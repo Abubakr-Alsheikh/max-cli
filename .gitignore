@@ -1,0 +1,95 @@
+# --- Python Standard ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual Environments ---
+# Keeps your local libraries out of git
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Distribution / Build ---
+# Created when we run 'pip install' or build the package
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Installer logs ---
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Unit Test / Coverage ---
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# --- Documentation ---
+docs/_build/
+
+# --- IDE / Editor Settings ---
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains / PyCharm
+.idea/
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Project Specific (Max CLI) ---
+# Ignore local configuration containing API Keys
+.env
+.env.local
+
+# Ignore output folders generated during testing/usage
+# (Prevents committing 100MB of compressed photos by accident)
+*_compressed/
+*_images/
+temp_combine_files_*/
+*.log
+
+# Ignore type checking cache
+.mypy_cache/
+.ruff_cache/
+
+GEMINI.md
+tasks/
