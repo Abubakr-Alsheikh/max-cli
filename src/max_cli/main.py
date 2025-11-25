@@ -1,8 +1,7 @@
 import typer
-from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai
+from max_cli.interface import cli_images, cli_ai
 from max_cli.common.logger import console
 
-# Initialize the main application
 app = typer.Typer(
     name="max",
     help="MAX: The High-Performance CLI Utility.",
@@ -10,11 +9,13 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Register sub-commands
-app.add_typer(cli_images.app, name="images", help="Image manipulation tools")
-app.add_typer(cli_files.app, name="files", help="File organization tools")
-app.add_typer(cli_pdf.app, name="pdf", help="PDF operations")
-app.add_typer(cli_ai.app, name="ai", help="AI Copilot")
+# Register the sub-commands
+app.add_typer(
+    cli_images.app, name="images", help="Compress, resize, and convert images."
+)
+# app.add_typer(cli_files.app, name="files", help="Organize files.") # Coming soon
+# app.add_typer(cli_pdf.app, name="pdf", help="Merge and compress PDFs.") # Coming soon
+app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
 
 
 @app.callback()
