@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Dict, Any
+from max_cli.common.exceptions import ResourceNotFoundError
 
 
 class FileOrganizer:
@@ -10,7 +11,7 @@ class FileOrganizer:
     def scan_directory(self, folder: Path) -> List[Path]:
         """Returns a sorted list of files in the folder (excluding subfolders)."""
         if not folder.exists() or not folder.is_dir():
-            raise NotADirectoryError(f"'{folder}' is not a valid directory.")
+            raise ResourceNotFoundError(f"Folder '{folder}' not found.")
 
         # Get all files, exclude directories
         files = [f for f in folder.iterdir() if f.is_file()]

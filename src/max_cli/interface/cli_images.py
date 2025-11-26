@@ -7,8 +7,9 @@ from rich import box
 
 # Import our custom modules
 from max_cli.core.image_processor import ImageEngine
-from max_cli.common.logger import console, log_error, log_success
+from max_cli.common.logger import console, log_success
 from max_cli.config import settings
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 app = typer.Typer()
 engine = ImageEngine()
@@ -16,7 +17,10 @@ engine = ImageEngine()
 
 @app.command("compress")
 def compress_command(
-    target: Path = typer.Argument(..., help="Path to a file or a folder of images."),
+    # CHANGE: Make target optional, default to current directory "."
+    target: Path = typer.Argument(
+        Path("."), help="Path to a file or a folder. Defaults to current folder."
+    ),
     quality: int = typer.Option(
         settings.DEFAULT_QUALITY, "-q", "--quality", help="JPEG quality (1-100)."
     ),
@@ -35,12 +39,10 @@ def compress_command(
 
     # 1. Validation
     if scale and max_dim:
-        log_error("Cannot use both --scale and --max-dim. Pick one.")
-        raise typer.Exit(code=1)
+        raise ValidationError("Cannot use both --scale and --max-dim. Pick one.")
 
     if not target.exists():
-        log_error(f"Target '{target}' not found.")
-        raise typer.Exit(code=1)
+        raise ResourceNotFoundError(f"The path '{target}' does not exist.")
 
     # 2. Preparation (Single File vs Folder)
     files_to_process: List[Path] = []
@@ -49,8 +51,7 @@ def compress_command(
     if target.is_file():
         # Single file mode
         if target.suffix.lower() not in engine.SUPPORTED_EXTENSIONS:
-            log_error(f"File type {target.suffix} not supported.")
-            raise typer.Exit(code=1)
+            raise ValidationError(f"File type {target.suffix} not supported.")
 
         files_to_process = [target]
         # For single file, save in same folder with suffix
@@ -69,8 +70,7 @@ def compress_command(
         ]
 
         if not files_to_process:
-            log_error("No valid images found in folder.")
-            raise typer.Exit(code=1)
+            raise ResourceNotFoundError("No valid images found in folder.")
 
     console.print(
         f"[bold cyan]Found {len(files_to_process)} images to process...[/bold cyan]"
