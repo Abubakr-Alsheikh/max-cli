@@ -1,15 +1,12 @@
 from pydantic_settings import BaseSettings
-from pathlib import Path
+from typing import Optional
 
 
 class Settings(BaseSettings):
-    """Global configuration managed via Environment Variables."""
-
     APP_NAME: str = "Max CLI"
     DEFAULT_QUALITY: int = 85
-    OPENAI_API_KEY: str | None = None
-
-    # AI Personality settings
+    # This will load from OS Environment or .env file
+    OPENAI_API_KEY: Optional[str] = None
     AI_MODEL: str = "gpt-5-nano"
 
     class Config:

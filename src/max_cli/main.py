@@ -30,6 +30,9 @@ app.add_typer(cli_pdf.app, name="pdf", help="Merge and compress PDFs.")
 
 app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
 
+# --- CRITICAL LINKING STEP ---
+# Give the AI module access to this app instance so it can read the docs
+cli_ai.MAIN_APP_REF = app
 
 def main():
     """

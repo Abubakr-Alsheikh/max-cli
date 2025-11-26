@@ -1,36 +1,74 @@
 import typer
-import os
-from max_cli.common.logger import console
+import subprocess
+import shlex
+from rich.panel import Panel
+from rich.prompt import Confirm
+from typing import Optional
 
-# In a real scenario, you would import OpenAI client here
+from max_cli.core.ai_engine import AIEngine
+from max_cli.common.logger import console, log_error
 
 app = typer.Typer()
+engine = AIEngine()
+
+# We need a reference to the main Typer app to generate docs.
+# We will set this in main.py
+MAIN_APP_REF = None
 
 
 @app.command("ask")
-def ask_ai(prompt: str):
+def ask_ai(prompt: str = typer.Argument(..., help="What do you want to do?")):
     """
-    Natural Language Interface: "max ai ask 'Compress the photos folder'"
+    Natural Language Interface.
+    Example: max ai ask "Compress all PDFs in Documents folder"
     """
-    console.print(f"[info]Thinking about:[/info] {prompt}")
+    if MAIN_APP_REF is None:
+        log_error("Internal Error: Main App reference not linked.")
+        raise typer.Exit(1)
 
-    # 1. Pseudo-code for AI Logic:
-    # response = openai.ChatCompletion.create(...)
-    # command_to_run = response.choices[0].message.function_call
+    console.print(f"[dim]Analyzing request: '{prompt}'...[/dim]")
 
-    # 2. Simulation for Demo:
-    if "compress" in prompt.lower():
+    with console.status("[bold cyan]Consulting AI...[/bold cyan]"):
+        try:
+            result = engine.interpret_intent(prompt, MAIN_APP_REF)
+        except Exception as e:
+            log_error(str(e))
+            raise typer.Exit(1)
+
+    # Handle AI Rejection
+    if "error" in result:
         console.print(
-            "[bold green]AI Suggestion:[/bold green] Detected intent to compress."
+            Panel(result["error"], title="[red]AI Error[/red]", border_style="red")
         )
-        console.print("Running: [bold]max images compress ./photos --quality 80[/bold]")
-        # In the future: subprocess.run(["max", "compress", ...])
-    elif "order" in prompt.lower():
-        console.print(
-            "[bold green]AI Suggestion:[/bold green] Detected intent to order files."
+        return
+
+    # Handle Success
+    cmd_str = result.get("command", "")
+    reason = result.get("thought", "")
+    is_dangerous = result.get("dangerous", False)
+
+    # Display Proposal
+    console.print(
+        Panel(
+            f"[dim]{reason}[/dim]\n\n[bold green]> {cmd_str}[/bold green]",
+            title="[cyan]Max Suggests[/cyan]",
+            border_style="green" if not is_dangerous else "yellow",
         )
-        console.print("Running: [bold]max files order ./documents[/bold]")
+    )
+
+    # Confirmation
+    msg = "Run this command?"
+    if is_dangerous:
+        msg = "[bold red]⚠ This command modifies files. Proceed?[/bold red]"
+
+    if Confirm.ask(msg):
+        console.print("\n[dim]Executing...[/dim]")
+        # Execute safely using subprocess
+        # We split the string safely to handle quotes properly
+        try:
+            args = shlex.split(cmd_str)
+            subprocess.run(args, check=True)
+        except Exception as e:
+            log_error(f"Execution failed: {e}")
     else:
-        console.print(
-            "[red]I'm not sure how to do that yet. Try 'compress' or 'order'.[/red]"
-        )
+        console.print("[yellow]Aborted.[/yellow]")
