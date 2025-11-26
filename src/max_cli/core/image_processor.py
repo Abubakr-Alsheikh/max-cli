@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Dict, Any 
 from PIL import Image
 
 # Handle Pillow version differences for Resampling

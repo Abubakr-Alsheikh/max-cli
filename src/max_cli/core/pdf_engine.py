@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF
 from pathlib import Path
-from typing import List, Optional
+from typing import List 
 from PIL import Image
 import io
 

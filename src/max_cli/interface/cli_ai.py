@@ -3,7 +3,6 @@ import subprocess
 import shlex
 from rich.panel import Panel
 from rich.prompt import Confirm
-from typing import Optional
 
 from max_cli.core.ai_engine import AIEngine
 from max_cli.common.logger import console, log_error

@@ -1,7 +1,6 @@
 import typer
 from pathlib import Path
 from typing import List, Optional
-from rich.progress import track
 
 from max_cli.core.pdf_engine import PDFEngine
 from max_cli.common.logger import console, log_error, log_success

@@ -1,7 +1,6 @@
 import json
 import typer
-from typer.core import TyperGroup
-from typing import Dict, Any, List
+from typing import Dict, Any 
 from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
