@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "max-cli"
 version = "0.1.0"
-description = "The AI-powered CLI companion for high-performance tasks."
+description = "The Local, Fast, & Lazy Terminal Assistant for high-performance tasks."
 authors = [{name = "Abubakr Alsheikh", email = "abubakralsheikh@outlook.com"}]
 readme = "README.md"
 requires-python = ">=3.9"
@@ -15,7 +15,14 @@ dependencies = [
     "pillow>=10.0.0",
     "pymupdf>=1.22.0",
     "pydantic-settings>=2.0.0",
-    "openai>=1.0.0" 
+    "openai>=1.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0"
 ]
 
 [project.scripts]
