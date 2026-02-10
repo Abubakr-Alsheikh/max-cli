@@ -1,8 +1,7 @@
 from pathlib import Path
-from typing import Optional, Dict, Any 
-from PIL import Image
+from typing import Optional, Dict, Any, Tuple
+from PIL import Image, ImageOps
 
-# Handle Pillow version differences for Resampling
 try:
     from PIL.Image import Resampling
 
@@ -14,90 +13,119 @@ except ImportError:
 class ImageEngine:
     """
     Business logic for image manipulation.
-    Decoupled from CLI to allow easier testing and AI integration.
     """
 
     SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tiff"}
 
     def get_size_str(self, size_bytes: int) -> str:
-        """Helper to format bytes into KB/MB."""
         if size_bytes < 1024 * 1024:
             return f"{size_bytes / 1024:.2f} KB"
         return f"{size_bytes / (1024 * 1024):.2f} MB"
+
+    def strip_metadata(self, input_path: Path, output_path: Path) -> None:
+        """Removes EXIF and other metadata by re-saving pixel data only."""
+        with Image.open(input_path) as img:
+            data = list(img.getdata())
+            clean_img = Image.new(img.mode, img.size)
+            clean_img.putdata(data)
+            clean_img.save(output_path, optimize=True)
 
     def process_single_image(
         self,
         input_path: Path,
         output_path: Path,
         quality: int = 85,
-        force_jpeg: bool = False,
-        quantize_png: bool = False,
         scale: Optional[int] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
         max_dim: Optional[int] = None,
+        force_format: Optional[str] = None,
+        quantize_png: bool = False,
+        strip_exif: bool = False,
     ) -> Dict[str, Any]:
         """
-        Compresses and/or resizes a single image.
-        Returns a dictionary containing statistics about the operation.
+        Versatile processor for compression, resizing, and conversion.
         """
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
 
-        # Open Image
         with Image.open(input_path) as img:
-            original_dims = img.size
+            img = ImageOps.exif_transpose(img)
             original_size = input_path.stat().st_size
+            original_dims = img.size
 
-            # --- 1. Resizing Logic ---
+            # --- 1. Resizing ---
+            new_size = None
             if scale:
-                # Resize by percentage
-                new_w = int(original_dims[0] * (scale / 100))
-                new_h = int(original_dims[1] * (scale / 100))
-                img = img.resize((new_w, new_h), resample=LANCZOS)
+                new_size = (
+                    int(original_dims[0] * (scale / 100)),
+                    int(original_dims[1] * (scale / 100)),
+                )
+            elif width or height:
+                w = width or int(original_dims[0] * (height / original_dims[1]))
+                h = height or int(original_dims[1] * (width / original_dims[0]))
+                new_size = (w, h)
             elif max_dim:
-                # Resize strictly by longest side
                 if max(original_dims) > max_dim:
                     img.thumbnail((max_dim, max_dim), resample=LANCZOS)
 
-            # --- 2. Format & Mode Logic ---
-            # Determine target format based on output filename
-            output_format = output_path.suffix.upper().lstrip(".")
-            if output_format == "JPG":
-                output_format = "JPEG"
+            if new_size:
+                img = img.resize(new_size, resample=LANCZOS)
 
-            # Force JPEG logic or format correction
-            if (force_jpeg or output_format == "JPEG") and img.mode in ["P", "RGBA"]:
-                img = img.convert("RGB")
-                # Ensure path ends in .jpg
-                output_path = output_path.with_suffix(".jpg")
-                output_format = "JPEG"
+            # --- 2. Format Determination ---
+            target_ext = (
+                force_format.lower()
+                if force_format
+                else output_path.suffix.lower().lstrip(".")
+            )
+            if target_ext in ["jpg", "jpeg"]:
+                target_format, target_ext = "JPEG", ".jpg"
+                if img.mode in ["RGBA", "P"]:
+                    img = img.convert("RGB")
+            elif target_ext == "webp":
+                target_format, target_ext = "WEBP", ".webp"
+            elif target_ext == "png":
+                target_format, target_ext = "PNG", ".png"
+            else:
+                target_format = img.format or "PNG"
+                target_ext = input_path.suffix
 
-            # --- 3. Saving Logic ---
-            if output_format == "JPEG":
-                img.save(output_path, "JPEG", quality=quality, optimize=True)
+            output_path = output_path.with_suffix(target_ext)
 
-            elif output_format == "PNG" and quantize_png:
-                # Lossy PNG
+            # --- 3. Save Logic ---
+            save_args = {"optimize": True}
+
+            # Lossy PNG Quantization
+            if target_format == "PNG" and quantize_png:
                 if img.mode not in ["RGB", "L"]:
                     img = img.convert("RGBA")
-                quantized = img.quantize(
+                img = img.quantize(
                     colors=256, method=2, dither=Image.Dither.FLOYDSTEINBERG
                 )
-                quantized.save(output_path, "PNG", optimize=True)
 
+            if target_format in ["JPEG", "WEBP"]:
+                save_args["quality"] = quality
+
+            if strip_exif:
+                # Rebuild image to drop all hidden metadata blocks
+                clean_img = Image.new(img.mode, img.size)
+                clean_img.putdata(list(img.getdata()))
+                clean_img.save(output_path, target_format, **save_args)
             else:
-                # Standard save
-                img.save(output_path, optimize=True)
-
-        # Return stats
-        final_size = output_path.stat().st_size
-        reduction_bytes = original_size - final_size
-        reduction_pct = (
-            (reduction_bytes / original_size) * 100 if original_size > 0 else 0
-        )
+                img.save(output_path, target_format, **save_args)
 
         return {
             "file_name": input_path.name,
             "original_size": self.get_size_str(original_size),
-            "final_size": self.get_size_str(final_size),
-            "reduction_pct": round(reduction_pct, 1),
+            "final_size": self.get_size_str(output_path.stat().st_size),
+            "reduction_pct": (
+                round(
+                    ((original_size - output_path.stat().st_size) / original_size)
+                    * 100,
+                    1,
+                )
+                if original_size > 0
+                else 0
+            ),
+            "out_path": output_path,
         }

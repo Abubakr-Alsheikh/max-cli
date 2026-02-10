@@ -1,150 +1,134 @@
 import typer
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.table import Table
 from rich import box
 
-# Import our custom modules
 from max_cli.core.image_processor import ImageEngine
-from max_cli.common.logger import console, log_success
+from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
-from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 app = typer.Typer()
 engine = ImageEngine()
 
 
+def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
+    if target.is_file():
+        return [target], target.parent
+    files = [
+        f
+        for f in target.iterdir()
+        if f.is_file() and f.suffix.lower() in engine.SUPPORTED_EXTENSIONS
+    ]
+    out_dir = target.parent / f"{target.name}_optimized"
+    out_dir.mkdir(exist_ok=True)
+    return files, out_dir
+
+
 @app.command("compress")
-def compress_command(
-    # CHANGE: Make target optional, default to current directory "."
-    target: Path = typer.Argument(
-        Path("."), help="Path to a file or a folder. Defaults to current folder."
-    ),
+def compress_images(
+    target: Path = typer.Argument(Path("."), help="File or folder."),
     quality: int = typer.Option(
-        settings.DEFAULT_QUALITY, "-q", "--quality", help="JPEG quality (1-100)."
+        settings.DEFAULT_QUALITY, "-q", help="Quality (1-100)."
     ),
-    scale: Optional[int] = typer.Option(None, help="Resize by percentage (e.g., 50)."),
-    max_dim: Optional[int] = typer.Option(
-        None, help="Resize longest side to N pixels."
-    ),
+    scale: Optional[int] = typer.Option(None, "-s", help="Scale percentage."),
+    max_dim: Optional[int] = typer.Option(None, "-m", help="Max dimension (px)."),
     force_jpeg: bool = typer.Option(False, "--jpeg", help="Force output to JPEG."),
     quantize: bool = typer.Option(
-        False, "--quantize", help="Use lossy PNG compression."
+        False, "--quantize", help="Lossy PNG compression (256 colors)."
     ),
+    strip: bool = typer.Option(True, "--strip/--keep", help="Remove EXIF metadata."),
 ):
     """
-    Compress images. Smartly handles a single file OR an entire folder.
+    All-in-one optimizer. Compress, resize, and convert formats in one go.
     """
+    files, out_dir = _resolve_batch(target)
 
-    # 1. Validation
-    if scale and max_dim:
-        raise ValidationError("Cannot use both --scale and --max-dim. Pick one.")
-
-    if not target.exists():
-        raise ResourceNotFoundError(f"The path '{target}' does not exist.")
-
-    # 2. Preparation (Single File vs Folder)
-    files_to_process: List[Path] = []
-    output_dir: Path
-
-    if target.is_file():
-        # Single file mode
-        if target.suffix.lower() not in engine.SUPPORTED_EXTENSIONS:
-            raise ValidationError(f"File type {target.suffix} not supported.")
-
-        files_to_process = [target]
-        # For single file, save in same folder with suffix
-        output_dir = target.parent
-
-    else:
-        # Folder mode
-        output_dir = target.parent / f"{target.name}_compressed"
-        output_dir.mkdir(exist_ok=True)
-
-        # Scan folder
-        files_to_process = [
-            f
-            for f in target.iterdir()
-            if f.is_file() and f.suffix.lower() in engine.SUPPORTED_EXTENSIONS
-        ]
-
-        if not files_to_process:
-            raise ResourceNotFoundError("No valid images found in folder.")
-
-    console.print(
-        f"[bold cyan]Found {len(files_to_process)} images to process...[/bold cyan]"
+    _run_batch(
+        files,
+        out_dir,
+        "Optimizing",
+        quality=quality,
+        scale=scale,
+        max_dim=max_dim,
+        force_format="jpg" if force_jpeg else None,
+        quantize_png=quantize,
+        strip_exif=strip,
     )
 
-    # 3. Processing Loop with Rich Progress Bar
-    stats_list = []
 
+@app.command("resize")
+def resize_images(
+    target: Path = typer.Argument(Path("."), help="File or folder."),
+    width: Optional[int] = typer.Option(None, "-w", help="Width in px."),
+    height: Optional[int] = typer.Option(None, "-h", help="Height in px."),
+    scale: Optional[int] = typer.Option(None, "-s", help="Scale %."),
+):
+    """Specialized command for adjusting image dimensions."""
+    if not any([width, height, scale]):
+        log_error("Specify --width, --height, or --scale.")
+        return
+    files, out_dir = _resolve_batch(target)
+    _run_batch(files, out_dir, "Resizing", width=width, height=height, scale=scale)
+
+
+@app.command("convert")
+def convert_images(
+    target: Path = typer.Argument(Path("."), help="File or folder."),
+    to: str = typer.Option(..., help="Target format (webp, jpg, png)."),
+):
+    """Bulk convert images to a new format."""
+    files, out_dir = _resolve_batch(target)
+    _run_batch(files, out_dir, "Converting", force_format=to)
+
+
+@app.command("strip")
+def strip_metadata(target: Path = typer.Argument(Path("."), help="File or folder.")):
+    """Remove GPS and EXIF data from images for privacy."""
+    files, out_dir = _resolve_batch(target)
+    _run_batch(files, out_dir, "Stripping", strip_exif=True)
+
+
+def _run_batch(files: List[Path], out_dir: Path, action: str, **kwargs):
+    stats_list = []
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TextColumn("{task.percentage:>3.0f}%"),
+        transient=True,
     ) as progress:
-
-        task = progress.add_task("[green]Compressing...", total=len(files_to_process))
-
-        for input_path in files_to_process:
-            # Determine output filename
-            if target.is_file():
-                # Single file logic: input.jpg -> input_compressed.jpg
-                stem = input_path.stem
-                ext = ".jpg" if force_jpeg else input_path.suffix
-                out_name = f"{stem}_compressed{ext}"
-                output_path = output_dir / out_name
+        task = progress.add_task(f"[green]{action}...", total=len(files))
+        for f in files:
+            # Single file handling: save with suffix
+            if len(files) == 1:
+                out_path = out_dir / f"{f.stem}_opt{f.suffix}"
             else:
-                # Folder logic: keep same name unless forcing jpeg
-                out_name = (
-                    input_path.with_suffix(".jpg").name
-                    if force_jpeg
-                    else input_path.name
-                )
-                output_path = output_dir / out_name
+                out_path = out_dir / f.name
 
             try:
-                # CALL THE CORE LOGIC
-                stats = engine.process_single_image(
-                    input_path=input_path,
-                    output_path=output_path,
-                    quality=quality,
-                    scale=scale,
-                    max_dim=max_dim,
-                    force_jpeg=force_jpeg,
-                    quantize_png=quantize,
-                )
+                stats = engine.process_single_image(f, out_path, **kwargs)
                 stats_list.append(stats)
             except Exception as e:
-                console.print(f"[red]Failed {input_path.name}: {e}[/red]")
-
+                console.print(f"[red]Error {f.name}: {e}[/red]")
             progress.advance(task)
 
-    # 4. Summary Table
-    table = Table(title="Compression Results", box=box.ROUNDED)
+    if not stats_list:
+        return
+
+    table = Table(title=f"{action} Summary", box=box.ROUNDED)
     table.add_column("File", style="cyan")
-    table.add_column("Original", style="magenta")
-    table.add_column("Compressed", style="green")
-    table.add_column("Saved", style="bold white")
+    table.add_column("Original", justify="right")
+    table.add_column("Final", justify="right", style="green")
+    table.add_column("Saved", justify="right", style="bold yellow")
 
-    # Show first 5 and last 5 if list is huge, otherwise show all
-    display_limit = 10
-    total_processed = len(stats_list)
-
-    for stat in stats_list[:display_limit]:
+    for s in stats_list[:15]:
         table.add_row(
-            stat["file_name"],
-            stat["original_size"],
-            stat["final_size"],
-            f"{stat['reduction_pct']}%",
+            s["file_name"],
+            s["original_size"],
+            s["final_size"],
+            f"{s['reduction_pct']}%",
         )
 
-    if total_processed > display_limit:
-        table.add_row("...", "...", "...", "...")
-        # Add summary row
-        table.add_row(f"{total_processed - display_limit} more files...", "", "", "")
-
     console.print(table)
-    log_success(f"Operation complete. Output at: [bold]{output_dir}[/bold]")
+    log_success(f"Output saved to: {out_dir}")
