@@ -3,7 +3,7 @@ import sys
 from rich.console import Console
 
 # Import interfaces
-from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media, cli_network
+from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media, cli_network, cli_tools
 from max_cli.common.exceptions import MaxError
 
 # Initialize Console directly here to ensure it's available for the crash handler
@@ -38,6 +38,15 @@ app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
 
 # Create a top-level shortcut because 'max grab' is very common
 app.command("grab")(cli_network.download_media)
+
+# Register the group (optional, if you want 'max tools share')
+app.add_typer(cli_tools.app, name="tools", help="System utilities (Clipboard, QR).")
+
+# Register top-level Shortcuts (The "Lazy" Way)
+# This allows 'max share' instead of 'max tools share'
+app.command("share")(cli_tools.share_qr)
+app.command("paste")(cli_tools.paste_image)
+app.command("copy")(cli_tools.copy_file)
 
 # --- CRITICAL LINKING STEP ---
 # Give the AI module access to this app instance so it can read the docs
