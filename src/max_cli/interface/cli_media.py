@@ -95,26 +95,53 @@ def convert_format(
         log_error(f"Conversion failed: {e}")
 
 
-@app.command("extract-audio")
-def extract_audio(
-    target: Path = typer.Argument(..., help="Input video file."),
-    output: Optional[Path] = typer.Option(None, "-o", help="Output audio file."),
+@app.command("to-audio")
+def video_to_audio(
+    target: Path = typer.Argument(..., help="Source video file."),
+    format: str = typer.Option(
+        "mp3", "--format", "-f", help="Target audio format: mp3, wav, flac, aac."
+    ),
+    quality: str = typer.Option(
+        "h",
+        "--quality",
+        "-q",
+        help="Quality: [s]mall (96k), [m]edium (128k), [h]igh (192k), [x]treme (320k).",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output path."),
 ):
     """
-    Rip audio from video (saves as MP3).
+    Convert a video file into a standalone audio file.
     """
     _check_engine()
 
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    # Resolve Bitrate
+    bitrate_map = {"s": "96k", "m": "128k", "h": "192k", "x": "320k"}
+    bitrate = bitrate_map.get(quality.lower()[0], "192k")
+
+    # Resolve Output Path
+    target_ext = f".{format.lower().lstrip('.')}"
     if not output:
-        output = target.parent / f"{target.stem}.mp3"
+        output = target.parent / f"{target.stem}{target_ext}"
+    else:
+        # Ensure the user-provided output has the right extension
+        if output.suffix.lower() != target_ext:
+            output = output.with_suffix(target_ext)
 
-    console.print(f"[cyan]Extracting audio from {target.name}...[/cyan]")
+    console.print(f"[cyan]Converting video to {format.upper()} ({bitrate})...[/cyan]")
 
-    try:
-        engine.extract_audio(target, output)
-        log_success(f"Audio saved: {output}")
-    except Exception as e:
-        log_error(f"Extraction failed: {e}")
+    with console.status("[bold green]Ripping audio track...[/bold green]"):
+        try:
+            engine.extract_audio(target, output, bitrate=bitrate)
+
+            final_size = output.stat().st_size
+            log_success(f"Audio extraction complete: [bold]{output.name}[/bold]")
+            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
+        except Exception as e:
+            log_error(f"Conversion failed: {e}")
 
 
 @app.command("gif")

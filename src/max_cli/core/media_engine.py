@@ -88,24 +88,40 @@ class MediaEngine:
             ]
             self._run(cmd_reencode)
 
-    def extract_audio(self, input_path: Path, output_path: Path) -> None:
+    def extract_audio(
+        self, input_path: Path, output_path: Path, bitrate: str = "192k"
+    ) -> None:
         """
-        Extracts audio track to MP3 or AAC.
+        Extracts audio from video and converts it to the desired format.
+        Supported extensions: .mp3, .wav, .aac, .flac
         """
+        # Map extension to the best FFmpeg codec
+        codec_map = {
+            ".mp3": "libmp3lame",
+            ".wav": "pcm_s16le",
+            ".aac": "aac",
+            ".flac": "flac",
+        }
+
+        ext = output_path.suffix.lower()
+        codec = codec_map.get(ext, "libmp3lame")
+
         cmd = [
             "ffmpeg",
             "-y",
             "-i",
             str(input_path),
-            "-vn",  # No video
+            "-vn",  # Disable video recording
             "-acodec",
-            "libmp3lame",
-            "-q:a",
-            "2",  # High quality VBR (Variable Bit Rate)
-            "-loglevel",
-            "error",
-            str(output_path),
+            codec,
         ]
+
+        # Only MP3 and AAC really benefit from explicit bitrate flags here
+        if ext in [".mp3", ".aac"]:
+            cmd.extend(["-b:a", bitrate])
+
+        cmd.extend(["-loglevel", "error", str(output_path)])
+
         self._run(cmd)
 
     def video_to_gif(

@@ -89,6 +89,11 @@ High-level control over FFmpeg without the syntax headaches.
 * **`snap`**: Capture a high-res JPG from any timestamp.
 * **`mute`**: Instantly remove audio tracks without re-encoding video.
 
+# Convert Video to Audio
+max video to-audio clip.mp4               # Instant MP3 (High quality)
+max video to-audio clip.mp4 --format wav  # Lossless WAV for editing
+max video to-audio clip.mp4 -q x          # 320kbps Audiophile MP3
+
 ### 📄 Document Suite (`max pdf`)
 
 Professional PDF management powered by PyMuPDF.
