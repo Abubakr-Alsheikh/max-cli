@@ -73,7 +73,7 @@ class NetworkEngine:
             # Video Strategy
             if q == "x":
                 # Just get the absolute best, regardless of container/codec
-                format_str = f"bestvideo+bestaudio/best"
+                format_str = "bestvideo+bestaudio/best"
             else:
                 # Constrain height, fallback to best available if height not found
                 format_str = f"bestvideo[height<={vid_height}]+bestaudio/best[height<={vid_height}]"

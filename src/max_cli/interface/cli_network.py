@@ -1,6 +1,5 @@
 import typer
 from pathlib import Path
-from typing import Optional
 from rich.progress import (
     Progress,
     SpinnerColumn,
