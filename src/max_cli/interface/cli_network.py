@@ -8,7 +8,7 @@ from rich.progress import (
     TextColumn,
     DownloadColumn,
     TransferSpeedColumn,
-    TimeRemainingColumn
+    TimeRemainingColumn,
 )
 
 from max_cli.core.network_engine import NetworkEngine
@@ -17,35 +17,47 @@ from max_cli.common.logger import console, log_success, log_error
 app = typer.Typer()
 engine = NetworkEngine()
 
+
 @app.command("grab")
 def download_media(
     url: str = typer.Argument(..., help="URL (YouTube, Twitch, Twitter, etc)."),
-    
-    # Audio Options
-    audio: bool = typer.Option(False, "--audio", "-a", help="Extract audio only."),
-    audio_fmt: str = typer.Option("mp3", "--audio-format", help="Audio format (mp3, m4a, wav)."),
-    
-    # Video Options
-    res: str = typer.Option(None, "--res", "-r", help="Max resolution (e.g. 1080p, 720p). Default: Best available."),
-    ext: str = typer.Option("mp4", "--ext", help="Video container (mp4, mkv)."),
-    
-    # General Options
+    # Smart Quality Control
+    quality: str = typer.Option(
+        "h",
+        "--quality",
+        "-q",
+        help="Quality Preset: [s]mall, [m]edium, [h]igh (default), [x]best.",
+    ),
+    # Mode Switches
+    audio: bool = typer.Option(
+        False, "--audio", "-a", help="Download audio only (MP3)."
+    ),
+    # Output Control
     output: Path = typer.Option(Path("."), "--output", "-o", help="Output folder."),
+    # Advanced Overrides (Optional)
+    ext: str = typer.Option("mp4", "--ext", help="Video container (mp4, mkv)."),
 ):
     """
-    Download media from the internet.
-    Supports YouTube playlists, metadata embedding, and 4K video.
+    Download media with Smart Quality Presets.
+
+    [bold]Quality Guide:[/bold]
+    [green]s (Small)[/green]:  480p Video / 64k Audio  (Great for data saving / speech)
+    [green]m (Medium)[/green]: 720p Video / 128k Audio (Standard Web Quality)
+    [green]h (High)[/green]:   1080p Video / 192k Audio (HD - Default)
+    [green]x (Xtreme)[/green]: 4K Video    / 320k Audio (Best possible quality)
     """
-    
+
     if not output.exists():
         output.mkdir(parents=True, exist_ok=True)
 
-    mode = "Audio" if audio else "Video"
-    console.print(f"[cyan]Initializing {mode} Download...[/cyan]")
-    console.print(f"[dim]URL: {url}[/dim]")
+    # UI Feedback
+    q_map = {"s": "Small", "m": "Medium", "h": "High", "x": "Best"}
+    q_label = q_map.get(quality.lower()[0], "Custom")
 
-    # Setup Rich Progress Bar
-    # We use a custom layout: [Spinner] [Description] [Bar] [Size] [Speed] [Time]
+    console.print(f"[cyan]Grabbing ({q_label} Quality)...[/cyan]")
+    console.print(f"[dim]Source: {url}[/dim]")
+
+    # Rich Progress Bar Setup
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[bold blue]{task.fields[filename]}", justify="left"),
@@ -58,45 +70,38 @@ def download_media(
         "•",
         TimeRemainingColumn(),
         console=console,
-        transient=True 
+        transient=True,
     )
 
     task_id = progress.add_task("Starting...", filename="Fetching info...", start=False)
 
-    # Define the hook function that yt-dlp will call
     def rich_hook(d):
-        if d['status'] == 'downloading':
-            # Extract filename for UI
-            filename = d.get('filename', '').split('/')[-1]
-            # Remove extension for cleaner look, limit length
-            filename = (filename[:30] + '...') if len(filename) > 30 else filename
-            
+        if d["status"] == "downloading":
+            filename = d.get("filename", "").split("/")[-1]
+            # Truncate long filenames
+            filename = (filename[:30] + "...") if len(filename) > 30 else filename
+
             progress.update(
                 task_id,
-                total=d.get('total_bytes') or d.get('total_bytes_estimate'),
-                completed=d.get('downloaded_bytes'),
+                total=d.get("total_bytes") or d.get("total_bytes_estimate"),
+                completed=d.get("downloaded_bytes"),
                 filename=filename,
-                start=True # Start the timer
+                start=True,
             )
-        elif d['status'] == 'finished':
-            progress.update(task_id, filename="Processing (Merging/Converting)...")
+        elif d["status"] == "finished":
+            progress.update(task_id, filename="Processing...")
 
-    # Run the download
     with progress:
         try:
             engine.download_media(
                 url=url,
                 output_path=output,
+                quality=quality,
                 audio_only=audio,
-                audio_format=audio_fmt,
                 video_format=ext,
-                resolution=res,
-                progress_hook=rich_hook
+                progress_hook=rich_hook,
             )
-            
-            # Since the progress bar is transient (disappears on done), 
-            # we print a success message manually.
-            log_success(f"Download complete! Saved to [bold]{output}[/bold]")
+            log_success(f"Saved to [bold]{output}[/bold]")
 
         except Exception as e:
             log_error(str(e))
