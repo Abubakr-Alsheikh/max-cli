@@ -30,11 +30,14 @@ Equipped with **Context-Aware AI**, Max doesn't just run commands; it understand
 
 ### 1. Prerequisites
 
-Max relies on **FFmpeg** for high-speed media processing.
+1. **FFmpeg:** Max relies on **FFmpeg** for high-speed media processing.
+    * **macOS:** `brew install ffmpeg`
+    * **Linux:** `sudo apt install ffmpeg`
+    * **Windows:** `winget install Gyan.FFmpeg`
 
-* **macOS:** `brew install ffmpeg`
-* **Linux:** `sudo apt install ffmpeg`
-* **Windows:** `winget install Gyan.FFmpeg`
+2. **JS Runtime (Pick one):**
+    * **Node.js:** `brew install node` (Recommended)
+    * **Deno:** `brew install deno`
 
 ### 2. Install Max
 
