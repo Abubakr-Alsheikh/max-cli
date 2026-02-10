@@ -76,38 +76,37 @@ class AIEngine:
             )
 
         tools = (
-            app_instance.generate_cli_schema(app_instance)
+            self.generate_cli_schema(app_instance)
             if hasattr(app_instance, "registered_groups")
             else ""
         )
         context = self._get_local_context()
 
+        # UPDATED PROMPT: Tell Max he CAN chat, but must use the JSON structure.
         system_msg = f"""
 You are "Max", a CLI agent. 
-TOOLS:
-{tools}
+TOOLS: {tools}
 {context}
 
 INSTRUCTIONS:
-- Map user requests to the TOOLS provided.
-- Use the filenames in [USER'S CURRENT ENVIRONMENT] to resolve vague names.
-- Return ONLY a JSON object.
+1. If the user asks a tool-related question, return the "command".
+2. If the user is just chatting (e.g., "hello", "who are you?"), use the "thought" field for your response and leave "command" as null.
+3. ALWAYS return a JSON object. No markdown. No outside text.
 
 JSON STRUCTURE:
 {{
-    "thought": "Reasoning",
-    "command": "The shell command",
+    "thought": "Your conversational response or reasoning",
+    "command": "The shell command or null",
     "explanation": "Briefly explain what the flags do (only if requested)",
     "dangerous": true/false
 }}
 
 If the request is unrelated to the tools or ambiguous, return:
-{{ "error": "I cannot handle this request with current tools." }}
+{{ "error": "I cannot handle this request with current tools. (and you have to explain the reason why not)" }}
         """
 
         try:
             messages = [{"role": "system", "content": system_msg}]
-            # Add history if we are in a chat session
             messages.extend(self.history)
             messages.append({"role": "user", "content": user_prompt})
 
@@ -116,15 +115,23 @@ If the request is unrelated to the tools or ambiguous, return:
                 messages=messages,
             )
 
-            result = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
 
-            # Save to history for future context in this session
+            # --- SAFETY CATCH ---
+            try:
+                result = json.loads(raw_content)
+            except json.JSONDecodeError:
+                # If AI fails to send JSON, wrap its text into a result dict manually
+                result = {
+                    "thought": raw_content.strip(),
+                    "command": None,
+                    "dangerous": False,
+                }
+
+            # Update history with the response
             self.history.append({"role": "user", "content": user_prompt})
             self.history.append(
-                {
-                    "role": "assistant",
-                    "content": result.get("command", "I couldn't find a command."),
-                }
+                {"role": "assistant", "content": result.get("thought", "")}
             )
 
             return result

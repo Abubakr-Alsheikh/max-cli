@@ -203,14 +203,13 @@ def chat_session():
     """
     console.print(
         Panel(
-            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' or 'quit' to end.",
+            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' to quit.",
             border_style="cyan",
         )
     )
 
     while True:
         user_input = Prompt.ask("[bold green]User[/bold green]")
-
         if user_input.lower() in ["exit", "quit"]:
             break
 
@@ -222,18 +221,25 @@ def chat_session():
                     console.print(f"[red]Max:[/red] {result['error']}")
                     continue
 
-                cmd = result.get("command")
                 thought = result.get("thought")
+                cmd = result.get("command")
 
-                console.print(
-                    f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
-                )
-                console.print(f"[dim]Reason: {thought}[/dim]")
+                # If there is a thought/message but no command, it's just a conversation
+                if thought and not cmd:
+                    console.print(f"[cyan]Max:[/cyan] {thought}")
 
-                if Confirm.ask("Execute?"):
-                    args = shlex.split(cmd)
-                    subprocess.run(args)
+                # If there is a command, propose it
+                elif cmd:
+                    console.print(
+                        f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
+                    )
+                    if thought:
+                        console.print(f"[dim]Reason: {thought}[/dim]")
+
+                    if Confirm.ask("Execute?"):
+                        args = shlex.split(cmd)
+                        subprocess.run(args)
+
             except Exception as e:
                 log_error(str(e))
-
     console.print("[cyan]Goodbye![/cyan]")
