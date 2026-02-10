@@ -110,6 +110,15 @@ max grab "URL" -a -q s        # Download tiny podcast-ready MP3
 max grab "URL" -q x           # Download 4K archival video
 ```
 
+#### **Advanced Grab Controls**
+
+```bash
+max grab "URL" -i 1              # Download only the 1st video in a playlist
+max grab "URL" -i "1-5"          # Download first 5 videos
+max grab "URL" --no-playlist     # Force download single video from a playlist URL
+max grab "URL" -a --no-meta      # Download audio without ID3 tags or thumbnails
+```
+
 ### 📂 File Management (`max files`)
 
 * **`order`**: Sequential renaming (e.g., `1_doc.pdf`, `2_doc.pdf`).
