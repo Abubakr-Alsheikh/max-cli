@@ -5,9 +5,11 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.markdown import Markdown
 from pathlib import Path
+import requests
+from typing import Optional
 
 from max_cli.core.ai_engine import AIEngine
-from max_cli.common.logger import console, log_error
+from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()
 engine = AIEngine()
@@ -113,3 +115,64 @@ def analyze_image(
         except Exception as e:
             log_error(str(e))
             raise typer.Exit(1)
+
+
+@app.command("create")
+def create_image(
+    prompt: str = typer.Argument(..., help="Description of the image to create."),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Save path."),
+    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model.")
+):
+    """
+    Generate an image from text (Nano Banana).
+    """
+    console.print(f"[cyan]Painting: [bold]{prompt}[/bold]...[/cyan]")
+    
+    with console.status("[bold green]Nano Banana is generating...[/bold green]"):
+        try:
+            url = engine.generate_image(prompt, model=model)
+            _handle_image_result(url, output, "created_image.png")
+        except Exception as e:
+            log_error(str(e))
+
+@app.command("edit")
+def edit_image(
+    target: Path = typer.Argument(..., help="Path to original image."),
+    prompt: str = typer.Argument(..., help="Instruction (e.g., 'Turn the sky purple')."),
+    output: Optional[Path] = typer.Option(None, "-o", help="Save path."),
+    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model.")
+):
+    """
+    Edit an existing image using AI instructions.
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Editing [bold]{target.name}[/bold]...[/cyan]")
+    
+    with console.status("[bold green]Applying AI changes...[/bold green]"):
+        try:
+            url = engine.edit_image(target, prompt, model=model)
+            _handle_image_result(url, output, f"edited_{target.name}")
+        except Exception as e:
+            log_error(str(e))
+
+def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
+    """Helper to display URL and download image."""
+    console.print(f"\n[green]✨ Image Ready![/green]")
+    console.print(f"🔗 [link={url}]View Online[/link]")
+    
+    # Auto-download
+    final_path = output_path or Path.cwd() / default_name
+    
+    try:
+        with console.status(f"[dim]Downloading to {final_path.name}...[/dim]"):
+            r = requests.get(url, stream=True)
+            r.raise_for_status()
+            with open(final_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        log_success(f"Saved to: [bold]{final_path}[/bold]")
+    except Exception as e:
+        console.print(f"[yellow]Could not auto-download: {e}[/yellow]")

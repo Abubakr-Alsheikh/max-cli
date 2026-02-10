@@ -1,10 +1,12 @@
 import json
 import typer
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Optional
 from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
+import requests
 
 
 class AIEngine:
@@ -144,3 +146,80 @@ If the request is unrelated to the tools or ambiguous, return:
             return response.choices[0].message.content
         except Exception as e:
             raise MaxError(f"AI Vision Error: {str(e)}")
+
+    def generate_image(self, prompt: str, model: Optional[str] = None) -> str:
+        """
+        Generates an image. Uses the dedicated IMAGE_MODEL by default.
+        """
+        if not self.client:
+            raise MaxError("AI Client not configured.")
+
+        # If no specific model override is passed in the command, use the config value
+        target_model = model or settings.AI_IMAGE_MODEL
+
+        try:
+            response = self.client.chat.completions.create(
+                model=target_model, messages=[{"role": "user", "content": prompt}]
+            )
+
+            content = response.choices[0].message.content
+            return self._extract_image_url(content, response)
+        except Exception as e:
+            raise MaxError(f"Image Generation Failed using {target_model}: {e}")
+
+    def edit_image(
+        self, image_path: Path, prompt: str, model: Optional[str] = None
+    ) -> str:
+        """
+        Edits an image. Uses the dedicated IMAGE_MODEL by default.
+        """
+        if not self.client:
+            raise MaxError("AI Client not configured.")
+
+        target_model = model or settings.AI_IMAGE_MODEL
+        base64_img = encode_image_to_base64(image_path)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"},
+                    },
+                ],
+            }
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=target_model, messages=messages
+            )
+            content = response.choices[0].message.content
+            return self._extract_image_url(content, response)
+        except Exception as e:
+            raise MaxError(f"Image Editing Failed using {target_model}: {e}")
+
+    def _extract_image_url(self, content: str, raw_response: Any) -> str:
+        """
+        Helper to find image URL in Nano Banana response.
+        """
+        # 1. Check for standard Markdown URL: ![alt text](url)
+        import re
+
+        match = re.search(r"\((https?://[^\s)]+)\)", content)
+        if match:
+            return match.group(1)
+
+        # 2. Check for raw URL in text
+        url_match = re.search(r"https?://[^\s]+", content)
+        if url_match:
+            return url_match.group(0)
+
+        # 3. Check raw response dictionary (Advanced Google implementation)
+        raw_dict = raw_response.model_dump()
+        if "images" in raw_dict and raw_dict["images"]:
+            return raw_dict["images"][0].get("url")
+
+        raise MaxError("AI generated a response, but no image URL was found.")
