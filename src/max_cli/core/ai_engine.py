@@ -7,7 +7,6 @@ from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
-import requests
 
 
 class AIEngine:
@@ -28,7 +27,7 @@ class AIEngine:
             # Filter for non-hidden files and limit to 30 for token safety
             visible_files = [f for f in files if not f.startswith(".")][:30]
 
-            context = f"\n[USER'S CURRENT ENVIRONMENT]\n"
+            context = "\n[USER'S CURRENT ENVIRONMENT]\n"
             context += f"Path: {os.getcwd()}\n"
             context += f"Files in Folder: {', '.join(visible_files)}\n"
             if len(files) > 30:

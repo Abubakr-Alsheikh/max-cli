@@ -178,7 +178,7 @@ def edit_image(
 
 def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
     """Helper to display URL and download image."""
-    console.print(f"\n[green]✨ Image Ready![/green]")
+    console.print("\n[green]✨ Image Ready![/green]")
     console.print(f"🔗 [link={url}]View Online[/link]")
 
     # Auto-download

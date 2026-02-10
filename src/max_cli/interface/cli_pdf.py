@@ -2,7 +2,7 @@ import typer
 import os
 from pathlib import Path
 from typing import List, Optional
-from rich.progress import track, Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 from max_cli.core.pdf_engine import PDFEngine
 from max_cli.common.logger import console, log_error, log_success

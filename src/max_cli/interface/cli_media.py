@@ -1,7 +1,6 @@
 import typer
 from pathlib import Path
 from typing import Optional
-from rich.progress import SpinnerColumn, TextColumn, Progress
 
 from max_cli.core.media_engine import MediaEngine
 from max_cli.common.logger import console, log_error, log_success
@@ -12,7 +11,7 @@ app = typer.Typer()
 # Initialize engine (might raise error if ffmpeg missing)
 try:
     engine = MediaEngine()
-except RuntimeError as e:
+except RuntimeError:
     # If this module is imported but FFmpeg isn't there, we don't crash main.py
     # We just won't be able to run commands.
     engine = None
@@ -234,7 +233,7 @@ def mute_track(
     if not output:
         output = target.parent / f"{target.stem}_mute.mp4"
 
-    console.print(f"[cyan]Removing audio track...[/cyan]")
+    console.print("[cyan]Removing audio track...[/cyan]")
 
     try:
         engine.mute_video(target, output)
