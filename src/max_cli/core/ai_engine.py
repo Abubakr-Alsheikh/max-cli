@@ -1,7 +1,8 @@
+import os
 import json
 import typer
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
@@ -11,13 +12,30 @@ import requests
 
 class AIEngine:
     def __init__(self):
-        if not settings.OPENAI_API_KEY:
-            # We don't raise an error immediately, only if they try to use it
-            self.client = None
-        else:
+        self.client = None
+        if settings.OPENAI_API_KEY:
+
             self.client = OpenAI(
                 api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
             )
+        # Session history for the 'chat' command
+        self.history: List[Dict[str, str]] = []
+
+    def _get_local_context(self) -> str:
+        """Scans current directory to give AI 'eyes'."""
+        try:
+            files = os.listdir(".")
+            # Filter for non-hidden files and limit to 30 for token safety
+            visible_files = [f for f in files if not f.startswith(".")][:30]
+
+            context = f"\n[USER'S CURRENT ENVIRONMENT]\n"
+            context += f"Path: {os.getcwd()}\n"
+            context += f"Files in Folder: {', '.join(visible_files)}\n"
+            if len(files) > 30:
+                context += f"(...and {len(files)-30} more files)\n"
+            return context
+        except Exception:
+            return ""
 
     def generate_cli_schema(self, app: typer.Typer, parent_name: str = "max") -> str:
         """
@@ -49,61 +67,84 @@ class AIEngine:
         return "\n".join(schema_lines)
 
     def interpret_intent(
-        self, user_prompt: str, app_instance: typer.Typer
+        self, user_prompt: str, app_instance: Any, explain: bool = False
     ) -> Dict[str, Any]:
-        """
-        Sends the schema + user prompt to LLM and gets a JSON command back.
-        """
+        """Translates natural language to CLI commands with local context."""
         if not self.client:
             raise MaxError(
                 "Missing AI Configuration.\n"
                 "Please set OPENAI_API_KEY in your .env file."
             )
 
-        # 1. Get the dynamic capabilities of the tool
-        available_tools = self.generate_cli_schema(app_instance)
+        tools = (
+            app_instance.generate_cli_schema(app_instance)
+            if hasattr(app_instance, "registered_groups")
+            else ""
+        )
+        context = self._get_local_context()
 
-        # 2. Build the System Prompt
-        # We explicitly ask for JSON and use 'response_format' in the API call
-        system_message = f"""
-You are "Max", an intelligent CLI wrapper.
-Your goal is to translate natural language user requests into a specific Shell Command based on the available tools below.
-
-{available_tools}
+        system_msg = f"""
+You are "Max", a CLI agent. 
+TOOLS:
+{tools}
+{context}
 
 INSTRUCTIONS:
-1. Analyze the user's request.
-2. Map it to the most appropriate 'Command' from the list above.
-3. Extract arguments (like paths, numbers, booleans).
-4. Return ONLY a valid JSON object.
+- Map user requests to the TOOLS provided.
+- Use the filenames in [USER'S CURRENT ENVIRONMENT] to resolve vague names.
+- Return ONLY a JSON object.
 
 JSON STRUCTURE:
 {{
-    "thought": "Brief reasoning of why you chose this command.",
-    "command": "The exact shell command to run (e.g., 'max images compress ./pic -q 50')",
-    "dangerous": true/false (true if it deletes/overwrites/renames files)
+    "thought": "Reasoning",
+    "command": "The shell command",
+    "explanation": "Briefly explain what the flags do (only if requested)",
+    "dangerous": true/false
 }}
 
 If the request is unrelated to the tools or ambiguous, return:
 {{ "error": "I cannot handle this request with current tools." }}
         """
 
-        # 3. Call LLM
+        try:
+            messages = [{"role": "system", "content": system_msg}]
+            # Add history if we are in a chat session
+            messages.extend(self.history)
+            messages.append({"role": "user", "content": user_prompt})
+
+            response = self.client.chat.completions.create(
+                model=settings.AI_MODEL,
+                messages=messages,
+            )
+
+            result = json.loads(response.choices[0].message.content)
+
+            # Save to history for future context in this session
+            self.history.append({"role": "user", "content": user_prompt})
+            self.history.append(
+                {
+                    "role": "assistant",
+                    "content": result.get("command", "I couldn't find a command."),
+                }
+            )
+
+            return result
+        except Exception as e:
+            raise MaxError(f"AI Interpretation Error: {e}")
+
+    def categorize_files(self, file_list: List[str]) -> Dict[str, str]:
+        """AI-powered semantic grouping of files."""
+        prompt = f"Categorize these files into logical folders (e.g., Invoices, Photos, Scripts). Return a JSON map: {{filename: category_name}}\nFiles: {file_list}"
+
         try:
             response = self.client.chat.completions.create(
                 model=settings.AI_MODEL,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
             )
-
-            content = response.choices[0].message.content
-            return json.loads(content)
-
-        except Exception as e:
-            # Handle specific API errors if needed, but generic catch is safer for CLI
-            raise MaxError(f"AI Provider Error: {str(e)}")
+            return json.loads(response.choices[0].message.content)
+        except Exception:
+            # Fallback to 'Other' if AI fails
+            return {f: "Other" for f in file_list}
 
     def analyze_image_content(self, image_path: Path, prompt: str) -> str:
         """

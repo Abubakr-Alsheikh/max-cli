@@ -4,6 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     APP_NAME: str = "Max CLI"
+    DEFAULT_QUALITY: int = 85
 
     # AI Configuration
     # If using OpenAI, leave BASE_URL as None.

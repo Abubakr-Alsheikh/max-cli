@@ -2,7 +2,7 @@ import typer
 import subprocess
 import shlex
 from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.markdown import Markdown
 from pathlib import Path
 import requests
@@ -20,7 +20,12 @@ MAIN_APP_REF = None
 
 
 @app.command("ask")
-def ask_ai(prompt: str = typer.Argument(..., help="What do you want to do?")):
+def ask_ai(
+    prompt: str = typer.Argument(..., help="What do you want to do?"),
+    explain: bool = typer.Option(
+        False, "--explain", "-e", help="Explain the command logic."
+    ),
+):
     """
     Natural Language Interface.
     Example: max ai ask "Compress all PDFs in Documents folder"
@@ -58,6 +63,15 @@ def ask_ai(prompt: str = typer.Argument(..., help="What do you want to do?")):
             border_style="green" if not is_dangerous else "yellow",
         )
     )
+
+    if explain and result.get("explanation"):
+        console.print(
+            Panel(
+                result["explanation"],
+                title="[dim]How it works[/dim]",
+                border_style="blue",
+            )
+        )
 
     # Confirmation
     msg = "Run this command?"
@@ -121,13 +135,13 @@ def analyze_image(
 def create_image(
     prompt: str = typer.Argument(..., help="Description of the image to create."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model.")
+    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
 ):
     """
     Generate an image from text (Nano Banana).
     """
     console.print(f"[cyan]Painting: [bold]{prompt}[/bold]...[/cyan]")
-    
+
     with console.status("[bold green]Nano Banana is generating...[/bold green]"):
         try:
             url = engine.generate_image(prompt, model=model)
@@ -135,12 +149,15 @@ def create_image(
         except Exception as e:
             log_error(str(e))
 
+
 @app.command("edit")
 def edit_image(
     target: Path = typer.Argument(..., help="Path to original image."),
-    prompt: str = typer.Argument(..., help="Instruction (e.g., 'Turn the sky purple')."),
+    prompt: str = typer.Argument(
+        ..., help="Instruction (e.g., 'Turn the sky purple')."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model.")
+    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
 ):
     """
     Edit an existing image using AI instructions.
@@ -150,7 +167,7 @@ def edit_image(
         raise typer.Exit(1)
 
     console.print(f"[cyan]Editing [bold]{target.name}[/bold]...[/cyan]")
-    
+
     with console.status("[bold green]Applying AI changes...[/bold green]"):
         try:
             url = engine.edit_image(target, prompt, model=model)
@@ -158,21 +175,65 @@ def edit_image(
         except Exception as e:
             log_error(str(e))
 
+
 def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
     """Helper to display URL and download image."""
     console.print(f"\n[green]✨ Image Ready![/green]")
     console.print(f"🔗 [link={url}]View Online[/link]")
-    
+
     # Auto-download
     final_path = output_path or Path.cwd() / default_name
-    
+
     try:
         with console.status(f"[dim]Downloading to {final_path.name}...[/dim]"):
             r = requests.get(url, stream=True)
             r.raise_for_status()
-            with open(final_path, 'wb') as f:
+            with open(final_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
         log_success(f"Saved to: [bold]{final_path}[/bold]")
     except Exception as e:
         console.print(f"[yellow]Could not auto-download: {e}[/yellow]")
+
+
+@app.command("chat")
+def chat_session():
+    """
+    Start an interactive session with Max. He remembers what you said.
+    """
+    console.print(
+        Panel(
+            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' or 'quit' to end.",
+            border_style="cyan",
+        )
+    )
+
+    while True:
+        user_input = Prompt.ask("[bold green]User[/bold green]")
+
+        if user_input.lower() in ["exit", "quit"]:
+            break
+
+        with console.status("[dim]Thinking...[/dim]"):
+            try:
+                result = engine.interpret_intent(user_input, MAIN_APP_REF)
+
+                if "error" in result:
+                    console.print(f"[red]Max:[/red] {result['error']}")
+                    continue
+
+                cmd = result.get("command")
+                thought = result.get("thought")
+
+                console.print(
+                    f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
+                )
+                console.print(f"[dim]Reason: {thought}[/dim]")
+
+                if Confirm.ask("Execute?"):
+                    args = shlex.split(cmd)
+                    subprocess.run(args)
+            except Exception as e:
+                log_error(str(e))
+
+    console.print("[cyan]Goodbye![/cyan]")

@@ -6,6 +6,7 @@ from rich.text import Text
 
 from max_cli.core.file_organizer import FileOrganizer
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.interface.cli_ai import engine  # Import the AIEngine instance
 
 app = typer.Typer()
 organizer = FileOrganizer()
@@ -86,3 +87,44 @@ def order_files(
         )
     else:
         log_success("File ordering complete!")
+
+
+@app.command("smart-sort")
+def smart_sort(
+    path: Path = typer.Argument(".", help="Folder to organize."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show changes without moving."
+    ),
+):
+    """
+    AI-powered file organization. Groups files by content/meaning, not just extension.
+    """
+    files = [
+        f.name for f in path.iterdir() if f.is_file() and not f.name.startswith(".")
+    ]
+
+    if not files:
+        console.print("[yellow]No files to organize.[/yellow]")
+        return
+
+    console.print(f"[cyan]Analyzing {len(files)} files with AI...[/cyan]")
+
+    # engine is the AIEngine instance
+    categories = engine.categorize_files(files)
+
+    for filename, category in categories.items():
+        src = path / filename
+        dest_dir = path / category
+
+        console.print(
+            f"  [dim]{filename}[/dim][/dim] -> [bold cyan]{category}/[/bold cyan]"
+        )
+
+        if not dry_run:
+            dest_dir.mkdir(exist_ok=True)
+            src.rename(dest_dir / filename)
+
+    if not dry_run:
+        log_success(f"Successfully organized {len(files)} files.")
+    else:
+        console.print("[yellow]Dry run complete. No files moved.[/yellow]")
