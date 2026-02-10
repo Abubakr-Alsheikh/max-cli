@@ -3,7 +3,7 @@ import sys
 from rich.console import Console
 
 # Import interfaces
-from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media # <--- Import cli_media
+from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media, cli_network
 from max_cli.common.exceptions import MaxError
 
 # Initialize Console directly here to ensure it's available for the crash handler
@@ -32,7 +32,12 @@ app.add_typer(cli_pdf.app, name="pdf", help="Merge, split, and compress PDFs.")
 app.add_typer(cli_media.app, name="video", help="Compress, convert, and process video/audio.")
 app.add_typer(cli_media.app, name="v", hidden=True) # Short alias
 
+app.add_typer(cli_network.app, name="net", help="Network tools (Download, Speedtest).")
+
 app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
+
+# Create a top-level shortcut because 'max grab' is very common
+app.command("grab")(cli_network.download_media)
 
 # --- CRITICAL LINKING STEP ---
 # Give the AI module access to this app instance so it can read the docs
