@@ -4,6 +4,7 @@ from typing import Dict, Any
 from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
+from max_cli.common.utils import encode_image_to_base64
 
 
 class AIEngine:
@@ -101,3 +102,45 @@ If the request is unrelated to the tools or ambiguous, return:
         except Exception as e:
             # Handle specific API errors if needed, but generic catch is safer for CLI
             raise MaxError(f"AI Provider Error: {str(e)}")
+
+    def analyze_image_content(self, image_path: Path, prompt: str) -> str:
+        """
+        Sends an image + prompt to the Vision Model (Gemini/GPT-4o).
+        Returns the text description.
+        """
+        if not self.client:
+            raise MaxError("Missing AI Configuration. Check your .env file.")
+
+        # 1. Encode Image
+        try:
+            base64_image = encode_image_to_base64(image_path)
+        except Exception as e:
+            raise MaxError(f"Failed to process image: {e}")
+
+        # 2. Build Payload
+        # Note: We do NOT force JSON mode here, as we want natural language description.
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            # JPEG header usually works for PNG/WEBP in OpenAI/Gemini APIs
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        },
+                    },
+                ],
+            }
+        ]
+
+        # 3. Call API
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.AI_MODEL,
+                messages=messages,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise MaxError(f"AI Vision Error: {str(e)}")
