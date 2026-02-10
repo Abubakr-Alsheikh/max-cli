@@ -3,7 +3,7 @@ import sys
 from rich.console import Console
 
 # Import interfaces
-from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai
+from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media # <--- Import cli_media
 from max_cli.common.exceptions import MaxError
 
 # Initialize Console directly here to ensure it's available for the crash handler
@@ -26,7 +26,11 @@ app.add_typer(cli_images.app, name="img", hidden=True)  # Hidden alias
 app.add_typer(cli_files.app, name="files", help="Organize and bulk-rename files.")
 app.add_typer(cli_files.app, name="file", hidden=True)  # Hidden alias
 
-app.add_typer(cli_pdf.app, name="pdf", help="Merge and compress PDFs.")
+app.add_typer(cli_pdf.app, name="pdf", help="Merge, split, and compress PDFs.")
+
+# Register Video/Audio
+app.add_typer(cli_media.app, name="video", help="Compress, convert, and process video/audio.")
+app.add_typer(cli_media.app, name="v", hidden=True) # Short alias
 
 app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
 
