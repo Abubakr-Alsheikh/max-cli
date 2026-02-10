@@ -1,6 +1,6 @@
 import yt_dlp
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, Callable
 import shutil
 
 
