@@ -4,6 +4,7 @@ from typing import List, Tuple
 from PIL import Image
 import io
 
+
 class PDFEngine:
     """
     Core logic for PDF manipulation using PyMuPDF and Pillow.
@@ -26,14 +27,14 @@ class PDFEngine:
                     result_pdf.insert_pdf(src)
                     total_pages += src.page_count
             except Exception as e:
-                # We log/raise here depending on strictness. 
+                # We log/raise here depending on strictness.
                 # For now, let's propagate the error to the CLI to handle.
                 raise RuntimeError(f"Failed to merge '{path.name}': {e}")
 
         # Garbage=4 removes unused objects to keep file size small
         result_pdf.save(output_path, garbage=4, deflate=True)
         result_pdf.close()
-      
+
         return total_pages
 
     def compress_pdf(
@@ -57,10 +58,10 @@ class PDFEngine:
         # Process pages
         for page_index in range(page_count):
             page = doc.load_page(page_index)
-          
+
             # Render page to image (PixMap)
             pix = page.get_pixmap(dpi=dpi)
-          
+
             # Convert to PIL Image
             img_data = pix.tobytes("ppm")
             img = Image.open(io.BytesIO(img_data))
@@ -68,7 +69,7 @@ class PDFEngine:
             # Ensure RGB for JPEG
             if img.mode != "RGB":
                 img = img.convert("RGB")
-          
+
             img_list.append(img)
 
         doc.close()
@@ -91,3 +92,117 @@ class PDFEngine:
             raise RuntimeError(f"Failed to save compressed PDF: {e}")
 
         return page_count
+
+    def split_pdf(self, input_path: Path, output_path: Path, page_ranges: str) -> int:
+        """
+        Extracts specific pages from a PDF.
+        page_ranges example: "1-5,8,11-15" (1-based indexing for user, converted to 0-based).
+        """
+        doc = fitz.open(input_path)
+        new_doc = fitz.open()
+
+        # Parse logic: "1-3, 5" -> [0, 1, 2, 4]
+        pages_to_keep = set()
+        parts = page_ranges.split(",")
+
+        for part in parts:
+            part = part.strip()
+            if "-" in part:
+                start, end = map(int, part.split("-"))
+                # Adjust 1-based to 0-based
+                pages_to_keep.update(range(start - 1, end))
+            else:
+                pages_to_keep.add(int(part) - 1)
+
+        sorted_pages = sorted(list(pages_to_keep))
+
+        # Validate
+        if any(p >= len(doc) or p < 0 for p in sorted_pages):
+            raise ValueError(f"Page range out of bounds. Doc has {len(doc)} pages.")
+
+        for p_idx in sorted_pages:
+            new_doc.insert_pdf(doc, from_page=p_idx, to_page=p_idx)
+
+        new_doc.save(output_path)
+        count = len(new_doc)
+        new_doc.close()
+        doc.close()
+        return count
+
+    def watermark_pdf(
+        self,
+        input_path: Path,
+        output_path: Path,
+        text: str = "DRAFT",
+        opacity: float = 0.3,
+        rotation: int = 45,
+    ) -> None:
+        """
+        Overlays text on the center of every page.
+        """
+        doc = fitz.open(input_path)
+
+        for page in doc:
+            # Calculate center
+            rect = page.rect
+            center = fitz.Point(rect.width / 2, rect.height / 2)
+
+            # Insert Text
+            page.insert_text(
+                center,
+                text,
+                fontsize=60,
+                fontname="helv",
+                color=(0.5, 0.5, 0.5),  # Grey
+                fill_opacity=opacity,
+                rotate=rotation,
+                align=1,  # Center align
+            )
+
+        doc.save(output_path)
+        doc.close()
+
+    def set_password(self, input_path: Path, output_path: Path, password: str) -> None:
+        """
+        Encrypts the PDF with a user password.
+        """
+        doc = fitz.open(input_path)
+        # permit functionality: print, copy, etc.
+        perm = int(
+            fitz.PDF_PERM_ACCESSIBILITY | fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY
+        )
+        doc.save(
+            output_path,
+            encryption=fitz.PDF_ENCRYPT_AES_256,  # Strong encryption
+            user_pw=password,
+            permissions=perm,
+        )
+        doc.close()
+
+    def extract_assets(
+        self, input_path: Path, output_dir: Path, extract_images: bool = True
+    ) -> int:
+        """
+        Rips images out of the PDF and saves them to a folder.
+        Returns count of extracted items.
+        """
+        doc = fitz.open(input_path)
+        count = 0
+
+        if extract_images:
+            for page_index in range(len(doc)):
+                page = doc[page_index]
+                image_list = page.get_images()
+
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    ext = base_image["ext"]
+
+                    filename = f"page{page_index+1}_img{img_index+1}.{ext}"
+                    (output_dir / filename).write_bytes(image_bytes)
+                    count += 1
+
+        doc.close()
+        return count

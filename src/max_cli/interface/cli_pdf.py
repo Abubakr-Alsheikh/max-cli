@@ -176,3 +176,85 @@ def _resolve_files(inputs: List[Path]) -> List[Path]:
         raise typer.Exit(1)
 
     return files
+
+
+@app.command("split")
+def split_pdf(
+    target: Path = typer.Argument(..., help="PDF file to split."),
+    ranges: str = typer.Option(
+        ..., "--pages", "-p", help="Pages to keep (e.g. '1-5, 8, 10-12')."
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output filename."),
+):
+    """
+    Extract specific pages from a PDF into a new file.
+    """
+    if not output:
+        output = target.parent / f"{target.stem}_extracted.pdf"
+
+    try:
+        count = engine.split_pdf(target, output, ranges)
+        log_success(f"Created new PDF with [bold]{count}[/bold] pages at: {output}")
+    except ValueError as e:
+        log_error(str(e))
+    except Exception as e:
+        log_error(f"Split failed: {e}")
+
+
+@app.command("stamp")
+def stamp_pdf(
+    target: Path = typer.Argument(..., help="PDF to watermark."),
+    text: str = typer.Argument("DRAFT", help="Text to overlay."),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output filename."),
+):
+    """
+    Add a watermark (e.g., 'CONFIDENTIAL') to the center of every page.
+    """
+    if not output:
+        output = target.parent / f"{target.stem}_stamped.pdf"
+
+    console.print(f"[cyan]Stamping '{text}' onto {target.name}...[/cyan]")
+    engine.watermark_pdf(target, output, text=text)
+    log_success(f"Stamped PDF saved to: {output}")
+
+
+@app.command("lock")
+def lock_pdf(
+    target: Path = typer.Argument(..., help="PDF to encrypt."),
+    password: str = typer.Option(
+        ..., "--password", "-p", prompt=True, hide_input=True, help="Password."
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output filename."),
+):
+    """
+    Encrypt a PDF with a password.
+    """
+    if not output:
+        output = target.parent / f"{target.stem}_locked.pdf"
+
+    engine.set_password(target, output, password)
+    log_success(f"Encrypted file saved to: {output}")
+
+
+@app.command("rip")
+def rip_content(
+    target: Path = typer.Argument(..., help="PDF to extract from."),
+    output_dir: Optional[Path] = typer.Option(
+        None, "-o", help="Folder to save images."
+    ),
+):
+    """
+    Extract all images from inside the PDF.
+    """
+    if not output_dir:
+        output_dir = target.parent / f"{target.stem}_assets"
+
+    output_dir.mkdir(exist_ok=True)
+
+    console.print(f"Extracting images from [bold]{target.name}[/bold]...")
+    count = engine.extract_assets(target, output_dir)
+
+    if count > 0:
+        log_success(f"Extracted [bold]{count}[/bold] images to: {output_dir}")
+    else:
+        console.print("[yellow]No images found in this PDF.[/yellow]")
