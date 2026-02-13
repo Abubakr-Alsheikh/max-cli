@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from PIL import Image
 from max_cli.core.image_processor import ImageEngine
 
