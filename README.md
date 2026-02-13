@@ -1,354 +1,534 @@
 # Max CLI ⚡
 
-> **The Local, Fast, & Lazy Terminal Assistant.**
+> **Your Lazy, Fast Terminal Assistant That Does the Work for You.**
 
-**Max** is a high-performance, modular CLI framework designed for developers and power users who value speed and efficiency. It transforms complex terminal tasks—media encoding, PDF manipulation, and file organization—into simple, human-readable commands.
-
-Equipped with **Context-Aware AI**, Max doesn't just run commands; it understands your environment, "sees" your files through vision, and generates assets on demand.
+Max transforms complex tasks—like compressing videos, merging PDFs, or downloading from YouTube—into simple commands you can actually remember. Whether you're a casual user or a seasoned developer, Max speaks your language.
 
 ---
 
-## 🚀 Philosophy
+## 🤔 What Can Max Do?
 
-1. **Local First:** Your files stay on your machine. Core logic (compression, renaming) runs 100% offline.
-2. **Be Lazy, Be Fast:** Why type 5 commands when 1 will do? Max automates the mundane.
-3. **AI as a Copilot:** The AI translates your natural language into precise, safe shell commands.
-
-## 🌟 Key Features
-
-* **Local-First Media Engine:** Robust wrappers for FFmpeg and Pillow.
-* **Professional PDF Suite:** Merge, split, compress, and secure documents locally.
-* **Context-Aware AI:** Max scans your current directory to resolve filenames automatically.
-* **Universal Downloader:** Grab video/audio from 1000+ sites with smart quality presets.
-* **Multimodal Vision:** Analyze screenshots, extract data from receipts, or troubleshoot errors.
-* **Image Generation:** Native integration with Gemini "Nano Banana" for creating and editing images.
-* **System Tools:** ASCII QR codes for local sharing and clipboard-to-disk workflows.
+| Task | Max Command | Example |
+|------|-------------|---------|
+| **Compress videos** | `max video compress` | `max video compress movie.mp4` |
+| **Convert video to audio** | `max video to-audio` | `max video to-audio podcast.mp4` |
+| **Download videos/music** | `max grab` | `max grab "youtube.com/..."` |
+| **Merge PDFs** | `max pdf bundle` | `max pdf bundle contracts/` |
+| **Compress images** | `max img compress` | `max img compress photos/` |
+| **Resize images** | `max img resize` | `max img resize logo.png --width 800` |
+| **Ask AI anything** | `max ai ask` | `max ai ask "Merge and Compress those pdf files"` |
+| **Generate images** | `max ai create` | `max ai create "A cat on a bike"` |
+| **Organize files** | `max files smart-sort` | `max files smart-sort downloads/` |
 
 ---
 
-## 📦 Installation
+## 🚀 Quick Start (5 Minutes)
 
-### 1. Prerequisites
+### Step 1: Install Python
 
-1. **FFmpeg:** Max relies on **FFmpeg** for high-speed media processing.
-    * **macOS:** `brew install ffmpeg`
-    * **Linux:** `sudo apt install ffmpeg`
-    * **Windows:** `winget install Gyan.FFmpeg`
+Max runs on Python. If you don't have it:
 
-2. **JS Runtime (Pick one):**
-    * **Node.js:** `brew install node` (Recommended)
-    * **Deno:** `brew install deno`
+- **Windows:** Download from [python.org](https://python.org) (check "Add to PATH")
+- **Mac:** Open Terminal and run: `brew install python`
+- **Linux:** `sudo apt install python3`
 
-### 2. Install Max
+### Step 2: Install FFmpeg (For Video/Audio)
+
+Max needs FFmpeg to process videos. Don't worry, it's easy:
 
 ```bash
-# Clone the repository
+# Mac
+brew install ffmpeg
+
+# Windows (run in PowerShell or Command Prompt)
+winget install Gyan.FFmpeg
+
+# Linux
+sudo apt install ffmpeg
+```
+
+### Step 3: Install Max
+
+```bash
+# Clone and install
 git clone https://github.com/Abubakr-Alsheikh/max-cli.git
 cd max-cli
-
-# Install in editable mode
 pip install -e .
+```
+
+### Step 4: Configure AI (Optional but Recommended)
+
+Max's AI features need an API key. The easiest setup:
+
+```bash
+max config setup
+```
+
+This wizard will guide you through:
+
+- Choosing your AI provider (Google Gemini, OpenAI, or custom)
+- Entering your API key
+- Setting preferences
+
+**Get a free API key:**
+
+- [Google AI Studio](https://aistudio.google.com/app/apikey) - Free tier available
+- [OpenAI](https://platform.openai.com/api-keys) - Pay-as-you-go
+
+### Step 5: Start Using Max
+
+```bash
+# See all available commands
+max --help
+
+# Download a video
+max grab "https://youtube.com/watch?v=..."
+
+# Compress a video
+max video compress mymovie.mp4
+
+# Compress images in a folder
+max img compress ./photos
+```
+
+---
+
+## 📖 User Guide
+
+### 🎥 Video & Audio
+
+#### Compress Video (Shrink File Size)
+
+```bash
+# Simple compression
+max video compress video.mp4
+
+# High quality compression
+max video compress video.mp4 --preset high
+
+# Specific quality (1-100)
+max video compress video.mp4 -q 75
+```
+
+#### Convert Video to Audio
+
+```bash
+# To MP3 (default, high quality)
+max video to-audio lecture.mp4
+
+# To WAV (lossless, for editing)
+max video to-audio lecture.mp4 --format wav
+
+# To MP3 320kbps
+max video to-audio lecture.mp4 -q x
+```
+
+#### Trim/Cut Video
+
+```bash
+# Cut from 0:30 to 1:00
+max video cut movie.mp4 --start 0:30 --end 1:00
+
+# First 30 seconds only
+max video cut movie.mp4 --duration 30
+```
+
+#### Other Video Commands
+
+```bash
+max video gif clip.mp4              # Convert to GIF
+max video louder audio.mp4 --db 10  # Boost volume by 10dB
+max video snap video.mp4 --time 1:30 # Take screenshot at 1:30
+max video mute video.mp4             # Remove audio track
+```
+
+---
+
+### 📄 PDF Documents
+
+#### Merge PDFs
+
+```bash
+# Merge all PDFs in a folder
+max pdf bundle mydocs/
+
+# Merge specific files
+max pdf bundle file1.pdf file2.pdf
+```
+
+#### Split PDF
+
+```bash
+# Extract pages 1-5 and page 8
+max pdf split document.pdf -p 1-5,8
+```
+
+#### Compress PDF
+
+```bash
+max pdf compress large.pdf
+```
+
+#### Add Watermark
+
+```bash
+max pdf stamp document.pdf "CONFIDENTIAL"
+```
+
+#### Password Protect
+
+```bash
+max pdf lock document.pdf
+```
+
+---
+
+### 📥 Downloading (YouTube, Spotify, etc.)
+
+Download from almost any website:
+
+```bash
+# Download video (best quality)
+max grab "https://youtube.com/watch?v=..."
+
+# Download audio only (MP3)
+max grab "https://youtube.com/watch?v=..." -a
+
+# Choose quality: s=480p, m=720p, h=1080p, x=4K
+max grab "..." -q h
+
+# Download a playlist
+max grab "https://youtube.com/playlist?list=..."
+
+# Download specific video from playlist
+max grab "..." -i 3
+```
+
+#### Quality Presets Explained
+
+| Flag | Video Quality | Audio Quality | Best For |
+|------|---------------|---------------|----------|
+| `-q s` | 480p | 64kbps | Saving data |
+| `-q m` | 720p | 128kbps | Phone viewing |
+| `-q h` | 1080p | 192kbps | Desktop viewing |
+| `-q x` | 4K | 320kbps | Best quality |
+
+#### Save Your Download Preferences
+
+```bash
+# Set your defaults once
+max config grab
+
+# Now just run:
+max grab "url"  # Uses your saved preferences
+```
+
+---
+
+### 🖼 Images
+
+#### Compress Images
+
+```bash
+# Compress all images in folder (75% quality)
+max img compress ./photos
+
+# Compress single image
+max img compress photo.jpg
+
+# Force JPEG output
+max img compress ./photos --jpeg
+
+# Limit max dimension to 1080px
+max img compress ./photos --max 1080
+```
+
+#### Resize Images
+
+```bash
+# Resize to specific width
+max img resize image.png --width 800
+
+# Resize to specific height
+max img resize image.png --height 600
+
+# Scale down by percentage
+max img resize image.png --scale 50
+```
+
+#### Convert Format
+
+```bash
+# Convert to WebP (modern, smaller)
+max img convert photo.jpg --to webp
+
+# Convert to PNG
+max img convert photo.png --to png
+```
+
+#### Remove Metadata (Privacy)
+
+```bash
+# Strip EXIF data (GPS, camera info, etc)
+max img strip ./photos
+```
+
+---
+
+### 🤖 AI Assistant
+
+Max has a smart AI that understands what you want.
+
+#### Ask Anything
+
+```bash
+# Get help with a task
+max ai ask "How do I compress this video?"
+
+# In a folder with a file, just describe what you want
+max ai ask "Make this image smaller"
+# Max figures out which file you mean!
+```
+
+#### Analyze Images
+
+```bash
+# Analyze a screenshot
+max ai analyze screenshot.png -p "What error is shown?"
+
+# Extract data from receipt
+max ai analyze receipt.jpg -p "What is the total amount?"
+```
+
+#### Generate Images
+
+```bash
+# Create from text description
+max ai create "A cute cat sitting on a beach" -o cat.png
+
+# Edit existing image
+max ai edit photo.jpg "Add a sunset background" -o new_photo.jpg
+```
+
+#### Chat Mode
+
+```bash
+# Start an interactive conversation
+max ai chat
+```
+
+---
+
+### 📂 File Management
+
+#### Smart Sort (AI Organizer)
+
+```bash
+# Automatically organize files into categories
+max files smart-sort ./downloads
+
+# Max reads filenames and sorts them into folders like:
+# Invoices/, Images/, Documents/, etc.
+```
+
+#### Rename Sequentially
+
+```bash
+# Rename to 1_file, 2_file, etc.
+max files order ./photos
+```
+
+---
+
+### 🔧 System Tools
+
+```bash
+# Generate QR code from URL
+max share "https://example.com"
+
+# Copy file contents to clipboard
+max copy file.txt
+
+# Save clipboard image to file
+max paste screenshot.png
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-Max uses a `.env` file for centralized configuration. It is optimized for **Google Gemini** (using the OpenAI compatibility layer) but works with any OpenAI-compatible provider.
+### Setting Up Your API Key
 
-### Enhanced Configuration System
-
-Max now features an interactive configuration wizard with support for multiple AI providers and the ability to promote local settings to global defaults.
-
-#### Interactive Setup
-
-Run `max config setup` to launch the configuration wizard:
+The easiest way:
 
 ```bash
 max config setup
 ```
 
-**Features:**
-- **Provider Selection**: Choose between Google Gemini, OpenAI, or Custom providers
-- **Custom Base URL**: Configure local AI servers like Ollama or LocalAI
-- **Model Overrides**: Customize text and image generation models
-- **Secure API Key Entry**: Password-protected input for API keys
+### Manual Configuration
 
-#### Local-to-Global Configuration
-
-Promote project-specific settings to system defaults:
-
-```bash
-# Configure a project locally first
-max config setup  # Configure for this project
-
-# Then promote to global settings
-max config save
-```
-
-**Use Case:** Perfect for testing new models in a specific project, then making them your default everywhere.
-
-#### Configuration Commands
-
-```bash
-# Interactive setup wizard
-max config setup
-
-# Configure downloader preferences
-max config grab
-
-# Promote local .env to global settings
-max config save [--force]
-
-# Show current configuration
-max config show
-```
-
-#### Configuration File Locations
-
-- **Global**: `~/.max_config.env` (System-wide settings)
-- **Local**: `.env` (Project-specific overrides)
-
-Local settings take priority over global settings, allowing for flexible per-project configurations while maintaining system defaults.
+Create a `.env` file in your project folder:
 
 ```ini
-# .env
-
-# --- Provider Setup ---
-OPENAI_API_KEY=your_google_ai_studio_key
+# For Google Gemini (recommended - has free tier)
+OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-
-# --- Model Selection ---
-# For Text reasoning, Vision analysis, and Context-aware commands
 AI_MODEL=gemini-1.5-flash
+AI_IMAGE_MODEL=gemini-2.0-flash-exp
 
-# Dedicated model for Image Generation and Editing (Nano Banana)
-AI_IMAGE_MODEL=gemini-2.5-flash-image
+# For OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4o-mini
 
-# --- Downloader Defaults ---
-# Persistent settings for 'max grab' command
-GRAB_QUALITY=h                 # Default quality: s, m, h, x
-GRAB_AUDIO_FORMAT=mp3          # Default audio format
-GRAB_STRIP_PLAYLIST=true       # Auto-remove playlist info from URLs
-GRAB_INCLUDE_METADATA=true     # Embed metadata/thumbnails by default
-
-# --- Other Defaults ---
+# Default settings
 DEFAULT_QUALITY=80
+GRAB_QUALITY=h
+GRAB_AUDIO_FORMAT=mp3
+```
+
+### Configuration Locations
+
+- **Global:** `~/.max_config.env` - Applied everywhere
+- **Local:** `.env` - Applied to current folder
+
+Local settings override global settings.
+
+### Other Config Commands
+
+```bash
+max config show     # View current configuration
+max config grab     # Configure downloader defaults
+max config save     # Save local settings as global defaults
 ```
 
 ---
 
-## 🛠 Command Reference
+## 💡 Tips & Tricks
 
-### 🎥 Video & Audio (`max video`)
+### Working with Folders
 
-High-level control over FFmpeg without the syntax headaches.
-
-* **`compress`**: Shrink videos using H.264 (Presets: `high`, `balanced`, `max`).
-* **`cut`**: Frame-perfect trimming using `--start`, `--end`, or `--duration`.
-* **`gif`**: High-quality GIF generation with custom palette rendering.
-* **`louder`**: Boost quiet audio tracks by decibels (e.g., `--db 10`).
-* **`snap`**: Capture a high-res JPG from any timestamp.
-* **`mute`**: Instantly remove audio tracks without re-encoding video.
-
-# Convert Video to Audio
-max video to-audio clip.mp4               # Instant MP3 (High quality)
-max video to-audio clip.mp4 --format wav  # Lossless WAV for editing
-max video to-audio clip.mp4 -q x          # 320kbps Audiophile MP3
-
-### 📄 Document Suite (`max pdf`)
-
-Professional PDF management powered by PyMuPDF.
-
-* **`bundle`**: The ultimate pipeline—merges a folder, compresses the result, and cleans up.
-* **`split`**: Extract specific pages (e.g., `-p 1-5, 8, 10-12`).
-* **`stamp`**: Overlay watermarks (e.g., "CONFIDENTIAL") on all pages.
-* **`lock`**: Secure documents with AES-256 password encryption.
-* **`rip`**: Extract all embedded images from a PDF into a folder.
-
-### 📥 Universal Downloader (`max grab`)
-
-Smart downloading with **Quality Presets**:
-
-* **`s` (Small)**: 480p Video / 64k Audio (Data saver).
-* **`m` (Medium)**: 720p Video / 128k Audio (Standard).
-* **`h` (High)**: 1080p Video / 192k Audio (HD Default).
-* **`x` (Xtreme)**: 4K Video / 320k Audio (Best quality).
+Most commands work on folders too:
 
 ```bash
-max grab "URL" -a -q s        # Download tiny podcast-ready MP3
-max grab "URL" -q x           # Download 4K archival video
+# Compress ALL images in a folder
+max img compress ./videos
+
+# Merge ALL PDFs in a folder
+max pdf bundle ./documents
 ```
 
-#### **Persistent Settings & Configuration**
+### Default Directory
 
-Configure your default downloader preferences once and use them across all downloads:
+If you don't specify a path, Max uses the current folder:
 
 ```bash
-# Configure default settings (saved to ~/.max_config.env)
-max config grab
+cd ./myphotos
+max img compress   # Compresses everything in myphotos
 ```
 
-This allows you to set:
-- Default quality level (s/m/h/x)
-- Whether to auto-strip playlist info from URLs
-- Whether to embed metadata/thumbnails by default
+### Chain Commands
 
-#### **Advanced Grab Controls**
+You can run multiple commands:
 
 ```bash
-max grab "URL" -q s              # Override default quality with -q flag
-max grab "URL" -i 1              # Download only the 1st video in a playlist
-max grab "URL" -i "1-5"          # Download first 5 videos
-max grab "URL" --no-playlist     # Force download single video from a playlist URL
-max grab "URL" -a --no-meta      # Download audio without ID3 tags or thumbnails
-max grab "URL" -a --nom          # Shortcut for --no-meta (disable metadata)
+# Merge PDFs then compress
+max pdf bundle ./docs && max pdf compress merged.pdf
 ```
 
-#### **Smart URL Handling**
-
-With the new `GRAB_STRIP_PLAYLIST=true` setting, Max automatically cleans URLs by removing playlist parameters when downloading individual videos, eliminating the need to manually edit URLs or answer playlist prompts for individual videos.
-
-### 📂 File Management (`max files`)
-
-* **`order`**: Sequential renaming (e.g., `1_doc.pdf`, `2_doc.pdf`).
-* **`smart-sort`**: AI-powered semantic organization. Max reads filenames and moves them into logical categories (e.g., `Invoices/`, `Legal/`, `Screenshots/`).
-
-### 🖼 Image Suite (Pillow Wrapper)
-
-High-speed bulk image processing with automatic EXIF orientation correction. All commands default to the **current directory (`.`)** if no path is provided.
+### Get Help
 
 ```bash
-# 1. The All-in-One Optimizer (Compress)
-# High-speed compression with optional resizing and format forcing.
-max img compress ./Photos -q 75           # Compress with 75% quality
-max img compress . --jpeg -m 1080         # Force to JPG and limit size to 1080px
-max img compress logo.png --quantize      # Lossy PNG optimization (8-bit)
+# See all commands
+max --help
 
-# 2. Precision Resizing
-max img resize . --width 1920             # Set width (height scales automatically)
-max img resize . --height 500              # Set height (width scales automatically)
-max img resize . --scale 50                # Shrink by 50%
-
-# 3. Format Conversion
-max img convert ./Assets --to webp        # Convert all images to modern WebP
-max img convert shot.bmp --to png         # Convert single file to PNG
-
-# 4. Privacy Scrubbing (Metadata Stripping)
-# Removes GPS coordinates, camera model, and timestamps.
-max img strip ./SocialMedia               # Remove EXIF data from all images
+# See help for specific command
+max video --help
+max img --help
+max pdf --help
 ```
 
 ---
 
-## 🧠 The AI Assistant
+## 🆘 Troubleshooting
 
-### 1. Context-Aware Execution
+### "FFmpeg not found"
 
-Max reads your current directory. You don't need to be specific.
+Install FFmpeg (see Step 2 above) and restart your terminal.
 
-```bash
-# In a folder with 'IMG_2024.jpg'
-max ai ask "Make the photo 50% smaller"
-# Max resolves context and runs: max images compress IMG_2024.jpg --scale 50
-```
+### "API key not found"
 
-### 2. Vision & Analysis
+Run `max config setup` to configure your AI provider.
 
-```bash
-max ai analyze error.png -p "Why is my build failing?"
-max ai analyze receipt.jpg -p "Total price in JSON format"
-```
+### "Permission denied" (Windows)
 
-### 3. Generative Creative Suite
+Run Command Prompt as Administrator, or use a virtual environment.
 
-```bash
-max ai create "A minimalist logo for a tech company" -o logo.png
-max ai edit photo.jpg "Change the sky to a sunset" -o new_photo.jpg
-```
+### Something else not working?
 
-### 4. Interactive Chat
-
-Start a persistent session where Max remembers your previous tasks.
-
-```bash
-max ai chat
-> User: What's the biggest video in this folder?
-> Max: 'final_render.mp4' is 1.2GB.
-> User: Compress it to medium quality.
-> Max: [Executes compression...]
-```
-
-### 5. Sharing & System
-
-* **`max share [URL/Text]`**: Generates an ASCII QR code in your terminal. Perfect for mobile testing.
-* **`max paste [file.png]`**: Saves the image currently in your system clipboard to a file.
-* **`max copy [file.txt]`**: Copies the entire content of a text file to your clipboard.
+- Check: `max --version`
+- Get help: `max --help`
+- Report issues: [GitHub Issues](https://github.com/Abubakr-Alsheikh/max-cli/issues)
 
 ---
 
-## 🏗 Architectural Design
+## 🔧 For Developers
 
-* **Modular Monolith:** Logic is separated into `core/` (Services) and `interface/` (CLI).
-* **Strategy Pattern:** Media processing engines are interchangeable.
-* **Type Safety:** Strict Python type-hinting throughout for maintainability.
-* **Rich UI:** Every command features color-coded feedback and real-time progress bars.
-This section is the "Vision" for Max. It targets high-impact utilities that turn the CLI into an intelligent agent capable of understanding audio, automating coding tasks, and managing cloud resources.
+### Installation (Development Mode)
 
-## 🔮 The Roadmap: Future Features & Improvements
+```bash
+# Clone
+git clone https://github.com/Abubakr-Alsheikh/max-cli.git
+cd max-cli
 
-We are constantly evolving **Max** to be the definitive local-first terminal assistant. Here is what we are building next:
+# Install with dev dependencies
+pip install -e .[dev]
 
-### 🎙 AI Intelligence & Content Extraction
+# Run tests
+pytest tests/
 
-* **AI Transcription (`max audio transcribe`)**: Integrate OpenAI Whisper (Local or API) to extract text from any video or audio file.
-  * *Use Case:* "Max, transcribe this 1-hour meeting recording into a text file."
-* **AI Summarization**: Feed transcribed text or long PDFs into Gemini/GPT-4 to generate executive summaries.
-* **Auto-Subtitle Generation**: Automatically generate and burn-in `.srt` subtitles for videos using AI-detected speech.
+# Lint code
+ruff check .
+ruff format .
 
-### 🧠 Semantic Knowledge Base (Local RAG)
+# Type check
+mypy src/
+```
 
-* **Local File Indexing**: Allow Max to "index" your local Documents folder.
-* **Natural Language Search**: Ask questions across your files.
-  * *Query:* "Max, which PDF mentions the contract terms for the 2024 project?"
+### Architecture
 
-### 🎥 Advanced Media Automation
-
-* **Smart Silence Removal**: Automatically cut silent gaps out of video/audio recordings—perfect for podcasters.
-* **Auto-Face Blurring**: Use local computer vision to detect and blur faces in videos for privacy before sharing.
-* **Color Grading Presets**: Apply cinematic looks to videos via simple CLI commands.
-
-### 🛠 Developer Productivity Tools
-
-* **AI Commit Messages**: Max reads your `git diff` and suggests a perfect, conventional commit message.
-* **Local Port Tunneling**: Integrate with tools like `ngrok` or `cloudflared` via `max share --tunnel 8000`.
-* **Docker Management**: Simplify complex Docker commands.
-  * *Command:* `max dev cleanup` (Kills all unused containers, volumes, and dangling images).
-
-### ☁️ Cloud & Backup Integration
-
-* **S3/Cloud Sync**: Quick-upload assets to AWS S3, Google Cloud Storage, or R2 for hosting.
-  * *Command:* `max push image.jpg --to s3-bucket`
-* **Temporary File Hosting**: Upload a file to a temporary, encrypted cloud link that expires in 24 hours.
-
-### 🛡 Security & Privacy
-
-* **PII Scanner**: Scan images or PDFs for Personal Identifiable Information (Credit cards, SSNs, Emails) before you upload or share them.
-* **Deepfake Detection**: Simple checks for image/video manipulation markers.
+```
+src/max_cli/
+├── core/           # Business logic (engines)
+├── interface/      # CLI commands (Typer)
+├── common/         # Shared utilities
+└── __init__.py    # Package exports
+```
 
 ---
-
-### 💡 Have an Idea?
-
-Max is built for the community. If you have a workflow that feels "too slow" or "too complex," [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues) and we might build a command for it!
 
 ## 🤝 Contributing
 
-1. Fork the repository.
-2. Install development dependencies: `pip install -e .[dev]`
-3. Ensure code passes `ruff` linting and `mypy` type checks.
-4. Submit a Pull Request.
+Found a bug or have a feature request?
+
+1. Open an issue: [GitHub Issues](https://github.com/Abubakr-Alsheikh/max-cli/issues)
+2. Fork the repo
+3. Submit a PR
+
+---
 
 ## 📄 License
 
-MIT
+MIT License - Free to use, modify, and distribute.
+
+---
+
+## 🙏 Thank You
+
+Max was built to make your life easier. If you find it useful, star the repo and share it with others!
+
+Questions? Reach out or open an issue.
+
+<div style="text-align: center;">
+Build with 💗 to make life easier
+</div>
