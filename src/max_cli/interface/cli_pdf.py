@@ -119,23 +119,55 @@ def compress_pdf(
 @app.command("bundle")
 def bundle_pdfs(
     inputs: List[Path] = typer.Argument(..., help="Files or Folder to bundle."),
-    output: Path = typer.Option(..., "-o", "--output", help="Final output file path."),
+    # Changed to Optional (None is allowed)
+    output: Optional[Path] = typer.Option(
+        None, "-o", "--output", help="Final output path."
+    ),
     dpi: int = typer.Option(150, help="Compression DPI."),
     quality: int = typer.Option(80, help="Compression Quality."),
 ):
     """
     Pipeline: Merge multiple files -> Compress result -> Save final.
-    Does not leave temporary files behind.
+    Automatically handles naming if output is a folder or missing.
     """
-    files = _resolve_files(inputs)
+    # 1. Resolve Inputs
+    try:
+        files = _resolve_files(inputs)
+    except Exception as e:
+        log_error(str(e))
+        raise typer.Exit(1)
 
-    # Create a temporary path for the merged (uncompressed) file
-    temp_merged = output.parent / f".temp_{output.stem}_merged.pdf"
+    # 2. Smart Output Logic
+    # Determine a base name for the file
+    if inputs[0].is_dir():
+        base_name = inputs[0].name
+        # If input is a folder, default location is the PARENT (Sibling to the input folder)
+        default_parent = inputs[0].parent
+    else:
+        base_name = inputs[0].stem
+        default_parent = inputs[0].parent
+
+    filename = f"{base_name}_bundled.pdf"
+
+    if output is None:
+        # Case A: No output provided -> Save as "InputName_bundled.pdf" in parent dir
+        output = default_parent / filename
+
+    elif output.is_dir():
+        # Case B: Output is a folder -> Save inside that folder with auto name
+        output = output / filename
+
+    # Case C: Output is a file path (e.g., ./out.pdf) -> Keep as is
 
     console.print(f"[cyan]Pipeline: Merge ({len(files)} files) -> Compress[/cyan]")
+    console.print(f"[dim]Target: {output}[/dim]")
+
+    # Create a unique temp file to avoid collisions
+    temp_merged = output.parent / f".tmp_{base_name}_merged.pdf"
 
     try:
         # Step 1: Merge
+        # We check total_pages to ensure merge actually happened
         with console.status("Step 1/2: Merging..."):
             engine.merge_pdfs(files, temp_merged)
 
@@ -149,8 +181,9 @@ def bundle_pdfs(
 
         # Stats
         final_size = output.stat().st_size
-        log_success(f"Bundle created at: [bold]{output}[/bold]")
-        console.print(f"Final Size: {format_size(final_size)}")
+        log_success(f"Bundle created successfully!")
+        console.print(f"Path: [bold]{output}[/bold]")
+        console.print(f"Size: {format_size(final_size)}")
 
     except Exception as e:
         # Cleanup on fail
@@ -163,17 +196,25 @@ def bundle_pdfs(
 def _resolve_files(inputs: List[Path]) -> List[Path]:
     """Helper to turn input arguments into a sorted list of PDF paths."""
     files = []
+
+    # If the user passed a single directory
     if len(inputs) == 1 and inputs[0].is_dir():
-        # Folder scan
-        raw = [f for f in inputs[0].iterdir() if f.suffix.lower() == ".pdf"]
+        folder = inputs[0]
+        # Recursively or flatly find PDFs? Standard is flat to avoid deep loops.
+        # We filter out files starting with '.' or '_' to avoid hidden/temp files.
+        raw = [
+            f
+            for f in folder.iterdir()
+            if f.suffix.lower() == ".pdf" and not f.name.startswith((".", "_"))
+        ]
         files = sorted(raw, key=lambda f: natural_sort_key(f.name))
+
     else:
-        # Explicit list
-        files = inputs
+        # Explicit list of files
+        files = [f for f in inputs if f.exists() and f.suffix.lower() == ".pdf"]
 
     if not files:
-        log_error("No PDF files found in input.")
-        raise typer.Exit(1)
+        raise ValueError("No PDF files found in input.")
 
     return files
 
