@@ -14,12 +14,19 @@ def natural_sort_key(s: str) -> list:
 
 
 def format_size(size_in_bytes: float) -> str:
-    """Returns a human-readable file size string."""
-    for unit in ["B", "KB", "MB", "GB"]:
-        if size_in_bytes < 1024.0:
-            return f"{size_in_bytes:.2f} {unit}"
-        size_in_bytes /= 1024.0
-    return f"{size_in_bytes:.2f} TB"
+    """Returns a human-readable file size string, handling negative values (growth)."""
+    is_negative = size_in_bytes < 0
+    size = abs(size_in_bytes)
+
+    final_unit = "B"
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        final_unit = unit
+        if size < 1024.0:
+            break
+        size /= 1024.0
+
+    prefix = "-" if is_negative else ""
+    return f"{prefix}{size:.2f} {final_unit}"
 
 
 def encode_image_to_base64(image_path: Path) -> str:

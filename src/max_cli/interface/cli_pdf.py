@@ -111,9 +111,19 @@ def compress_pdf(
             progress.advance(task)
 
     log_success(f"Finished! Processed {success_count}/{len(targets)} files.")
-    console.print(
-        f"[green]Total Space Saved:[/green] [bold]{format_size(total_saved)}[/bold]"
-    )
+    if total_saved > 0:
+        console.print(
+            f"[green]Total Space Saved:[/green] [bold]{format_size(total_saved)}[/bold]"
+        )
+    else:
+        # Growth scenario
+        console.print(
+            f"[yellow]⚠ Warning:[/yellow] File size increased by [bold red]{format_size(abs(total_saved))}[/bold red]."
+        )
+        console.print(
+            "[dim]Note: This PDF is likely text-based. Rasterization (image-based compression) "
+            "is best for scanned documents, not digital text documents.[/dim]"
+        )
 
 
 @app.command("bundle")
@@ -181,9 +191,20 @@ def bundle_pdfs(
 
         # Stats
         final_size = output.stat().st_size
-        log_success(f"Bundle created successfully!")
+        log_success("Bundle created successfully!")
         console.print(f"Path: [bold]{output}[/bold]")
         console.print(f"Size: {format_size(final_size)}")
+
+        # Check if bundling increased file size
+        original_total_size = sum(f.stat().st_size for f in files)
+        if final_size > original_total_size:
+            growth = final_size - original_total_size
+            console.print(
+                f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
+            )
+            console.print(
+                "[dim]Note: The bundling process may have added overhead. Consider using 'compress' on the result if it's a scanned document.[/dim]"
+            )
 
     except Exception as e:
         # Cleanup on fail
