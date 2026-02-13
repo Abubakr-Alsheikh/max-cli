@@ -42,7 +42,7 @@ def _clean_url(url: str, strip_playlist: bool) -> str:
         new_parts[4] = urllib.parse.urlencode(new_query, doseq=True)
         cleaned_url = urllib.parse.urlunparse(new_parts)
 
-        console.print(f"[dim]Auto-cleaned URL: Removed playlist info.[/dim]")
+        console.print("[dim]Auto-cleaned URL: Removed playlist info.[/dim]")
         return cleaned_url
 
     return url
