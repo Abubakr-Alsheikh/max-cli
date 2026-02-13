@@ -93,3 +93,5 @@ temp_combine_files_*/
 
 GEMINI.md
 tasks/
+.geminiignore
+.qwenignore

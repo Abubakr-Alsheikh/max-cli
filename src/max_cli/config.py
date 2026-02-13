@@ -12,22 +12,21 @@ class Settings(BaseSettings):
     # If using Gemini, set to: https://generativelanguage.googleapis.com/v1beta/openai/
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
-
     # Models
     AI_MODEL: str = "gpt-5-nano"  # For 'ask', 'chat', 'analyze'
     AI_IMAGE_MODEL: str = "gemini-2.5-flash-image"  # For 'create', 'edit'
 
+    # --- GRAB (DOWNLOADER) DEFAULTS ---
+    # These save your preferences
+    GRAB_QUALITY: str = "h"  # s, m, h, x
+    GRAB_AUDIO_FORMAT: str = "mp3"  # mp3, m4a, wav
+    GRAB_STRIP_PLAYLIST: bool = True  # If True, removes '&list=...' from video URLs
+    GRAB_INCLUDE_METADATA: bool = True  # If True, embeds tags/thumbnails
+
     class Config:
-        # Pydantic will load these in order.
-        # Files later in the list override earlier ones.
-        env_file = [
-            str(
-                Path.home() / ".max_config.env"
-            ),  # 1. Look in User Home (~/.max_config.env)
-            ".env",  # 2. Look in Current Folder
-        ]
+        env_file = [str(Path.home() / ".max_config.env"), ".env"]
         env_file_encoding = "utf-8"
-        extra = "ignore"  # Ignore extra keys in the file
+        extra = "ignore"
 
 
 settings = Settings()

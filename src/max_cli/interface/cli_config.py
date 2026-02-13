@@ -146,6 +146,60 @@ def show_config():
         console.print(f"Base URL:    [dim]{settings.OPENAI_BASE_URL}[/dim]")
 
 
+@app.command("grab")
+def configure_grab():
+    """
+    Configure default settings for the Media Downloader.
+    """
+    console.print(
+        Panel("[bold cyan]Downloader Preferences[/bold cyan]", border_style="cyan")
+    )
+
+    current_data = {}
+
+    # 1. Default Quality
+    q_choice = Prompt.ask(
+        "Default Video/Audio Quality?",
+        choices=["s", "m", "h", "x"],
+        default=settings.GRAB_QUALITY,
+    )
+    current_data["GRAB_QUALITY"] = q_choice
+
+    # 2. Playlist Behavior
+    strip_pl = Confirm.ask(
+        "Auto-strip Playlist info?", default=settings.GRAB_STRIP_PLAYLIST
+    )
+    console.print("[dim]  (If Yes: 'watch?v=ID&list=LIST' becomes 'watch?v=ID')[/dim]")
+    current_data["GRAB_STRIP_PLAYLIST"] = str(strip_pl)
+
+    # 3. Metadata
+    meta = Confirm.ask(
+        "Embed Metadata (Tags/Thumbnail)?", default=settings.GRAB_INCLUDE_METADATA
+    )
+    current_data["GRAB_INCLUDE_METADATA"] = str(meta)
+
+    # 4. Save
+    try:
+        # We append/update the global config file
+        lines = []
+        if GLOBAL_CONFIG_PATH.exists():
+            lines = GLOBAL_CONFIG_PATH.read_text().splitlines()
+
+        # Remove old entries for these specific keys to avoid duplicates
+        keys = ["GRAB_QUALITY", "GRAB_STRIP_PLAYLIST", "GRAB_INCLUDE_METADATA"]
+        lines = [line for line in lines if not any(line.startswith(k) for k in keys)]
+
+        # Add new
+        for k, v in current_data.items():
+            lines.append(f"{k}={v}")
+
+        GLOBAL_CONFIG_PATH.write_text("\n".join(lines) + "\n")
+        log_success("Downloader settings saved!")
+
+    except Exception as e:
+        log_error(f"Failed to save settings: {e}")
+
+
 def _write_env_file(path: Path, data: dict):
     """Helper to write a clean .env file."""
     lines = [
