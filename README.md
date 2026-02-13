@@ -94,6 +94,9 @@ max config save
 # Interactive setup wizard
 max config setup
 
+# Configure downloader preferences
+max config grab
+
 # Promote local .env to global settings
 max config save [--force]
 
@@ -122,7 +125,14 @@ AI_MODEL=gemini-1.5-flash
 # Dedicated model for Image Generation and Editing (Nano Banana)
 AI_IMAGE_MODEL=gemini-2.5-flash-image
 
-# --- Defaults ---
+# --- Downloader Defaults ---
+# Persistent settings for 'max grab' command
+GRAB_QUALITY=h                 # Default quality: s, m, h, x
+GRAB_AUDIO_FORMAT=mp3          # Default audio format
+GRAB_STRIP_PLAYLIST=true       # Auto-remove playlist info from URLs
+GRAB_INCLUDE_METADATA=true     # Embed metadata/thumbnails by default
+
+# --- Other Defaults ---
 DEFAULT_QUALITY=80
 ```
 
@@ -170,14 +180,34 @@ max grab "URL" -a -q s        # Download tiny podcast-ready MP3
 max grab "URL" -q x           # Download 4K archival video
 ```
 
+#### **Persistent Settings & Configuration**
+
+Configure your default downloader preferences once and use them across all downloads:
+
+```bash
+# Configure default settings (saved to ~/.max_config.env)
+max config grab
+```
+
+This allows you to set:
+- Default quality level (s/m/h/x)
+- Whether to auto-strip playlist info from URLs
+- Whether to embed metadata/thumbnails by default
+
 #### **Advanced Grab Controls**
 
 ```bash
+max grab "URL" -q s              # Override default quality with -q flag
 max grab "URL" -i 1              # Download only the 1st video in a playlist
 max grab "URL" -i "1-5"          # Download first 5 videos
 max grab "URL" --no-playlist     # Force download single video from a playlist URL
 max grab "URL" -a --no-meta      # Download audio without ID3 tags or thumbnails
+max grab "URL" -a --nom          # Shortcut for --no-meta (disable metadata)
 ```
+
+#### **Smart URL Handling**
+
+With the new `GRAB_STRIP_PLAYLIST=true` setting, Max automatically cleans URLs by removing playlist parameters when downloading individual videos, eliminating the need to manually edit URLs or answer playlist prompts for individual videos.
 
 ### 📂 File Management (`max files`)
 
