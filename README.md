@@ -56,6 +56,58 @@ pip install -e .
 
 Max uses a `.env` file for centralized configuration. It is optimized for **Google Gemini** (using the OpenAI compatibility layer) but works with any OpenAI-compatible provider.
 
+### Enhanced Configuration System
+
+Max now features an interactive configuration wizard with support for multiple AI providers and the ability to promote local settings to global defaults.
+
+#### Interactive Setup
+
+Run `max config setup` to launch the configuration wizard:
+
+```bash
+max config setup
+```
+
+**Features:**
+- **Provider Selection**: Choose between Google Gemini, OpenAI, or Custom providers
+- **Custom Base URL**: Configure local AI servers like Ollama or LocalAI
+- **Model Overrides**: Customize text and image generation models
+- **Secure API Key Entry**: Password-protected input for API keys
+
+#### Local-to-Global Configuration
+
+Promote project-specific settings to system defaults:
+
+```bash
+# Configure a project locally first
+max config setup  # Configure for this project
+
+# Then promote to global settings
+max config save
+```
+
+**Use Case:** Perfect for testing new models in a specific project, then making them your default everywhere.
+
+#### Configuration Commands
+
+```bash
+# Interactive setup wizard
+max config setup
+
+# Promote local .env to global settings
+max config save [--force]
+
+# Show current configuration
+max config show
+```
+
+#### Configuration File Locations
+
+- **Global**: `~/.max_config.env` (System-wide settings)
+- **Local**: `.env` (Project-specific overrides)
+
+Local settings take priority over global settings, allowing for flexible per-project configurations while maintaining system defaults.
+
 ```ini
 # .env
 
