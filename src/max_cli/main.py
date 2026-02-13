@@ -3,7 +3,16 @@ import sys
 from rich.console import Console
 
 # Import interfaces
-from max_cli.interface import cli_images, cli_files, cli_pdf, cli_ai, cli_media, cli_network, cli_tools
+from max_cli.interface import (
+    cli_images,
+    cli_files,
+    cli_pdf,
+    cli_ai,
+    cli_media,
+    cli_network,
+    cli_tools,
+    cli_config,
+)  # <--- Import this
 from max_cli.common.exceptions import MaxError
 
 # Initialize Console directly here to ensure it's available for the crash handler
@@ -29,8 +38,10 @@ app.add_typer(cli_files.app, name="file", hidden=True)  # Hidden alias
 app.add_typer(cli_pdf.app, name="pdf", help="Merge, split, and compress PDFs.")
 
 # Register Video/Audio
-app.add_typer(cli_media.app, name="video", help="Compress, convert, and process video/audio.")
-app.add_typer(cli_media.app, name="v", hidden=True) # Short alias
+app.add_typer(
+    cli_media.app, name="video", help="Compress, convert, and process video/audio."
+)
+app.add_typer(cli_media.app, name="v", hidden=True)  # Short alias
 
 app.add_typer(cli_network.app, name="net", help="Network tools (Download, Speedtest).")
 
@@ -42,6 +53,9 @@ app.command("grab")(cli_network.download_media)
 # Register the group (optional, if you want 'max tools share')
 app.add_typer(cli_tools.app, name="tools", help="System utilities (Clipboard, QR).")
 
+# Register config commands
+app.add_typer(cli_config.app, name="config", help="Manage API keys and settings.")
+
 # Register top-level Shortcuts (The "Lazy" Way)
 # This allows 'max share' instead of 'max tools share'
 app.command("share")(cli_tools.share_qr)
@@ -51,6 +65,7 @@ app.command("copy")(cli_tools.copy_file)
 # --- CRITICAL LINKING STEP ---
 # Give the AI module access to this app instance so it can read the docs
 cli_ai.MAIN_APP_REF = app
+
 
 def main():
     """

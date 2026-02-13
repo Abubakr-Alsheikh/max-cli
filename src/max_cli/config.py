@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -17,7 +18,16 @@ class Settings(BaseSettings):
     AI_IMAGE_MODEL: str = "gemini-2.5-flash-image"  # For 'create', 'edit'
 
     class Config:
-        env_file = ".env"
+        # Pydantic will load these in order.
+        # Files later in the list override earlier ones.
+        env_file = [
+            str(
+                Path.home() / ".max_config.env"
+            ),  # 1. Look in User Home (~/.max_config.env)
+            ".env",  # 2. Look in Current Folder
+        ]
+        env_file_encoding = "utf-8"
+        extra = "ignore"  # Ignore extra keys in the file
 
 
 settings = Settings()
