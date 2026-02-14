@@ -255,6 +255,31 @@ Before starting any task, agents should check for AI-specific instruction files 
 
 If any of these files exist, read them first and follow their instructions. These files contain specific guidelines for AI agents working on this codebase. If no instruction files are found, proceed with the standard development workflow.
 
+### Time Management & Task Deferral
+
+If a task is taking too much time or effort (e.g., fighting with type checker configurations, fixing LSP errors from third-party libraries, etc.):
+
+1. **Do NOT** spend excessive time trying to perfect it
+2. **Mark the task** as deferred in PLAN.md with `[D]`
+3. **Create a file** in `tasks/issues/` documenting the issue and why it was deferred
+4. **Move to the next task** - don't get stuck
+
+The goal is continuous progress, not perfection. It's better to complete 10 tasks well than to spend hours on 1 difficult task.
+
+Example:
+```markdown
+# Task Issue: mypy strict mode
+
+## Problem
+Third-party libraries (PIL, fitz, yt_dlp) lack type stubs, causing many false-positive errors.
+
+## Why Deferred
+Adding `# type: ignore` everywhere would make code harder to maintain.
+
+## Future Approach
+Wait for official type stubs or consider using pyright with suppressions.
+```
+
 ---
 
 ## Continuous Improvement System
