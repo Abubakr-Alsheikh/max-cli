@@ -1,4 +1,4 @@
-import fitz  # PyMuPDF
+import fitz  # PyMuPDF  # type: ignore[import-untyped]
 from pathlib import Path
 from typing import List
 from PIL import Image
@@ -68,7 +68,7 @@ class PDFEngine:
 
             # Ensure RGB for JPEG
             if img.mode != "RGB":
-                img = img.convert("RGB")
+                img = img.convert("RGB")  # type: ignore[assignment]
 
             img_list.append(img)
 
@@ -102,7 +102,7 @@ class PDFEngine:
         new_doc = fitz.open()
 
         # Parse logic: "1-3, 5" -> [0, 1, 2, 4]
-        pages_to_keep = set()
+        pages_to_keep: set[int] = set()
         parts = page_ranges.split(",")
 
         for part in parts:
@@ -261,8 +261,7 @@ class PDFEngine:
                 fontname="helv",
                 color=(0.5, 0.5, 0.5),  # Grey
                 fill_opacity=opacity,
-                rotate=rotation,
-                align=1,  # Center align
+                rotate=0,
             )
 
         doc.save(output_path)

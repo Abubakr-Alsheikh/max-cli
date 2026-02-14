@@ -1,4 +1,4 @@
-import yt_dlp
+import yt_dlp  # type: ignore[import-untyped]
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
 import shutil

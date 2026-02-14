@@ -71,7 +71,7 @@ def order_files(
     if len(actions) > 20:
         for action in actions[:10]:
             console.print(f"  {action}")
-        console.print(f"  ... and {len(actions)-10} more.")
+        console.print(f"  ... and {len(actions) - 10} more.")
     else:
         for action in actions:
             console.print(f"  {action}")

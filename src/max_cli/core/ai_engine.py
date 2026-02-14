@@ -13,7 +13,6 @@ class AIEngine:
     def __init__(self):
         self.client = None
         if settings.OPENAI_API_KEY:
-
             self.client = OpenAI(
                 api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
             )
@@ -31,7 +30,7 @@ class AIEngine:
             context += f"Path: {os.getcwd()}\n"
             context += f"Files in Folder: {', '.join(visible_files)}\n"
             if len(files) > 30:
-                context += f"(...and {len(files)-30} more files)\n"
+                context += f"(...and {len(files) - 30} more files)\n"
             return context
         except Exception:
             return ""

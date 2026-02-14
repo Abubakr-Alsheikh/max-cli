@@ -16,7 +16,7 @@ engine = AIEngine()
 
 # We need a reference to the main Typer app to generate docs.
 # We will set this in main.py
-MAIN_APP_REF = None
+MAIN_APP_REF: Optional[typer.Typer] = None
 
 
 @app.command("ask")

@@ -33,7 +33,9 @@ def test_resize_image(dummy_image):
     output_path = dummy_image.parent / "resized.jpg"
 
     engine.process_single_image(
-        dummy_image, output_path, scale=50  # Should become 50x50
+        dummy_image,
+        output_path,
+        scale=50,  # Should become 50x50
     )
 
     with Image.open(output_path) as result:

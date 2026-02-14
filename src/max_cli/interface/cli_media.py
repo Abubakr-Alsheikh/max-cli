@@ -14,7 +14,7 @@ try:
 except RuntimeError:
     # If this module is imported but FFmpeg isn't there, we don't crash main.py
     # We just won't be able to run commands.
-    engine = None
+    engine: Optional[MediaEngine] = None
 
 
 def _check_engine():

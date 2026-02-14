@@ -62,8 +62,14 @@ class ImageEngine:
                     int(original_dims[1] * (scale / 100)),
                 )
             elif width or height:
-                w = width or int(original_dims[0] * (height / original_dims[1]))
-                h = height or int(original_dims[1] * (width / original_dims[0]))
+                if width is not None and height is not None:
+                    w, h = width, height
+                elif width is not None:
+                    w = width
+                    h = int(original_dims[1] * (width / original_dims[0]))  # type: ignore[operator]
+                else:
+                    w = int(original_dims[0] * (height / original_dims[1]))  # type: ignore[assignment]
+                    h = height  # type: ignore[assignment]
                 new_size = (w, h)
             elif max_dim:
                 if max(original_dims) > max_dim:
@@ -100,7 +106,9 @@ class ImageEngine:
                 if img.mode not in ["RGB", "L"]:
                     img = img.convert("RGBA")
                 img = img.quantize(
-                    colors=256, method=2, dither=Image.Dither.FLOYDSTEINBERG
+                    colors=256,
+                    method=2,
+                    dither=Image.Dither.FLOYDSTEINBERG,  # type: ignore[assignment]
                 )
 
             if target_format in ["JPEG", "WEBP"]:
