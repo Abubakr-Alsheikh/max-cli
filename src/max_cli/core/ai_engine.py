@@ -7,6 +7,7 @@ from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
+from max_cli.common.cache import get_default_cache
 
 
 class AIEngine:
@@ -139,6 +140,12 @@ If the request is unrelated to the tools or ambiguous, return:
 
     def categorize_files(self, file_list: List[str]) -> Dict[str, str]:
         """AI-powered semantic grouping of files."""
+        cache = get_default_cache()
+        cache_key = f"categorize:{','.join(sorted(file_list))}"
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
         prompt = f"Categorize these files into logical folders (e.g., Invoices, Photos, Scripts). Return a JSON map: {{filename: category_name}}\nFiles: {file_list}"
 
         try:
@@ -146,9 +153,10 @@ If the request is unrelated to the tools or ambiguous, return:
                 model=settings.AI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content)
+            cache.set(cache_key, result, ttl=3600)
+            return result
         except Exception:
-            # Fallback to 'Other' if AI fails
             return {f: "Other" for f in file_list}
 
     def analyze_image_content(self, image_path: Path, prompt: str) -> str:

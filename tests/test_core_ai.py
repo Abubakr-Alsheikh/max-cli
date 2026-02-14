@@ -98,10 +98,13 @@ class TestAIEngine:
 
         assert "file1.txt" in result
 
+    @patch("max_cli.core.ai_engine.get_default_cache")
     @patch("max_cli.core.ai_engine.OpenAI")
     @patch("max_cli.config.settings")
-    def test_categorize_files_fallback(self, mock_settings, mock_openai):
+    def test_categorize_files_fallback(self, mock_settings, mock_openai, mock_cache):
         """Test file categorization fallback on error."""
+        mock_cache.return_value.get.return_value = None
+
         mock_settings.OPENAI_API_KEY = "test-key"
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"

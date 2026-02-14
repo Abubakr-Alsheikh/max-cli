@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from typing import Optional
 from pathlib import Path
@@ -6,6 +7,16 @@ from pathlib import Path
 class Settings(BaseSettings):
     APP_NAME: str = "Max CLI"
     DEFAULT_QUALITY: int = 85
+
+    MAX_WORKERS: int = Field(default=4, ge=1, le=16)
+    BATCH_SIZE: int = Field(default=10, ge=1)
+
+    DOWNLOAD_TIMEOUT: int = Field(default=300, ge=30)
+    MAX_RETRIES: int = Field(default=3, ge=0)
+
+    PROGRESS_BAR: bool = True
+    VERBOSE: bool = False
+    CONFIRM_DESTRUCTIVE: bool = True
 
     # AI Configuration
     # If using OpenAI, leave BASE_URL as None.

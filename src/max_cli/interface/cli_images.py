@@ -7,6 +7,7 @@ from rich import box
 
 from max_cli.core.image_processor import ImageEngine
 from max_cli.common.logger import console, log_success, log_error
+from max_cli.common.concurrent import process_batch_parallel
 from max_cli.config import settings
 
 app = typer.Typer()
@@ -39,6 +40,9 @@ def compress_images(
         False, "--quantize", help="Lossy PNG compression (256 colors)."
     ),
     strip: bool = typer.Option(True, "--strip/--keep", help="Remove EXIF metadata."),
+    workers: int = typer.Option(
+        settings.MAX_WORKERS, "-j", help="Number of parallel workers."
+    ),
 ):
     """
     All-in-one optimizer. Compress, resize, and convert formats in one go.
@@ -49,6 +53,7 @@ def compress_images(
         files,
         out_dir,
         "Optimizing",
+        workers=workers,
         quality=quality,
         scale=scale,
         max_dim=max_dim,
@@ -64,34 +69,62 @@ def resize_images(
     width: Optional[int] = typer.Option(None, "-w", help="Width in px."),
     height: Optional[int] = typer.Option(None, "-h", help="Height in px."),
     scale: Optional[int] = typer.Option(None, "-s", help="Scale %."),
+    workers: int = typer.Option(
+        settings.MAX_WORKERS, "-j", help="Number of parallel workers."
+    ),
 ):
     """Specialized command for adjusting image dimensions."""
     if not any([width, height, scale]):
         log_error("Specify --width, --height, or --scale.")
         return
     files, out_dir = _resolve_batch(target)
-    _run_batch(files, out_dir, "Resizing", width=width, height=height, scale=scale)
+    _run_batch(
+        files,
+        out_dir,
+        "Resizing",
+        workers=workers,
+        width=width,
+        height=height,
+        scale=scale,
+    )
 
 
 @app.command("convert")
 def convert_images(
     target: Path = typer.Argument(Path("."), help="File or folder."),
     to: str = typer.Option(..., help="Target format (webp, jpg, png)."),
+    workers: int = typer.Option(
+        settings.MAX_WORKERS, "-j", help="Number of parallel workers."
+    ),
 ):
     """Bulk convert images to a new format."""
     files, out_dir = _resolve_batch(target)
-    _run_batch(files, out_dir, "Converting", force_format=to)
+    _run_batch(files, out_dir, "Converting", workers=workers, force_format=to)
 
 
 @app.command("strip")
-def strip_metadata(target: Path = typer.Argument(Path("."), help="File or folder.")):
+def strip_metadata(
+    target: Path = typer.Argument(Path("."), help="File or folder."),
+    workers: int = typer.Option(
+        settings.MAX_WORKERS, "-j", help="Number of parallel workers."
+    ),
+):
     """Remove GPS and EXIF data from images for privacy."""
     files, out_dir = _resolve_batch(target)
-    _run_batch(files, out_dir, "Stripping", strip_exif=True)
+    _run_batch(files, out_dir, "Stripping", workers=workers, strip_exif=True)
 
 
-def _run_batch(files: List[Path], out_dir: Path, action: str, **kwargs):
-    stats_list = []
+def _run_batch(
+    files: List[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
+):
+    def process_file(f: Path) -> dict:
+        if len(files) == 1:
+            out_path = out_dir / f"{f.stem}_opt{f.suffix}"
+        else:
+            out_path = out_dir / f.name
+        return engine.process_single_image(f, out_path, **kwargs)
+
+    stats_list: List[dict] = []
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -99,19 +132,28 @@ def _run_batch(files: List[Path], out_dir: Path, action: str, **kwargs):
         transient=True,
     ) as progress:
         task = progress.add_task(f"[green]{action}...", total=len(files))
-        for f in files:
-            # Single file handling: save with suffix
-            if len(files) == 1:
-                out_path = out_dir / f"{f.stem}_opt{f.suffix}"
-            else:
-                out_path = out_dir / f.name
 
-            try:
-                stats = engine.process_single_image(f, out_path, **kwargs)
-                stats_list.append(stats)
-            except Exception as e:
-                console.print(f"[red]Error {f.name}: {e}[/red]")
-            progress.advance(task)
+        if workers > 1 and len(files) > 1:
+            results = process_batch_parallel(
+                files,
+                process_file,
+                max_workers=workers,
+                progress=progress,
+                task_id=task,
+            )
+            for r in results:
+                if "error" in r:
+                    console.print(f"[red]Error {r['item'].name}: {r['error']}[/red]")
+                else:
+                    stats_list.append(r)
+        else:
+            for f in files:
+                try:
+                    stats = process_file(f)
+                    stats_list.append(stats)
+                except Exception as e:
+                    console.print(f"[red]Error {f.name}: {e}[/red]")
+                progress.advance(task)
 
     if not stats_list:
         return
