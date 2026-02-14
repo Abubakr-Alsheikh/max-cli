@@ -52,8 +52,12 @@ def merge_pdfs(
 @app.command("compress")
 def compress_pdf(
     target: Path = typer.Argument(..., help="PDF file OR Folder to compress."),
-    dpi: int = typer.Option(150, help="DPI resolution (Lower = smaller file)."),
-    quality: int = typer.Option(80, help="JPEG Quality (Lower = smaller file)."),
+    dpi: int = typer.Option(
+        150, "-d", "--dpi", help="DPI resolution (Lower = smaller file)."
+    ),
+    quality: int = typer.Option(
+        80, "-q", "--quality", help="JPEG Quality 1-100 (Lower = smaller file)."
+    ),
 ):
     """
     Shrink PDFs. Accepts a single file OR a folder (batch mode).
