@@ -14,8 +14,8 @@ engine = PDFEngine()
 
 @app.command("merge")
 def merge_pdfs(
-    inputs: List[Path] = typer.Argument(
-        default_factory=lambda: [Path(".")], help="List of files OR a single folder."
+    inputs: Optional[List[Path]] = typer.Argument(
+        None, help="List of files OR a single folder."
     ),
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output filename."
@@ -24,6 +24,10 @@ def merge_pdfs(
     """
     Combine multiple PDFs into one.
     """
+    # Handle default to current directory
+    if inputs is None:
+        inputs = [Path(".")]
+
     files_to_merge = _resolve_files(inputs)
 
     if not output:
@@ -47,9 +51,7 @@ def merge_pdfs(
 
 @app.command("compress")
 def compress_pdf(
-    target: Path = typer.Argument(
-        default_factory=lambda: Path("."), help="PDF file OR Folder to compress."
-    ),
+    target: Path = typer.Argument(..., help="PDF file OR Folder to compress."),
     dpi: int = typer.Option(150, help="DPI resolution (Lower = smaller file)."),
     quality: int = typer.Option(80, help="JPEG Quality (Lower = smaller file)."),
 ):
@@ -135,10 +137,9 @@ def compress_pdf(
 
 @app.command("bundle")
 def bundle_pdfs(
-    inputs: List[Path] = typer.Argument(
-        default_factory=lambda: [Path(".")], help="Files or Folder to bundle."
+    inputs: Optional[List[Path]] = typer.Argument(
+        None, help="Files or Folder to bundle."
     ),
-    # Changed to Optional (None is allowed)
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Final output path."
     ),
@@ -149,6 +150,10 @@ def bundle_pdfs(
     Pipeline: Merge multiple files -> Compress result -> Save final.
     Automatically handles naming if output is a folder or missing.
     """
+    # Handle default to current directory
+    if inputs is None:
+        inputs = [Path(".")]
+
     # 1. Resolve Inputs
     try:
         files = _resolve_files(inputs)
