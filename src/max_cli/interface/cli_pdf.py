@@ -14,7 +14,9 @@ engine = PDFEngine()
 
 @app.command("merge")
 def merge_pdfs(
-    inputs: List[Path] = typer.Argument(..., help="List of files OR a single folder."),
+    inputs: List[Path] = typer.Argument(
+        default_factory=lambda: [Path(".")], help="List of files OR a single folder."
+    ),
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output filename."
     ),
@@ -27,7 +29,10 @@ def merge_pdfs(
     if not output:
         # Smart default naming
         if inputs[0].is_dir():
-            output = inputs[0] / f"{inputs[0].name}_merged.pdf"
+            folder_name = inputs[0].name
+            if not folder_name:
+                folder_name = inputs[0].absolute().name or inputs[0].parent.name
+            output = inputs[0] / f"{folder_name}_merged.pdf"
         else:
             output = inputs[0].parent / f"{inputs[0].stem}_merged.pdf"
 
@@ -42,7 +47,9 @@ def merge_pdfs(
 
 @app.command("compress")
 def compress_pdf(
-    target: Path = typer.Argument(..., help="PDF file OR Folder to compress."),
+    target: Path = typer.Argument(
+        default_factory=lambda: Path("."), help="PDF file OR Folder to compress."
+    ),
     dpi: int = typer.Option(150, help="DPI resolution (Lower = smaller file)."),
     quality: int = typer.Option(80, help="JPEG Quality (Lower = smaller file)."),
 ):
@@ -128,7 +135,9 @@ def compress_pdf(
 
 @app.command("bundle")
 def bundle_pdfs(
-    inputs: List[Path] = typer.Argument(..., help="Files or Folder to bundle."),
+    inputs: List[Path] = typer.Argument(
+        default_factory=lambda: [Path(".")], help="Files or Folder to bundle."
+    ),
     # Changed to Optional (None is allowed)
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Final output path."
@@ -151,6 +160,8 @@ def bundle_pdfs(
     # Determine a base name for the file
     if inputs[0].is_dir():
         base_name = inputs[0].name
+        if not base_name:
+            base_name = inputs[0].absolute().name or inputs[0].parent.name
         # If input is a folder, default location is the PARENT (Sibling to the input folder)
         default_parent = inputs[0].parent
     else:
