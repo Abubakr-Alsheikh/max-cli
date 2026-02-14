@@ -143,12 +143,22 @@ def bundle_pdfs(
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Final output path."
     ),
-    dpi: int = typer.Option(150, help="Compression DPI."),
-    quality: int = typer.Option(80, help="Compression Quality."),
+    dpi: int = typer.Option(150, "-d", "--dpi", help="Compression DPI (default: 150)."),
+    quality: int = typer.Option(
+        80, "-q", "--quality", help="Compression Quality 1-100 (default: 80)."
+    ),
+    no_compress: bool = typer.Option(
+        False, "--no-compress", help="Skip compression (merge only, no compress)."
+    ),
 ):
     """
-    Pipeline: Merge multiple files -> Compress result -> Save final.
-    Automatically handles naming if output is a folder or missing.
+    Pipeline: Merge multiple files -> Optionally Compress -> Save final.
+
+    Examples:
+      max pdf bundle                    # Merge + Compress (default)
+      max pdf bundle --no-compress      # Merge only, no compression
+      max pdf bundle -d 300 -q 90       # Merge + Compress with high quality
+      max pdf bundle -d 72 -q 50        # Merge + Heavy compression
     """
     # Handle default to current directory
     if inputs is None:
@@ -167,25 +177,29 @@ def bundle_pdfs(
         base_name = inputs[0].name
         if not base_name:
             base_name = inputs[0].absolute().name or inputs[0].parent.name
-        # If input is a folder, default location is the PARENT (Sibling to the input folder)
         default_parent = inputs[0].parent
     else:
         base_name = inputs[0].stem
         default_parent = inputs[0].parent
 
-    filename = f"{base_name}_bundled.pdf"
+    # Determine filename based on whether compression is used
+    if no_compress:
+        filename = f"{base_name}_merged.pdf"
+    else:
+        filename = f"{base_name}_bundled.pdf"
 
     if output is None:
-        # Case A: No output provided -> Save as "InputName_bundled.pdf" in parent dir
         output = default_parent / filename
-
     elif output.is_dir():
-        # Case B: Output is a folder -> Save inside that folder with auto name
         output = output / filename
 
-    # Case C: Output is a file path (e.g., ./out.pdf) -> Keep as is
-
-    console.print(f"[cyan]Pipeline: Merge ({len(files)} files) -> Compress[/cyan]")
+    # Show pipeline info
+    if no_compress:
+        console.print(f"[cyan]Pipeline: Merge ({len(files)} files)[/cyan]")
+    else:
+        console.print(
+            f"[cyan]Pipeline: Merge ({len(files)} files) -> Compress (DPI:{dpi}, Q:{quality})[/cyan]"
+        )
     console.print(f"[dim]Target: {output}[/dim]")
 
     # Create a unique temp file to avoid collisions
@@ -193,37 +207,43 @@ def bundle_pdfs(
 
     try:
         # Step 1: Merge
-        # We check total_pages to ensure merge actually happened
-        with console.status("Step 1/2: Merging..."):
+        with console.status("Merging..."):
             engine.merge_pdfs(files, temp_merged)
 
-        # Step 2: Compress
-        with console.status("Step 2/2: Compressing..."):
-            engine.compress_pdf(temp_merged, output, dpi, quality)
+        final_size = 0
 
-        # Step 3: Cleanup
-        if temp_merged.exists():
-            os.remove(temp_merged)
+        if no_compress:
+            # Just move the merged file to output
+            temp_merged.rename(output)
+            final_size = output.stat().st_size
+        else:
+            # Step 2: Compress
+            with console.status("Compressing..."):
+                engine.compress_pdf(temp_merged, output, dpi, quality)
 
-        # Stats
-        final_size = output.stat().st_size
+            # Cleanup temp
+            if temp_merged.exists():
+                os.remove(temp_merged)
+
+            # Stats
+            final_size = output.stat().st_size
+            original_total_size = sum(f.stat().st_size for f in files)
+
+            if final_size > original_total_size:
+                growth = final_size - original_total_size
+                console.print(
+                    f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
+                )
+                console.print(
+                    "[dim]Note: Consider using lower quality or 'compress' command separately.[/dim]"
+                )
+
         log_success("Bundle created successfully!")
         console.print(f"Path: [bold]{output}[/bold]")
         console.print(f"Size: {format_size(final_size)}")
-
-        # Check if bundling increased file size
-        original_total_size = sum(f.stat().st_size for f in files)
-        if final_size > original_total_size:
-            growth = final_size - original_total_size
-            console.print(
-                f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
-            )
-            console.print(
-                "[dim]Note: The bundling process may have added overhead. Consider using 'compress' on the result if it's a scanned document.[/dim]"
-            )
+        console.print(f"Pages: [bold]{engine.get_page_count(output)}[/bold]")
 
     except Exception as e:
-        # Cleanup on fail
         if temp_merged.exists():
             os.remove(temp_merged)
         log_error(f"Bundle operation failed: {e}")
