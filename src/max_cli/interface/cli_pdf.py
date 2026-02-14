@@ -254,20 +254,101 @@ def _resolve_files(inputs: List[Path]) -> List[Path]:
 @app.command("split")
 def split_pdf(
     target: Path = typer.Argument(..., help="PDF file to split."),
-    ranges: str = typer.Option(
-        ..., "--pages", "-p", help="Pages to keep (e.g. '1-5, 8, 10-12')."
+    start: int = typer.Option(
+        1, "-s", "--start", help="Start page (1-based, default: 1)."
+    ),
+    end: int = typer.Option(
+        -1, "-e", "--end", help="End page (-1 for last page, default: last)."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output filename."),
+    chunks: int = typer.Option(
+        0,
+        "-c",
+        "--chunks",
+        help="Split into chunks of N pages (0=disabled, creates multiple files).",
+    ),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove the specified range instead of keeping it."
+    ),
+    list_pages: bool = typer.Option(
+        False, "--list", help="Just show page count and exit."
+    ),
 ):
     """
-    Extract specific pages from a PDF into a new file.
+    Split a PDF by page range or into chunks.
+
+    Examples:
+      max pdf split file.pdf -s 1 -e 10       Keep pages 1-10
+      max pdf split file.pdf -s 11             Keep from page 11 to end
+      max pdf split file.pdf -e 5              Keep pages 1-5
+      max pdf split file.pdf -c 10             Split into chunks of 10 pages each
+      max pdf split file.pdf --remove -s 5 -e 10  Remove pages 5-10
     """
-    if not output:
-        output = target.parent / f"{target.stem}_extracted.pdf"
+    if not target.exists() or not target.is_file():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
 
     try:
-        count = engine.split_pdf(target, output, ranges)
-        log_success(f"Created new PDF with [bold]{count}[/bold] pages at: {output}")
+        total_pages = engine.get_page_count(target)
+    except Exception as e:
+        log_error(f"Failed to read PDF: {e}")
+        raise typer.Exit(1)
+
+    if list_pages:
+        console.print(f"[cyan]'{target.name}' has [bold]{total_pages}[/bold] pages.")
+        return
+
+    # Handle chunk mode
+    if chunks > 0:
+        output_dir = target.parent
+        if output and output.is_dir():
+            output_dir = output
+
+        output_dir.mkdir(exist_ok=True)
+
+        console.print(f"[cyan]Splitting into chunks of {chunks} pages...")
+        files = engine.split_into_chunks(target, output_dir, chunks)
+
+        console.print(f"[green]Created [bold]{len(files)}[/bold] files:")
+        for f in files:
+            size = f.stat().st_size
+            console.print(f"  {f.name} ({format_size(size)})")
+
+        log_success(f"Split into {len(files)} chunks")
+        return
+
+    # Resolve end to last page
+    if end == -1 or end > total_pages:
+        end = total_pages
+
+    # Validate range
+    if start < 1 or start > end:
+        log_error(f"Invalid range: {start}-{end}. Document has {total_pages} pages.")
+        raise typer.Exit(1)
+
+    # Determine output path
+    if not output:
+        if remove:
+            output = target.parent / f"{target.stem}_without_p{start}-{end}.pdf"
+        else:
+            output = target.parent / f"{target.stem}_p{start}-{end}.pdf"
+
+    # Show what we're doing
+    if remove:
+        console.print(f"[cyan]Removing pages {start}-{end} from '{target.name}'...")
+        action_text = "Removed"
+    else:
+        console.print(f"[cyan]Extracting pages {start}-{end} from '{target.name}'...")
+        action_text = "Extracted"
+
+    try:
+        count = engine.split_by_range(target, output, start, end, keep=not remove)
+
+        size = output.stat().st_size
+        console.print(f"{action_text} [bold]{count}[/bold] pages -> {output.name}")
+        console.print(f"Size: {format_size(size)}")
+        log_success(f"Saved to: {output}")
+
     except ValueError as e:
         log_error(str(e))
     except Exception as e:

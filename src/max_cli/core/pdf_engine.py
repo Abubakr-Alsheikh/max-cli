@@ -129,6 +129,112 @@ class PDFEngine:
         doc.close()
         return count
 
+    def get_page_count(self, input_path: Path) -> int:
+        """Returns the total number of pages in a PDF."""
+        with fitz.open(input_path) as doc:
+            return doc.page_count
+
+    def split_by_range(
+        self,
+        input_path: Path,
+        output_path: Path,
+        start: int = 1,
+        end: int = -1,
+        keep: bool = True,
+    ) -> int:
+        """
+        Extract or remove a range of pages.
+
+        Args:
+            input_path: Source PDF
+            output_path: Destination PDF
+            start: Start page (1-based, inclusive)
+            end: End page (1-based, inclusive, -1 for last page)
+            keep: If True, keep the range; If False, remove the range
+
+        Returns:
+            Number of pages in output
+        """
+        with fitz.open(input_path) as doc:
+            total_pages = doc.page_count
+
+            # Resolve end to last page if -1
+            if end == -1 or end > total_pages:
+                end = total_pages
+
+            # Validate range
+            if start < 1 or start > end or end > total_pages:
+                raise ValueError(
+                    f"Invalid range: {start}-{end}. Document has {total_pages} pages."
+                )
+
+            # Convert to 0-based indices
+            start_idx = start - 1
+            end_idx = end - 1
+
+            new_doc = fitz.open()
+
+            if keep:
+                # Keep only the specified range
+                for p_idx in range(start_idx, end_idx + 1):
+                    new_doc.insert_pdf(doc, from_page=p_idx, to_page=p_idx)
+            else:
+                # Remove the specified range, keep everything else
+                for p_idx in range(total_pages):
+                    if p_idx < start_idx or p_idx > end_idx:
+                        new_doc.insert_pdf(doc, from_page=p_idx, to_page=p_idx)
+
+            new_doc.save(output_path)
+            count = len(new_doc)
+            new_doc.close()
+
+        return count
+
+    def split_into_chunks(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        chunk_size: int = 10,
+    ) -> List[Path]:
+        """
+        Split a PDF into multiple files of chunk_size pages each.
+
+        Args:
+            input_path: Source PDF
+            output_dir: Directory for output files
+            chunk_size: Number of pages per chunk
+
+        Returns:
+            List of output file paths
+        """
+        with fitz.open(input_path) as doc:
+            total_pages = doc.page_count
+            stem = input_path.stem
+
+            output_files = []
+
+            for chunk_num in range(0, total_pages, chunk_size):
+                new_doc = fitz.open()
+
+                # Calculate chunk range
+                start_idx = chunk_num
+                end_idx = min(chunk_num + chunk_size, total_pages)
+
+                for p_idx in range(start_idx, end_idx):
+                    new_doc.insert_pdf(doc, from_page=p_idx, to_page=p_idx)
+
+                # Generate output filename
+                chunk_start = chunk_num + 1
+                chunk_end = end_idx
+                output_name = f"{stem}_p{chunk_start}-{chunk_end}.pdf"
+                output_path = output_dir / output_name
+
+                new_doc.save(output_path)
+                new_doc.close()
+                output_files.append(output_path)
+
+        return output_files
+
     def watermark_pdf(
         self,
         input_path: Path,
@@ -200,7 +306,7 @@ class PDFEngine:
                     image_bytes = base_image["image"]
                     ext = base_image["ext"]
 
-                    filename = f"page{page_index+1}_img{img_index+1}.{ext}"
+                    filename = f"page{page_index + 1}_img{img_index + 1}.{ext}"
                     (output_dir / filename).write_bytes(image_bytes)
                     count += 1
 
