@@ -255,4 +255,140 @@ Before starting any task, agents should check for AI-specific instruction files 
 
 If any of these files exist, read them first and follow their instructions. These files contain specific guidelines for AI agents working on this codebase. If no instruction files are found, proceed with the standard development workflow.
 
+---
+
+## Continuous Improvement System
+
+### The Improvement Plan
+
+This project uses `PLAN.md` as the single source of truth for all improvement tasks. The plan is divided into phases:
+
+- **Phase 1**: Foundation & Code Quality (Testing, Type Safety, Linting)
+- **Phase 2**: Performance & Architecture (Parallel Processing, Caching)
+- **Phase 3**: Feature Enhancements (Media, PDF, AI, File Management)
+- **Phase 4**: Developer Experience (Documentation, CI/CD, Plugin System)
+- **Phase 5**: Advanced Features (Cloud, Voice, System Integration)
+
+### Task Tracking System
+
+Tasks in PLAN.md use checkboxes `[ ]` for pending and `[x]` for completed. When an agent works on a task:
+
+1. **Read the Plan**: Always read `PLAN.md` first to understand current priorities
+2. **Check Task Status**: Verify the task is still `[ ]` (not started)
+3. **Mark In Progress**: Update the checkbox to `[~]` (in progress) while working
+4. **Complete the Task**: Update to `[x]` when finished
+5. **Update README if Needed**: Only update README.md if the task adds user-facing features
+6. **Create Implementation Files**: For complex tasks, create `.md` files with implementation details
+
+### Task Status Legend
+
+| Symbol | Meaning | Description |
+|--------|---------|-------------|
+| `[ ]` | Pending | Not started, available for work |
+| `[~]` | In Progress | Currently being worked on |
+| `[x]` | Completed | Finished and verified |
+| `[S]` | Skipped | Will not implement |
+| `[D]` | Deferred | Moved to future phase |
+
+### Working on Improvement Tasks
+
+When asked to work on project improvements:
+
+```
+1. Read PLAN.md to understand current priorities
+2. Select the highest priority task (P0 first, then P1, etc.)
+3. Check if the task is already marked as in progress or completed
+4. Implement the solution:
+   - For simple tasks: Implement directly in the codebase
+   - For complex tasks: Create an implementation guide file
+5. Test the changes (run pytest, ruff, mypy)
+6. Update PLAN.md to mark task as complete [x]
+7. Only update README.md if user-facing changes require it
+8. If implementation was complex, create an implementation guide
+```
+
+### Implementation Guides for Complex Tasks
+
+When a task is too complex to implement in a single session:
+
+1. Create an implementation guide in `tasks/implementation/` directory
+2. Name it descriptively: `tasks/implementation/<task-name>.md`
+3. Include:
+   - Overview of what needs to be built
+   - Step-by-step implementation plan
+   - Code snippets for key components
+   - Testing strategy
+   - Potential pitfalls
+
+Example template:
+```markdown
+# Implementation Guide: <Feature Name>
+
+## Overview
+Brief description of the feature.
+
+## Implementation Steps
+
+### Step 1: <Name>
+Description and code snippet.
+
+### Step 2: <Name>
+Description and code snippet.
+
+## Testing Strategy
+How to test this feature.
+
+## Potential Issues
+Known issues and how to avoid them.
+
+## Related Tasks
+Links to related tasks in PLAN.md.
+```
+
+### Updating Documentation
+
+**When to UPDATE README.md:**
+- New CLI commands are added
+- New features that users need to know about
+- Breaking changes to existing commands
+- Installation requirement changes
+
+**When NOT to UPDATE README.md:**
+- Internal refactoring
+- Test coverage improvements
+- Type hint additions
+- CI/CD improvements
+- Code style changes
+
+### Running Quality Checks
+
+Before marking a task as complete, always run:
+
+```bash
+# 1. Run tests
+pytest tests/
+
+# 2. Run linter
+ruff check .
+ruff format .
+
+# 3. Run type checker
+mypy src/
+
+# 4. Verify no regressions
+pytest tests/ -v
+```
+
+### The Improvement Loop
+
+This creates a continuous improvement cycle:
+
+1. **Agent reads PLAN.md** → understands priorities
+2. **Agent works on task** → implements or creates guide
+3. **Agent runs checks** → ensures quality
+4. **Agent updates PLAN.md** → marks complete
+5. **Agent updates README if needed** → keeps users informed
+6. **Next agent reads PLAN.md** → sees updated status
+7. **Repeat** → project continuously improves
+
 This document should be kept up-to-date as the project evolves and new patterns emerge.
