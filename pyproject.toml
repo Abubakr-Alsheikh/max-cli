@@ -29,6 +29,9 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0.0"
 ]
+ocr = [
+    "pytesseract>=0.3.10",
+]
 
 [project.scripts]
 max = "max_cli.main:app"

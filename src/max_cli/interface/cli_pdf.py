@@ -441,3 +441,175 @@ def rip_content(
         log_success(f"Extracted [bold]{count}[/bold] images to: {output_dir}")
     else:
         console.print("[yellow]No images found in this PDF.[/yellow]")
+
+
+@app.command("ocr")
+def ocr_pdf(
+    target: Path = typer.Argument(..., help="PDF file to OCR."),
+    lang: str = typer.Option(
+        "eng", "--lang", "-l", help="Language code (eng, deu, fra, eng+deu)."
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "-o", help="Output text file (default: same name with .txt)."
+    ),
+):
+    """
+    Extract text from scanned PDFs using OCR.
+
+    Requires pytesseract and Tesseract OCR installed.
+    Install: pip install max-cli[ocr]
+    """
+    if not output:
+        output = target.parent / f"{target.stem}.txt"
+
+    console.print(f"[cyan]Running OCR on {target.name} (lang={lang})...[/cyan]")
+
+    try:
+        text = engine.ocr_pdf(target, output, lang=lang)
+        char_count = len(text)
+
+        log_success(f"Text extracted to: {output}")
+        console.print(f"Extracted [bold]{char_count}[/bold] characters")
+
+    except RuntimeError as e:
+        log_error(str(e))
+        console.print(
+            "[yellow]Tip: Install OCR dependencies with: pip install max-cli[ocr][/yellow]"
+        )
+    except Exception as e:
+        log_error(f"OCR failed: {e}")
+
+
+@app.command("form-data")
+def extract_form(
+    target: Path = typer.Argument(..., help="PDF form to extract data from."),
+):
+    """
+    Extract data from PDF form fields.
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Extracting form data from {target.name}...[/cyan]")
+
+    try:
+        form_data = engine.extract_form_data(target)
+        if form_data:
+            console.print("[bold]Form Fields:[/bold]")
+            for name, value in form_data.items():
+                console.print(f"  {name}: [green]{value}[/green]")
+            log_success(f"Found {len(form_data)} form fields")
+        else:
+            console.print("[yellow]No form fields found in this PDF.[/yellow]")
+    except Exception as e:
+        log_error(f"Failed to extract form data: {e}")
+
+
+@app.command("form-fill")
+def fill_form(
+    target: Path = typer.Argument(..., help="PDF form to fill."),
+    field: str = typer.Option(
+        ...,
+        "-f",
+        "--field",
+        help="Field name=value (can be specified multiple times).",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+):
+    """
+    Fill PDF form fields with values.
+
+    Example: max pdf form-fill form.pdf -f name="John" -f email="john@example.com"
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    if not output:
+        output = target.parent / f"{target.stem}_filled.pdf"
+
+    field_values = {}
+    for f in field:
+        if "=" in f:
+            key, value = f.split("=", 1)
+            field_values[key] = value
+        else:
+            log_error(f"Invalid field format: {f}. Use fieldname=value")
+            raise typer.Exit(1)
+
+    console.print(f"[cyan]Filling {len(field_values)} fields...[/cyan]")
+
+    try:
+        engine.fill_form(target, output, field_values)
+        log_success(f"Filled form saved to: {output}")
+    except Exception as e:
+        log_error(f"Failed to fill form: {e}")
+
+
+@app.command("form-flatten")
+def flatten_form(
+    target: Path = typer.Argument(..., help="PDF form to flatten."),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+):
+    """
+    Flatten PDF form (convert fields to regular content).
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    if not output:
+        output = target.parent / f"{target.stem}_flattened.pdf"
+
+    console.print("[cyan]Flattening form...[/cyan]")
+
+    try:
+        engine.flatten_form(target, output)
+        log_success(f"Flattened form saved to: {output}")
+    except Exception as e:
+        log_error(f"Failed to flatten form: {e}")
+
+
+@app.command("optimize")
+def optimize_pdf(
+    target: Path = typer.Argument(..., help="PDF file to optimize."),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    no_compress: bool = typer.Option(
+        False, "--no-compress", help="Skip image compression."
+    ),
+    no_linearize: bool = typer.Option(
+        False, "--no-linearize", help="Skip web optimization."
+    ),
+):
+    """
+    Optimize PDF (remove unused objects, compress images, linearize).
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    if not output:
+        output = target.parent / f"{target.stem}_optimized.pdf"
+
+    orig_size = target.stat().st_size
+
+    console.print("[cyan]Optimizing PDF...[/cyan]")
+
+    try:
+        engine.optimize_pdf(
+            target,
+            output,
+            compress_images=not no_compress,
+            linearize=not no_linearize,
+        )
+
+        new_size = output.stat().st_size
+        reduction = ((orig_size - new_size) / orig_size) * 100
+
+        log_success(f"Optimized PDF saved to: {output}")
+        console.print(
+            f"Size: {format_size(orig_size)} -> [green]{format_size(new_size)}[/green] (-{reduction:.1f}%)"
+        )
+    except Exception as e:
+        log_error(f"Optimization failed: {e}")

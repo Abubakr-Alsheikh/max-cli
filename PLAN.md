@@ -499,7 +499,9 @@ class Cache:
 
 #### Actions
 
-- [ ] **3.1.1** Add video concatenation
+- [x] **3.1.1** Add video concatenation
+  - Added `concatenate_videos()` method to MediaEngine with two methods: concat demuxer (fast) and filter (safe/re-encode)
+  - Added `max media concat` command supporting glob patterns (e.g., `*.mp4`) or text file input
 
 ```python
 def concatenate_videos(self, input_paths: List[Path], output_path: Path) -> None:
@@ -507,19 +509,21 @@ def concatenate_videos(self, input_paths: List[Path], output_path: Path) -> None
     # Implementation using FFmpeg concat demuxer
 ```
 
-- [ ] **3.1.2** Add video filters
-  - Brightness/contrast adjustment
-  - Color grading presets (vintage, noir, vivid)
-  - Video stabilization
+- [x] **3.1.2** Add video filters
+  - Added `adjust_brightness()` for brightness/contrast adjustment
+  - Added `apply_color_preset()` with presets: vivid, vintage, noir, warm, cool, fade
+  - Added `stabilize_video()` for video stabilization using vidstab
+  - CLI commands: `max media brightness`, `max media color`, `max media stabilize`
   
-- [ ] **3.1.3** Add audio processing
-  - Audio normalization
-  - Audio extraction from video
-  - Audio format conversion
+- [x] **3.1.3** Add audio processing
+  - Added `normalize_audio()` for audio normalization (loudness)
+  - Added `convert_audio()` for format conversion between audio formats
+  - Existing: `extract_audio()`, `adjust_volume()`, `mute_video()`
+  - CLI commands: `max media normalize`, `max media audio-convert`
   
-- [ ] **3.1.4** Add screen recording capture
-  - Platform-specific screen capture
-  - Audio system capture
+- [x] **3.1.4** Add screen recording capture
+  - Added `screen_record()` to MediaEngine (platform-specific: Windows gdigrab, macOS/Linux x11grab)
+  - CLI command: `max media record` (supports --duration, --fps, --audio flags)
 
 - [ ] **3.1.5** Add streaming/remote processing
   - Stream to RTMP servers
@@ -534,7 +538,10 @@ def concatenate_videos(self, input_paths: List[Path], output_path: Path) -> None
 
 #### Actions
 
-- [ ] **3.2.1** Add OCR capabilities
+- [x] **3.2.1** Add OCR capabilities
+  - Added `ocr_pdf()` to PDFEngine (requires pytesseract and Tesseract installed)
+  - Added optional `ocr` extra to pyproject.toml
+  - CLI command: `max pdf ocr`
 
 ```python
 def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str:
@@ -542,19 +549,19 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
     # Implementation
 ```
 
-- [ ] **3.2.2** Add PDF forms support
-  - Fill PDF forms
-  - Extract form data
-  - Flatten forms
-  
+- [x] **3.2.2** Add PDF forms support
+  - Added `extract_form_data()` to extract form field values
+  - Added `fill_form()` to fill forms with provided values
+  - Added `flatten_form()` to convert form fields to regular content
+  - CLI commands: `max pdf form-data`, `max pdf form-fill`, `max pdf form-flatten`
+
 - [ ] **3.2.3** Add PDF comparison
   - Compare two PDFs
   - Generate diff report
-  
-- [ ] **3.2.4** Add PDF optimization
-  - Remove unused objects
-  - Optimize images
-  - Linearize PDF
+
+- [x] **3.2.4** Add PDF optimization
+  - Added `optimize_pdf()` with options: remove_unused, compress_images, linearize
+  - CLI command: `max pdf optimize`
 
 ---
 
@@ -593,12 +600,9 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
 
 #### Actions
 
-- [ ] **3.4.1** Add duplicate finder
-
-```python
-def find_duplicates(self, folder: Path) -> Dict[str, List[Path]]:
-    """Find duplicate files based on content hash."""
-```
+- [x] **3.4.1** Add duplicate finder
+  - Added `find_duplicates()` to FileOrganizer using MD5 hash
+  - CLI command: `max files duplicates` (supports --recursive, --delete)
 
 - [ ] **3.4.2** Add file recovery
   - Recover deleted files

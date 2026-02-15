@@ -128,3 +128,57 @@ def smart_sort(
         log_success(f"Successfully organized {len(files)} files.")
     else:
         console.print("[yellow]Dry run complete. No files moved.[/yellow]")
+
+
+@app.command("duplicates")
+def find_duplicates(
+    folder: Path = typer.Argument(".", help="Folder to scan for duplicates."),
+    recursive: bool = typer.Option(
+        False, "-r", "--recursive", help="Scan subdirectories as well."
+    ),
+    delete: bool = typer.Option(
+        False, "-d", "--delete", help="Delete duplicates (keeps one copy)."
+    ),
+):
+    """
+    Find and optionally remove duplicate files based on content.
+    """
+    if not folder.is_dir():
+        log_error(f"'{folder}' is not a directory.")
+        raise typer.Exit(code=1)
+
+    console.print(f"[cyan]Scanning for duplicates in {folder}...[/cyan]")
+
+    try:
+        duplicates = organizer.find_duplicates(folder, recursive=recursive)
+
+        if not duplicates:
+            console.print("[green]No duplicates found![/green]")
+            return
+
+        total_dupes = sum(len(v) - 1 for v in duplicates.values())
+        console.print(
+            f"[yellow]Found {total_dupes} duplicate(s) in {len(duplicates)} group(s):[/yellow]\n"
+        )
+
+        for hash_val, paths in duplicates.items():
+            console.print("[bold]Duplicate group:[/bold]")
+            for p in paths:
+                console.print(f"  {p}")
+            console.print()
+
+        if delete:
+            removed = 0
+            for hash_val, paths in duplicates.items():
+                keep = paths[0]
+                for p in paths[1:]:
+                    p.unlink()
+                    removed += 1
+                    console.print(f"[red]Deleted:[/red] {p}")
+
+            log_success(f"Removed {removed} duplicate(s). Kept: {keep}")
+        else:
+            console.print("[dim]Run with --delete to remove duplicates[/dim]")
+
+    except Exception as e:
+        log_error(f"Error finding duplicates: {e}")

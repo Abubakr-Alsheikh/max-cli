@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF  # type: ignore[import-untyped]
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 from PIL import Image
 import io
 
@@ -311,3 +311,210 @@ class PDFEngine:
 
         doc.close()
         return count
+
+    def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str:
+        """
+        Extract text from PDF using OCR (requires pytesseract and Tesseract installed).
+
+        Args:
+            input_path: Input PDF file
+            output_path: Output text file (or None to return text only)
+            lang: Language code (e.g., 'eng', 'deu', 'fra', 'eng+deu')
+
+        Returns:
+            Extracted text
+        """
+        try:
+            import pytesseract
+        except ImportError:
+            raise RuntimeError(
+                "pytesseract is not installed. Install with: pip install max-cli[ocr]\n"
+                "Also requires Tesseract OCR installed on your system."
+            )
+
+        if not input_path.exists():
+            raise FileNotFoundError(f"File not found: {input_path}")
+
+        doc = fitz.open(input_path)
+        full_text = []
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            pix = page.get_pixmap(dpi=300)
+            img_data = pix.tobytes("ppm")
+            img = Image.open(io.BytesIO(img_data))
+
+            text = pytesseract.image_to_string(img, lang=lang)
+            full_text.append(f"--- Page {page_num + 1} ---\n{text}")
+
+        doc.close()
+
+        result_text = "\n\n".join(full_text)
+
+        if output_path:
+            output_path.write_text(result_text, encoding="utf-8")
+
+        return result_text
+
+    def extract_form_data(self, input_path: Path) -> Dict[str, str]:
+        """
+        Extract data from PDF form fields.
+
+        Returns:
+            Dictionary mapping field names to their values
+        """
+        if not input_path.exists():
+            raise FileNotFoundError(f"File not found: {input_path}")
+
+        doc = fitz.open(input_path)
+        form_data: Dict[str, str] = {}
+
+        for page in doc:
+            widgets = page.widgets()
+            for widget in widgets:
+                if widget.field_name and widget.field_value:
+                    form_data[widget.field_name] = widget.field_value
+
+        doc.close()
+        return form_data
+
+    def fill_form(
+        self, input_path: Path, output_path: Path, field_values: Dict[str, str]
+    ) -> None:
+        """
+        Fill PDF form fields with provided values.
+
+        Args:
+            input_path: Source PDF with form
+            output_path: Output PDF file
+            field_values: Dictionary mapping field names to values
+        """
+        if not input_path.exists():
+            raise FileNotFoundError(f"File not found: {input_path}")
+
+        doc = fitz.open(input_path)
+
+        for page in doc:
+            widgets = page.widgets()
+            for widget in widgets:
+                if widget.field_name and widget.field_name in field_values:
+                    widget.field_value = field_values[widget.field_name]
+                    widget.update()
+
+        doc.save(output_path)
+        doc.close()
+
+    def flatten_form(self, input_path: Path, output_path: Path) -> None:
+        """
+        Flatten PDF form (convert fields to regular content).
+        """
+        if not input_path.exists():
+            raise FileNotFoundError(f"File not found: {input_path}")
+
+        doc = fitz.open(input_path)
+
+        for page in doc:
+            widgets = page.widgets()
+            for widget in widgets:
+                if widget.field_type in (
+                    fitz.PDF_WIDGET_TYPE_TEXT,
+                    fitz.PDF_WIDGET_TYPE_CHECKBOX,
+                    fitz.PDF_WIDGET_TYPE_RADIOBUTTON,
+                ):
+                    widget.field_flags = fitz.PDF_FIELD_IS_READONLY
+
+        doc.save(output_path)
+        doc.close()
+
+    def optimize_pdf(
+        self,
+        input_path: Path,
+        output_path: Path,
+        remove_unused: bool = True,
+        compress_images: bool = True,
+        linearize: bool = True,
+    ) -> None:
+        """
+        Optimize PDF by removing unused objects, compressing images, and linearizing.
+
+        Args:
+            input_path: Source PDF
+            output_path: Output PDF file
+            remove_unused: Remove unused objects
+            compress_images: Compress images
+            linearize: Create web-optimized (linearized) PDF
+        """
+        if not input_path.exists():
+            raise FileNotFoundError(f"File not found: {input_path}")
+
+        doc = fitz.open(input_path)
+
+        if remove_unused:
+            garbage = 4
+        else:
+            garbage = 0
+
+        deflate = compress_images
+        clean = linearize
+
+        doc.save(
+            output_path,
+            garbage=garbage,
+            deflate=deflate,
+            clean=clean,
+        )
+        doc.close()
+
+    def compare_pdfs(self, path1: Path, path2: Path) -> Dict[str, Any]:
+        """
+        Compare two PDFs and generate a diff report.
+
+        Returns:
+            Dictionary with comparison results
+        """
+        if not path1.exists():
+            raise FileNotFoundError(f"File not found: {path1}")
+        if not path2.exists():
+            raise FileNotFoundError(f"File not found: {path2}")
+
+        doc1 = fitz.open(path1)
+        doc2 = fitz.open(path2)
+
+        result: Dict[str, Any] = {
+            "file1": path1.name,
+            "file2": path2.name,
+            "pages_equal": True,
+            "differences": [],
+        }
+
+        if len(doc1) != len(doc2):
+            result["pages_equal"] = False
+            result["differences"].append(
+                f"Page count differs: {len(doc1)} vs {len(doc2)}"
+            )
+
+        min_pages = min(len(doc1), len(doc2))
+
+        for i in range(min_pages):
+            page1 = doc1[i]
+            page2 = doc2[i]
+
+            text1 = page1.get_text()
+            text2 = page2.get_text()
+
+            if text1 != text2:
+                result["pages_equal"] = False
+                result["differences"].append(f"Page {i + 1}: Text content differs")
+
+            pix1 = page1.get_pixmap()
+            pix2 = page2.get_pixmap()
+
+            if pix1.width != pix2.width or pix1.height != pix2.height:
+                result["differences"].append(
+                    f"Page {i + 1}: Dimensions differ ({pix1.width}x{pix1.height} vs {pix2.width}x{pix2.height})"
+                )
+
+        doc1.close()
+        doc2.close()
+
+        return result

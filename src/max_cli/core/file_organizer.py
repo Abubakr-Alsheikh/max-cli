@@ -70,3 +70,39 @@ class FileOrganizer:
             "skipped": skipped_count,
             "actions": actions,
         }
+
+    def find_duplicates(
+        self, folder: Path, recursive: bool = False
+    ) -> Dict[str, List[Path]]:
+        """
+        Find duplicate files based on content hash.
+
+        Returns:
+            Dictionary mapping hash to list of duplicate file paths
+        """
+        import hashlib
+
+        if not folder.exists() or not folder.is_dir():
+            raise ResourceNotFoundError(f"Folder '{folder}' not found.")
+
+        hash_map: Dict[str, List[Path]] = {}
+
+        if recursive:
+            files = [f for f in folder.rglob("*") if f.is_file()]
+        else:
+            files = [f for f in folder.iterdir() if f.is_file()]
+
+        for file_path in files:
+            try:
+                with open(file_path, "rb") as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+
+                if file_hash in hash_map:
+                    hash_map[file_hash].append(file_path)
+                else:
+                    hash_map[file_hash] = [file_path]
+            except OSError:
+                continue
+
+        duplicates = {k: v for k, v in hash_map.items() if len(v) > 1}
+        return duplicates
