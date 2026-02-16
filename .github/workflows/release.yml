@@ -48,11 +48,11 @@ jobs:
         body: ${{ steps.changelog.outputs.changelog }}
         draft: false
         prerelease: false
-        # You can also attach the build artifacts here easily:
-        # files: dist/*
+        files: dist/*
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1.13
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
+        skip-existing: true
