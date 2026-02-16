@@ -39,7 +39,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: coverage
+        name: coverage-report
         path: coverage.xml
 
   build:
@@ -66,9 +66,8 @@ jobs:
         pip install dist/*.whl
         max --help
 
-    - name: Upload artifact
+    - name: Upload package
       uses: actions/upload-artifact@v4
       with:
-        name: dist-${{ matrix.os }}-${{ matrix.python-version }}
+        name: python-package
         path: dist/
-        merge-multiple: true
