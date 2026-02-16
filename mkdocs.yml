@@ -1,0 +1,66 @@
+site_name: Max CLI
+site_description: A high-performance, modular CLI framework for developers and power users.
+site_author: Abubakr Alsheikh
+site_url: https://Abubakr-Alsheikh.github.io/max-cli/
+
+repo_url: https://github.com/Abubakr-Alsheikh/max-cli
+repo_name: max-cli
+
+copyright: Copyright &copy; 2026 Max CLI Team
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Commands:
+      - commands/index.md
+      - commands/images.md
+      - commands/pdf.md
+      - commands/media.md
+      - commands/ai.md
+      - commands/files.md
+      - commands/config.md
+  - API:
+      - api/index.md
+      - api/core.md
+      - api/common.md
+      - api/config.md
+  - Contributing: contributing.md
+
+plugins:
+  - search:
+      lang: en

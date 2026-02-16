@@ -54,6 +54,7 @@ cover/
 
 # --- Documentation ---
 docs/_build/
+site/
 
 # --- IDE / Editor Settings ---
 # VS Code
