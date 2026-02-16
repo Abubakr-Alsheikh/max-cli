@@ -189,6 +189,19 @@ def command_name(
 - Handle file operations safely with Path objects
 - Use try-except blocks for external API calls
 
+## Code Reuse
+
+**Always use existing utilities from `max_cli.common`:**
+
+- `@retry` decorator from `common/retry.py` - retry logic with exponential backoff
+- `console`, `log_success`, `log_error` from `common/logger.py` - consistent output
+- Custom exceptions from `common/exceptions.py` - proper error handling
+- `format_size`, `natural_sort_key` from `common/utils.py` - helper functions
+- `Cache` class from `common/cache.py` - caching functionality
+- `process_batch_parallel` from `common/concurrent.py` - parallel processing
+
+This keeps code clean, consistent, and professional.
+
 ## Development Workflow
 
 1. **Setup**: Install dependencies with `pip install -e .[dev]`
