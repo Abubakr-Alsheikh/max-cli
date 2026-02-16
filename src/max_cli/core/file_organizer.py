@@ -140,3 +140,115 @@ class FileOrganizer:
             return True
         except OSError as e:
             raise OSError(f"Secure delete failed: {e}")
+
+    def get_backup_dir(self) -> Path:
+        """Get or create the backup directory."""
+        backup_dir = Path.home() / ".max_cli" / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        return backup_dir
+
+    def create_backup(self, path: Path, label: str = "manual") -> Path:
+        """
+        Create a backup of a file.
+
+        Args:
+            path: File to backup
+            label: Optional label for the backup
+
+        Returns:
+            Path to the backup file
+        """
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        from datetime import datetime
+
+        backup_dir = self.get_backup_dir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{path.stem}_{label}_{timestamp}{path.suffix}"
+        backup_path = backup_dir / backup_name
+
+        import shutil
+
+        shutil.copy2(path, backup_path)
+
+        return backup_path
+
+    def list_backups(self, filename: str = None) -> List[Dict[str, Any]]:
+        """
+        List available backups.
+
+        Args:
+            filename: Optional filename filter
+
+        Returns:
+            List of backup info dictionaries
+        """
+        backup_dir = self.get_backup_dir()
+
+        backups = []
+        for f in sorted(
+            backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
+        ):
+            if filename and filename not in f.stem:
+                continue
+
+            stat = f.stat()
+            backups.append(
+                {
+                    "path": f,
+                    "name": f.name,
+                    "size": stat.st_size,
+                    "created": stat.st_ctime,
+                }
+            )
+
+        return backups
+
+    def restore_backup(self, backup_path: Path, target_dir: Path = None) -> Path:
+        """
+        Restore a backup to a target location.
+
+        Args:
+            backup_path: Path to the backup file
+            target_dir: Optional target directory (defaults to original location)
+
+        Returns:
+            Path to the restored file
+        """
+        if not backup_path.exists():
+            raise FileNotFoundError(f"Backup not found: {backup_path}")
+
+        import shutil
+
+        if target_dir:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            restore_path = target_dir / backup_path.name
+        else:
+            restore_path = backup_path.parent.parent / backup_path.name
+
+        shutil.copy2(backup_path, restore_path)
+        return restore_path
+
+    def cleanup_old_backups(self, days: int = 30) -> int:
+        """
+        Remove backups older than specified days.
+
+        Args:
+            days: Remove backups older than this many days
+
+        Returns:
+            Number of backups removed
+        """
+        import time
+
+        backup_dir = self.get_backup_dir()
+        cutoff = time.time() - (days * 86400)
+        removed = 0
+
+        for f in backup_dir.iterdir():
+            if f.stat().st_ctime < cutoff:
+                f.unlink()
+                removed += 1
+
+        return removed

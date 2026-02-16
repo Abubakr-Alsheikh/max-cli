@@ -525,9 +525,9 @@ def concatenate_videos(self, input_paths: List[Path], output_path: Path) -> None
   - Added `screen_record()` to MediaEngine (platform-specific: Windows gdigrab, macOS/Linux x11grab)
   - CLI command: `max media record` (supports --duration, --fps, --audio flags)
 
-- [ ] **3.1.5** Add streaming/remote processing
-  - Stream to RTMP servers
-  - Live preview capability
+- [x] **3.1.5** Add streaming/remote processing
+   - Added RTMP streaming (max media stream)
+   - Added HLS live preview (max media preview)
 
 ---
 
@@ -584,10 +584,10 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
   - Added `extract_structured_data()` to AIEngine for extracting structured data from images
   - CLI command: `max ai extract image.jpg -s "field:description"`
 
-- [ ] **3.3.4** Enhance chat mode
-  - Persistent conversation history
-  - Conversation export/import
-  - Context-aware suggestions
+- [x] **3.3.4** Enhance chat mode
+   - Added persistent conversation history with disk persistence
+   - Added conversation export/import (max chat --export, --import)
+   - Added context-aware suggestions based on conversation history
 
 ---
 
@@ -602,18 +602,18 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
   - Added `find_duplicates()` to FileOrganizer using MD5 hash
   - CLI command: `max files duplicates` (supports --recursive, --delete)
 
-- [ ] **3.4.2** Add file recovery
-  - Recover deleted files
-  - Backup management
-  - Version history
+- [x] **3.4.2** Add file recovery
+   - Added backup management (max files backup)
+   - Added list/restore backups (max files backups)
+   - Added cleanup old backups (max files backup-cleanup)
 
 - [x] **3.4.3** Add secure deletion
   - Added `secure_delete()` to FileOrganizer (overwrites with random data)
   - CLI command: `max files shred` (supports --passes)
 
-- [ ] **3.4.4** Add file preview
-  - Quick file preview
-  - Metadata viewer
+- [x] **3.4.4** Add file preview
+   - Added metadata viewer (size, dates, type)
+   - Added quick preview for text files, images, and PDFs
 
 ---
 

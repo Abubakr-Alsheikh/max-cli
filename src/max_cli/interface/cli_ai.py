@@ -197,21 +197,66 @@ def _handle_image_result(url: str, output_path: Optional[Path], default_name: st
 
 
 @app.command("chat")
-def chat_session():
+def chat_session(
+    clear: bool = typer.Option(False, "--clear", help="Clear conversation history."),
+    export: Optional[Path] = typer.Option(
+        None, "--export", "-e", help="Export conversation to JSON file."
+    ),
+    import_file: Optional[Path] = typer.Option(
+        None, "--import", "-i", help="Import conversation from JSON file."
+    ),
+):
     """
     Start an interactive session with Max. He remembers what you said.
+
+    Use --clear to reset history, --export to save, --import to load previous chats.
     """
+    if clear:
+        engine.clear_history()
+        console.print("[green]Conversation history cleared.[/green]")
+        return
+
+    if export:
+        engine.export_history(export)
+        log_success(f"Conversation exported to: {export}")
+        return
+
+    if import_file:
+        if not import_file.exists():
+            log_error(f"File not found: {import_file}")
+            raise typer.Exit(1)
+        engine.import_history(import_file)
+        log_success(f"Conversation imported from: {import_file}")
+        return
+
     console.print(
         Panel(
-            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' to quit.",
+            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' to quit, 'help' for suggestions.",
             border_style="cyan",
         )
     )
 
+    if engine.history:
+        console.print(
+            f"[dim]Loaded {len(engine.history)} messages from previous session[/dim]"
+        )
+
     while True:
-        user_input = Prompt.ask("[bold green]User[/bold green]")
+        suggestions = engine.get_suggestions()
+        user_input = Prompt.ask(
+            "[bold green]User[/bold green]",
+            choices=suggestions + ["help", "exit", "quit"],
+            show_choices=False,
+        )
         if user_input.lower() in ["exit", "quit"]:
+            engine._save_history()
             break
+        if user_input.lower() == "help":
+            console.print("[bold cyan]Suggestions:[/bold cyan]")
+            for i, s in enumerate(suggestions, 1):
+                console.print(f"  {i}. {s}")
+            console.print("  [dim]Or type your own command[/dim]")
+            continue
 
         with console.status("[dim]Thinking...[/dim]"):
             try:
@@ -224,11 +269,9 @@ def chat_session():
                 thought = result.get("thought")
                 cmd = result.get("command")
 
-                # If there is a thought/message but no command, it's just a conversation
                 if thought and not cmd:
                     console.print(f"[cyan]Max:[/cyan] {thought}")
 
-                # If there is a command, propose it
                 elif cmd:
                     console.print(
                         f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
@@ -242,6 +285,8 @@ def chat_session():
 
             except Exception as e:
                 log_error(str(e))
+
+    engine._save_history()
     console.print("[cyan]Goodbye![/cyan]")
 
 

@@ -239,6 +239,108 @@ class MediaEngine:
         ]
         self._run(cmd)
 
+    def stream_to_rtmp(
+        self,
+        input_path: Path,
+        rtmp_url: str,
+        bitrate: str = "4500k",
+        preset: str = "veryfast",
+    ) -> None:
+        """
+        Stream video to an RTMP server.
+
+        Args:
+            input_path: Input video file
+            rtmp_url: RTMP server URL (e.g., rtmp://live.twitch.tv/app)
+            bitrate: Video bitrate for streaming
+            preset: Encoding preset for transcoding
+        """
+        cmd = [
+            "ffmpeg",
+            "-re",
+            "-i",
+            str(input_path),
+            "-c:v",
+            "libx264",
+            "-preset",
+            preset,
+            "-b:v",
+            bitrate,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-f",
+            "flv",
+            "-flvflags",
+            "no_duration_filesize",
+            rtmp_url,
+        ]
+        self._run(cmd)
+
+    def live_preview(
+        self,
+        input_path: Path,
+        port: int = 8080,
+        bitrate: str = "2000k",
+    ) -> None:
+        """
+        Start HTTP server for live preview streaming via HLS.
+
+        Args:
+            input_path: Input video file
+            port: HTTP server port
+            bitrate: Transcoding bitrate
+        """
+        import os
+        import threading
+        from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+        os.makedirs("/tmp/hls", exist_ok=True)
+
+        cmd = [
+            "ffmpeg",
+            "-re",
+            "-i",
+            str(input_path),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-b:v",
+            bitrate,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-f",
+            "hls",
+            "-hls_time",
+            "2",
+            "-hls_list_size",
+            "10",
+            "-hls_flags",
+            "delete_segments",
+            "-start_number",
+            "1",
+            "/tmp/hls/live.m3u8",
+        ]
+
+        class QuietHandler(SimpleHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass
+
+        def run_server():
+            os.chdir("/tmp/hls")
+            server = HTTPServer(("", port), QuietHandler)
+            print(f"Live preview available at http://localhost:{port}/live.m3u8")
+            server.serve_forever()
+
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+
+        self._run(cmd)
+
     def _run(self, cmd: List[str]):
         """Runs the subprocess command."""
         try:

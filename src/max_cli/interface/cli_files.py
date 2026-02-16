@@ -216,3 +216,173 @@ def secure_delete(
         log_success(f"File securely deleted: {target.name}")
     except Exception as e:
         log_error(f"Secure delete failed: {e}")
+
+
+@app.command("preview")
+def file_preview(
+    target: Path = typer.Argument(..., help="File to preview."),
+    lines: int = typer.Option(
+        20, "-n", "--lines", help="Number of lines to show for text files."
+    ),
+):
+    """
+    Show file metadata and preview content.
+    """
+    from datetime import datetime
+    from max_cli.common.utils import format_size
+
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    stat = target.stat()
+
+    console.print(Panel(f"[bold cyan]{target.name}[/bold cyan]", border_style="cyan"))
+
+    console.print(f"[bold]Path:[/bold] {target.absolute()}")
+    console.print(f"[bold]Type:[/bold] {target.suffix or 'No extension'}")
+    console.print(f"[bold]Size:[/bold] {format_size(stat.st_size)}")
+    console.print(f"[bold]Created:[/bold] {datetime.fromtimestamp(stat.st_ctime)}")
+    console.print(f"[bold]Modified:[/bold] {datetime.fromtimestamp(stat.st_mtime)}")
+    console.print(f"[bold]Accessed:[/bold] {datetime.fromtimestamp(stat.st_atime)}")
+
+    console.print()
+
+    text_extensions = {
+        ".txt",
+        ".md",
+        ".py",
+        ".js",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".html",
+        ".css",
+        ".sh",
+        ".bat",
+        ".ps1",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".log",
+    }
+
+    if target.suffix.lower() in text_extensions:
+        try:
+            content = target.read_text(encoding="utf-8", errors="ignore")
+            preview_lines = content.splitlines()[:lines]
+            console.print("[bold]Preview:[/bold]")
+            for i, line in enumerate(preview_lines, 1):
+                console.print(f"{i:3}: {line}")
+            if len(content.splitlines()) > lines:
+                console.print(
+                    f"[dim]... and {len(content.splitlines()) - lines} more lines[/dim]"
+                )
+        except Exception as e:
+            console.print(f"[yellow]Could not read file content: {e}[/yellow]")
+    elif target.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+        console.print("[bold]Image Dimensions:[/bold] (requires PIL)")
+        try:
+            from PIL import Image
+
+            with Image.open(target) as img:
+                console.print(f"  {img.width} x {img.height} pixels")
+                console.print(f"  Mode: {img.mode}")
+        except Exception:
+            console.print("  [dim]Could not read image info[/dim]")
+    elif target.suffix.lower() == ".pdf":
+        console.print("[bold]PDF Info:[/bold] (requires PyMuPDF)")
+        try:
+            import fitz
+
+            doc = fitz.open(target)
+            console.print(f"  Pages: {len(doc)}")
+            console.print(f"  Title: {doc.metadata.get('title', 'N/A')}")
+            console.print(f"  Author: {doc.metadata.get('author', 'N/A')}")
+        except Exception:
+            console.print("  [dim]Could not read PDF info[/dim]")
+    else:
+        console.print("[dim]Preview not available for this file type[/dim]")
+
+
+@app.command("backup")
+def backup_file(
+    target: Path = typer.Argument(..., help="File to backup."),
+    label: str = typer.Option("manual", "-l", "--label", help="Label for this backup."),
+):
+    """
+    Create a backup of a file.
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    try:
+        backup_path = organizer.create_backup(target, label=label)
+        log_success(f"Backup created: {backup_path}")
+    except Exception as e:
+        log_error(f"Backup failed: {e}")
+
+
+@app.command("backups")
+def list_backups(
+    filter: str = typer.Option(None, "--filter", "-f", help="Filter by filename."),
+    restore: Path = typer.Option(
+        None, "--restore", "-r", help="Restore a specific backup."
+    ),
+    output: Path = typer.Option(None, "-o", help="Restore to specific directory."),
+):
+    """
+    List and manage backups.
+    """
+    from datetime import datetime
+    from max_cli.common.utils import format_size
+
+    if restore:
+        try:
+            restored = organizer.restore_backup(restore, output)
+            log_success(f"Restored: {restored}")
+        except Exception as e:
+            log_error(f"Restore failed: {e}")
+        return
+
+    backups = organizer.list_backups(filter)
+
+    if not backups:
+        console.print("[yellow]No backups found.[/yellow]")
+        return
+
+    console.print(f"[cyan]Found {len(backups)} backup(s):[/cyan]\n")
+
+    for b in backups:
+        console.print(f"[bold]{b['name']}[/bold]")
+        console.print(f"  Size: {format_size(b['size'])}")
+        console.print(f"  Created: {datetime.fromtimestamp(b['created'])}")
+        console.print(f"  Path: {b['path']}")
+        console.print()
+
+
+@app.command("backup-cleanup")
+def cleanup_backups(
+    days: int = typer.Option(
+        30, "-d", "--days", help="Remove backups older than N days."
+    ),
+    force: bool = typer.Option(False, "-f", "--force", help="Skip confirmation."),
+):
+    """
+    Clean up old backups to save space.
+    """
+    if not force:
+        console.print(
+            f"[yellow]This will remove backups older than {days} days.[/yellow]"
+        )
+        if not Confirm.ask("Continue?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return
+
+    try:
+        removed = organizer.cleanup_old_backups(days)
+        log_success(f"Removed {removed} old backup(s)")
+    except Exception as e:
+        log_error(f"Cleanup failed: {e}")

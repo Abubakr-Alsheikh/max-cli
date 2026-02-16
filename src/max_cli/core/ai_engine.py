@@ -17,8 +17,74 @@ class AIEngine:
             self.client = OpenAI(
                 api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
             )
-        # Session history for the 'chat' command
         self.history: List[Dict[str, str]] = []
+        self._history_file = Path.home() / ".max_cli" / "chat_history.json"
+        self._history_file.parent.mkdir(parents=True, exist_ok=True)
+        self._load_history()
+
+    def _load_history(self) -> None:
+        """Load conversation history from disk."""
+        if self._history_file.exists():
+            try:
+                data = json.loads(self._history_file.read_text(encoding="utf-8"))
+                self.history = data.get("history", [])
+            except Exception:
+                self.history = []
+
+    def _save_history(self) -> None:
+        """Save conversation history to disk."""
+        data = {"history": self.history}
+        self._history_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def clear_history(self) -> None:
+        """Clear conversation history from memory and disk."""
+        self.history = []
+        if self._history_file.exists():
+            self._history_file.unlink()
+
+    def export_history(self, output_path: Path) -> None:
+        """Export conversation history to a JSON file."""
+        data = {"history": self.history, "exported_at": str(Path.cwd())}
+        output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def import_history(self, input_path: Path) -> None:
+        """Import conversation history from a JSON file."""
+        data = json.loads(input_path.read_text(encoding="utf-8"))
+        self.history = data.get("history", [])
+        self._save_history()
+
+    def get_suggestions(self) -> List[str]:
+        """Get context-aware suggestions based on conversation history."""
+        if not self.history or not self.client:
+            return [
+                "Help me organize my files",
+                "Compress these images",
+                "Extract audio from this video",
+            ]
+
+        recent_topics = " ".join(
+            [msg["content"] for msg in self.history[-4:] if msg.get("role") == "user"]
+        )
+
+        prompt = f"""Based on this conversation context: "{recent_topics}"
+
+Suggest 3 relevant follow-up commands the user might want to run. 
+Keep suggestions brief and related to file management, media processing, or AI features.
+Return as a JSON array of strings."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.AI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            result = json.loads(response.choices[0].message.content)
+            return result if isinstance(result, list) else []
+        except Exception:
+            return [
+                "Show me what you can do",
+                "Help me with files",
+                "Process some media",
+            ]
 
     def _get_local_context(self) -> str:
         """Scans current directory to give AI 'eyes'."""

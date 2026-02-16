@@ -493,3 +493,66 @@ def screen_record_cmd(
         log_success(f"Recording saved: {output}")
     except Exception as e:
         log_error(f"Recording failed: {e}")
+
+
+@app.command("stream")
+def stream_video_cmd(
+    target: Path = typer.Argument(..., help="Video file to stream."),
+    rtmp_url: str = typer.Option(
+        ..., "--url", "-u", help="RTMP server URL (e.g., rtmp://live.twitch.tv/app)."
+    ),
+    bitrate: str = typer.Option(
+        "4500k", "--bitrate", "-b", help="Video bitrate (e.g., 4500k, 6000k)."
+    ),
+    preset: str = typer.Option(
+        "veryfast", "--preset", "-p", help="Encoding preset: ultrafast to slow."
+    ),
+):
+    """
+    Stream video to an RTMP server (Twitch, YouTube, etc.).
+
+    Example: max media stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
+    """
+    _check_engine()
+
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Streaming to {rtmp_url}...[/cyan]")
+    console.print("[yellow]Press Ctrl+C to stop streaming[/yellow]")
+
+    try:
+        engine.stream_to_rtmp(target, rtmp_url, bitrate=bitrate, preset=preset)
+        log_success("Streaming completed")
+    except Exception as e:
+        log_error(f"Streaming failed: {e}")
+
+
+@app.command("preview")
+def live_preview_cmd(
+    target: Path = typer.Argument(..., help="Video file to preview."),
+    port: int = typer.Option(8080, "--port", "-p", help="HTTP server port."),
+    bitrate: str = typer.Option(
+        "2000k", "--bitrate", "-b", help="Transcoding bitrate."
+    ),
+):
+    """
+    Start HTTP server for live preview streaming via HLS.
+
+    Open http://localhost:8080/live.m3u8 in a player to watch.
+    """
+    _check_engine()
+
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Starting live preview on port {port}...[/cyan]")
+    console.print(f"[yellow]Open http://localhost:{port}/live.m3u8 to view[/yellow]")
+    console.print("[dim]Press Ctrl+C to stop[/dim]")
+
+    try:
+        engine.live_preview(target, port=port, bitrate=bitrate)
+    except Exception as e:
+        log_error(f"Preview failed: {e}")
