@@ -1,8 +1,27 @@
 # Max CLI ⚡
 
+[![PyPI Version](https://img.shields.io/pypi/v/max-cli.svg)](https://pypi.org/project/max-cli/)
+[![Python Version](https://img.shields.io/pypi/pyversions/max-cli.svg)](https://pypi.org/project/max-cli/)
+[![License](https://img.shields.io/pypi/l/max-cli.svg)](https://github.com/Abubakr-Alsheikh/max-cli/blob/main/LICENSE)
+[![Build Status](https://github.com/Abubakr-Alsheikh/max-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/Abubakr-Alsheikh/max-cli/actions)
+[![Documentation](https://img.shields.io/badge/docs-MkDocs-blue)](https://Abubakr-Alsheikh.github.io/max-cli/)
+
 > **Your Lazy, Fast Terminal Assistant That Does the Work for You.**
 
 Max transforms complex tasks—like compressing videos, merging PDFs, or downloading from YouTube—into simple commands you can actually remember. Whether you're a casual user or a seasoned developer, Max speaks your language.
+
+---
+
+## 📚 Documentation
+
+**Full docs:** https://Abubakr-Alsheikh.github.io/max-cli/
+
+**Quick links:**
+- [Installation](https://Abubakr-Alsheikh.github.io/max-cli/installation/)
+- [Usage](https://Abubakr-Alsheikh.github.io/max-cli/usage/)
+- [Commands](https://Abubakr-Alsheikh.github.io/max-cli/commands/)
+- [API Reference](https://Abubakr-Alsheikh.github.io/max-cli/api/)
+- [Contributing](https://Abubakr-Alsheikh.github.io/max-cli/contributing/)
 
 ---
 
@@ -495,6 +514,54 @@ ruff format .
 mypy src/
 ```
 
+### Documentation
+
+Full documentation is available at: https://Abubakr-Alsheikh.github.io/max-cli/
+
+Local documentation development:
+
+```bash
+# Install mkdocs
+pip install mkdocs mkdocs-material
+
+# Serve locally
+mkdocs serve
+
+# Build for production
+mkdocs build
+```
+
+### Plugin System
+
+Max CLI supports plugins for extensibility. Plugins are stored in:
+- `~/.max_cli/plugins/` (user-level)
+- `./plugins/` (project-level)
+
+Example plugin structure:
+
+```python
+from max_cli.plugins.base import CLIPlugin
+import typer
+
+class MyPlugin(CLIPlugin):
+    @property
+    def name(self) -> str:
+        return "my-plugin"
+    
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+    
+    @property
+    def description(self) -> str:
+        return "My custom plugin"
+    
+    def register(self, app: typer.Typer) -> None:
+        @app.command("my-command")
+        def my_command():
+            typer.echo("Hello from my plugin!")
+```
+
 ### Architecture
 
 ```
@@ -510,6 +577,8 @@ src/max_cli/
 ## 🤝 Contributing
 
 Found a bug or have a feature request?
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 1. Open an issue: [GitHub Issues](https://github.com/Abubakr-Alsheikh/max-cli/issues)
 2. Fork the repo
