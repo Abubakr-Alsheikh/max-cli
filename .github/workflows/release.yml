@@ -14,6 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Required for changelog generators to see history
+
+    - name: Generate changelog
+      id: changelog
+      uses: metcalfc/changelog-generator@v4
+      with:
+        myToken: ${{ secrets.GIT_TOKEN }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -31,40 +39,20 @@ jobs:
         python -m build
 
     - name: Create Release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        body: ${{ steps.changelog.outputs.changelog }}
         draft: false
         prerelease: false
+        # You can also attach the build artifacts here easily:
+        # files: dist/*
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1.13
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
-
-  release-notes:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Generate changelog
-      id: changelog
-      uses: metcalfc/changelog-generator@v4
-      with:
-        myToken: ${{ secrets.GIT_TOKEN }}
-
-    - name: Update release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: ${{ github.ref_name }}
-        body: ${{ steps.changelog.outputs.changelog }}
-        draft: false
-        prerelease: false
