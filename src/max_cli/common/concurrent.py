@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from rich.progress import Progress, TaskID
 
@@ -11,8 +11,8 @@ def process_batch_parallel(
     items: List[T],
     processor: Callable[[T], R],
     max_workers: int = 4,
-    progress: Progress | None = None,
-    task_id: TaskID | None = None,
+    progress: Optional[Progress] = None,
+    task_id: Optional[TaskID] = None,
 ) -> List[Dict[str, Any]]:
     """Process items in parallel with optional progress tracking.
 
@@ -51,8 +51,8 @@ def process_batch_parallel(
 def process_batch_sequential(
     items: List[T],
     processor: Callable[[T], R],
-    progress: Progress | None = None,
-    task_id: TaskID | None = None,
+    progress: Optional[Progress] = None,
+    task_id: Optional[TaskID] = None,
 ) -> List[Dict[str, Any]]:
     """Process items sequentially with optional progress tracking.
 
