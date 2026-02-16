@@ -1,6 +1,14 @@
 # Active Plans
 
-Place new plan files here. Use the following format:
+Place new plan files here.
+
+## Current Active Plans
+
+| Plan | Status |
+|------|--------|
+| [grab-media-improvements.md](./grab-media-improvements.md) | Draft |
+
+## Creating a New Plan
 
 ```markdown
 # Plan: <Feature Name>
@@ -10,7 +18,7 @@ Place new plan files here. Use the following format:
 
 ## Overview
 
-Brief description of what needs to be done.
+Brief description.
 
 ## Goals
 
@@ -19,9 +27,5 @@ Brief description of what needs to be done.
 
 ## Implementation Notes
 
-Any technical notes or approach.
+Technical notes.
 ```
-
-## Current Active Plans
-
-No active plans yet. Create a new plan file when ready.
