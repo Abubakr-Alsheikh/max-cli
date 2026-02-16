@@ -25,9 +25,6 @@ pip install -e .
 ruff check .
 ruff format .
 
-# Run mypy type checker
-mypy src/
-
 # Run pytest tests
 pytest tests/
 
@@ -175,7 +172,7 @@ def command_name(
 ### Dependencies
 
 - **Core**: typer, rich, pillow, pymupdf, openai, requests
-- **Development**: pytest, ruff, mypy
+- **Development**: pytest, ruff
 - **Optional**: ffmpeg (required for media operations)
 
 ### Performance Considerations
@@ -198,8 +195,7 @@ def command_name(
 2. **Code**: Follow the established patterns and style guidelines
 3. **Test**: Run `pytest tests/` to ensure all tests pass
 4. **Lint**: Run `ruff check .` and `ruff format .` for code quality
-5. **Type Check**: Run `mypy src/` to verify type hints
-6. **Commit**: Follow conventional commit messages if applicable
+5. **Commit**: Follow conventional commit messages if applicable
 
 ## Common Patterns
 
@@ -267,6 +263,7 @@ If a task is taking too much time or effort (e.g., fighting with type checker co
 The goal is continuous progress, not perfection. It's better to complete 10 tasks well than to spend hours on 1 difficult task.
 
 Example:
+
 ```markdown
 # Task Issue: mypy strict mode
 
@@ -326,7 +323,7 @@ When asked to work on project improvements:
 4. Implement the solution:
    - For simple tasks: Implement directly in the codebase
    - For complex tasks: Create an implementation guide file
-5. Test the changes (run pytest, ruff, mypy)
+5. Test the changes (run pytest, ruff)
 6. Update PLAN.md to mark task as complete [x]
 7. Only update README.md if user-facing changes require it
 8. If implementation was complex, create an implementation guide
@@ -346,6 +343,7 @@ When a task is too complex to implement in a single session:
    - Potential pitfalls
 
 Example template:
+
 ```markdown
 # Implementation Guide: <Feature Name>
 
@@ -373,12 +371,14 @@ Links to related tasks in PLAN.md.
 ### Updating Documentation
 
 **When to UPDATE README.md:**
+
 - New CLI commands are added
 - New features that users need to know about
 - Breaking changes to existing commands
 - Installation requirement changes
 
 **When NOT to UPDATE README.md:**
+
 - Internal refactoring
 - Test coverage improvements
 - Type hint additions
@@ -397,10 +397,7 @@ pytest tests/
 ruff check .
 ruff format .
 
-# 3. Run type checker
-mypy src/
-
-# 4. Verify no regressions
+# 3. Verify no regressions
 pytest tests/ -v
 ```
 

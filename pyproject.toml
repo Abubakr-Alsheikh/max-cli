@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "max-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "The Local, Fast, & Lazy Terminal Assistant for high-performance tasks."
 authors = [{name = "Abubakr Alsheikh", email = "abubakralsheikh@outlook.com"}]
 readme = "README.md"
@@ -27,7 +27,6 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
 ]

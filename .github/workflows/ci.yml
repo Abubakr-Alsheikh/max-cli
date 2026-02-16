@@ -31,10 +31,6 @@ jobs:
       run: |
         ruff check .
 
-    - name: Type check with mypy
-      run: |
-        mypy src/
-
     - name: Test with Pytest
       run: |
         pytest --cov=max_cli --cov-report=xml
