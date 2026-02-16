@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file contains guidelines and commands for agentic coding agents working in the max-cli repository.
+This file contains guidelines for agentic coding agents working on the max-cli repository.
 
 ## Project Overview
 
@@ -239,178 +239,60 @@ with Progress(
         progress.advance(task)
 ```
 
-## AI Agent Instructions
+## Before Starting
 
-Before starting any task, agents should check for AI-specific instruction files in the project root directory. Look for files with patterns like:
-
-- `GEMINI.md`
-- `CLAUDE.md`
-- `OPENAI.md`
-- `AGENT.md`
-- `AI_INSTRUCTIONS.md`
-
-If any of these files exist, read them first and follow their instructions. These files contain specific guidelines for AI agents working on this codebase. If no instruction files are found, proceed with the standard development workflow.
+Check for AI-specific instruction files in the project root (e.g., `CLAUDE.md`, `GEMINI.md`). If found, read them first and follow their instructions.
 
 ### Time Management & Task Deferral
 
 If a task is taking too much time or effort (e.g., fighting with type checker configurations, fixing LSP errors from third-party libraries, etc.):
 
 1. **Do NOT** spend excessive time trying to perfect it
-2. **Mark the task** as deferred in PLAN.md with `[D]`
-3. **Create a file** in `tasks/issues/` documenting the issue and why it was deferred
-4. **Move to the next task** - don't get stuck
+2. **Mark the task** as deferred with `[D]`
+3. **Move to the next task** - don't get stuck
 
 The goal is continuous progress, not perfection. It's better to complete 10 tasks well than to spend hours on 1 difficult task.
 
-Example:
+### Project Plans (PLANS Folder)
 
-```markdown
-# Task Issue: mypy strict mode
-
-## Problem
-Third-party libraries (PIL, fitz, yt_dlp) lack type stubs, causing many false-positive errors.
-
-## Why Deferred
-Adding `# type: ignore` everywhere would make code harder to maintain.
-
-## Future Approach
-Wait for official type stubs or consider using pyright with suppressions.
-```
-
----
-
-## Continuous Improvement System
-
-### The Improvement Plan
-
-This project uses `PLAN.md` as the single source of truth for all improvement tasks. The plan is divided into phases:
-
-- **Phase 1**: Foundation & Code Quality (Testing, Type Safety, Linting)
-- **Phase 2**: Performance & Architecture (Parallel Processing, Caching)
-- **Phase 3**: Feature Enhancements (Media, PDF, AI, File Management)
-- **Phase 4**: Developer Experience (Documentation, CI/CD, Plugin System)
-- **Phase 5**: Advanced Features (Cloud, Voice, System Integration)
-
-### Task Tracking System
-
-Tasks in PLAN.md use checkboxes `[ ]` for pending and `[x]` for completed. When an agent works on a task:
-
-1. **Read the Plan**: Always read `PLAN.md` first to understand current priorities
-2. **Check Task Status**: Verify the task is still `[ ]` (not started)
-3. **Mark In Progress**: Update the checkbox to `[~]` (in progress) while working
-4. **Complete the Task**: Update to `[x]` when finished
-5. **Update README if Needed**: Only update README.md if the task adds user-facing features
-6. **Create Implementation Files**: For complex tasks, create `.md` files with implementation details
-
-### Task Status Legend
-
-| Symbol | Meaning | Description |
-|--------|---------|-------------|
-| `[ ]` | Pending | Not started, available for work |
-| `[~]` | In Progress | Currently being worked on |
-| `[x]` | Completed | Finished and verified |
-| `[S]` | Skipped | Will not implement |
-| `[D]` | Deferred | Moved to future phase |
-
-### Working on Improvement Tasks
-
-When asked to work on project improvements:
+This project uses the `PLANS/` folder instead of a single PLAN.md file:
 
 ```
-1. Read PLAN.md to understand current priorities
-2. Select the highest priority task (P0 first, then P1, etc.)
-3. Check if the task is already marked as in progress or completed
-4. Implement the solution:
-   - For simple tasks: Implement directly in the codebase
-   - For complex tasks: Create an implementation guide file
-5. Test the changes (run pytest, ruff)
-6. Update PLAN.md to mark task as complete [x]
-7. Only update README.md if user-facing changes require it
-8. If implementation was complex, create an implementation guide
+PLANS/
+├── active/       # Current tasks to work on
+├── completed/    # Completed work summaries
+└── deferred/    # Deferred tasks with reasons
 ```
 
-### Implementation Guides for Complex Tasks
+**Workflow:**
 
-When a task is too complex to implement in a single session:
+1. Check `PLANS/active/` for current tasks
+2. Pick a task and implement it
+3. Run quality checks: `pytest tests/ && ruff check . && ruff format .`
+4. Update the plan file to mark complete
+5. Update README.md and docs if user-facing changes require it
+6. For deferred tasks: document why in `PLANS/deferred/`
 
-1. Create an implementation guide in `tasks/implementation/` directory
-2. Name it descriptively: `tasks/implementation/<task-name>.md`
-3. Include:
-   - Overview of what needs to be built
-   - Step-by-step implementation plan
-   - Code snippets for key components
-   - Testing strategy
-   - Potential pitfalls
+### When to Update Documentation
 
-Example template:
-
-```markdown
-# Implementation Guide: <Feature Name>
-
-## Overview
-Brief description of the feature.
-
-## Implementation Steps
-
-### Step 1: <Name>
-Description and code snippet.
-
-### Step 2: <Name>
-Description and code snippet.
-
-## Testing Strategy
-How to test this feature.
-
-## Potential Issues
-Known issues and how to avoid them.
-
-## Related Tasks
-Links to related tasks in PLAN.md.
-```
-
-### Updating Documentation
-
-**When to UPDATE README.md:**
-
+**Update README.md:**
 - New CLI commands are added
 - New features that users need to know about
 - Breaking changes to existing commands
 - Installation requirement changes
 
-**When NOT to UPDATE README.md:**
-
+**Don't update for:**
 - Internal refactoring
 - Test coverage improvements
 - Type hint additions
 - CI/CD improvements
 - Code style changes
 
-### Running Quality Checks
+**Task Status:**
 
-Before marking a task as complete, always run:
-
-```bash
-# 1. Run tests
-pytest tests/
-
-# 2. Run linter
-ruff check .
-ruff format .
-
-# 3. Verify no regressions
-pytest tests/ -v
-```
-
-### The Improvement Loop
-
-This creates a continuous improvement cycle:
-
-1. **Agent reads PLAN.md** → understands priorities
-2. **Agent works on task** → implements or creates guide
-3. **Agent runs checks** → ensures quality
-4. **Agent updates PLAN.md** → marks complete
-5. **Agent updates README if needed** → keeps users informed
-6. **Next agent reads PLAN.md** → sees updated status
-7. **Repeat** → project continuously improves
-
-This document should be kept up-to-date as the project evolves and new patterns emerge.
+| Symbol | Meaning |
+|--------|---------|
+| `[ ]` | Pending |
+| `[~]` | In Progress |
+| `[x]` | Completed |
+| `[D]` | Deferred |
