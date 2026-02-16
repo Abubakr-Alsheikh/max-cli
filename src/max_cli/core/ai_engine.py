@@ -277,3 +277,199 @@ If the request is unrelated to the tools or ambiguous, return:
             return raw_dict["images"][0].get("url")
 
         raise MaxError("AI generated a response, but no image URL was found.")
+
+    def run_pipeline(
+        self, operations: List[Dict[str, Any]], input_data: Any = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Run a pipeline of AI operations.
+
+        Args:
+            operations: List of operation dicts with 'type' and 'params'
+            input_data: Initial input data
+
+        Returns:
+            List of results from each operation
+        """
+        if not self.client:
+            raise MaxError("AI Client not configured.")
+
+        current_data = input_data
+        results = []
+
+        for i, op in enumerate(operations):
+            op_type = op.get("type", "").lower()
+            params = op.get("params", {})
+
+            try:
+                if op_type == "categorize":
+                    files = params.get("files", [])
+                    result = self.categorize_files(files)
+                    results.append(
+                        {"step": i + 1, "operation": "categorize", "result": result}
+                    )
+
+                elif op_type == "analyze_image":
+                    image_path = params.get("image_path")
+                    prompt = params.get("prompt", "Describe this image")
+                    if image_path:
+                        result = self.analyze_image_content(Path(image_path), prompt)
+                        results.append(
+                            {
+                                "step": i + 1,
+                                "operation": "analyze_image",
+                                "result": result,
+                            }
+                        )
+
+                elif op_type == "generate_image":
+                    prompt = params.get("prompt", "")
+                    if prompt:
+                        result = self.generate_image(prompt)
+                        results.append(
+                            {
+                                "step": i + 1,
+                                "operation": "generate_image",
+                                "result": result,
+                            }
+                        )
+
+                elif op_type == "chat":
+                    message = params.get("message", "")
+                    if message:
+                        result = self.interpret_intent(message, None)
+                        results.append(
+                            {"step": i + 1, "operation": "chat", "result": result}
+                        )
+
+                elif op_type == "transform":
+                    transform_prompt = params.get("prompt", "")
+                    input_text = params.get("input", current_data)
+                    if transform_prompt and input_text:
+                        response = self.client.chat.completions.create(
+                            model=settings.AI_MODEL,
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": f"{transform_prompt}\n\n{input_text}",
+                                }
+                            ],
+                        )
+                        result = response.choices[0].message.content
+                        current_data = result
+                        results.append(
+                            {"step": i + 1, "operation": "transform", "result": result}
+                        )
+
+                else:
+                    results.append(
+                        {
+                            "step": i + 1,
+                            "operation": op_type,
+                            "error": f"Unknown operation: {op_type}",
+                        }
+                    )
+
+            except Exception as e:
+                results.append({"step": i + 1, "operation": op_type, "error": str(e)})
+
+        return results
+
+    def semantic_search(self, query: str, files: List[Path]) -> List[Dict[str, Any]]:
+        """
+        Search files by content using AI.
+
+        Args:
+            query: Natural language search query
+            files: List of files to search
+
+        Returns:
+            List of matching results with relevance scores
+        """
+        if not self.client:
+            raise MaxError("AI Client not configured.")
+
+        results = []
+
+        for file_path in files:
+            try:
+                if file_path.suffix.lower() in [
+                    ".txt",
+                    ".md",
+                    ".py",
+                    ".json",
+                    ".yaml",
+                    ".yml",
+                ]:
+                    file_content = file_path.read_text(
+                        encoding="utf-8", errors="ignore"
+                    )[:5000]
+                elif file_path.suffix.lower() == ".pdf":
+                    continue
+                else:
+                    continue
+
+                prompt = f"""Search Query: {query}
+
+File: {file_path.name}
+
+Content:
+{file_content}
+
+Does this file match the query? Reply with YES or NO followed by a brief explanation."""
+
+                response = self.client.chat.completions.create(
+                    model=settings.AI_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+
+                answer = response.choices[0].message.content or ""
+
+                if answer.strip().upper().startswith("YES"):
+                    results.append(
+                        {"file": str(file_path), "match": True, "reasoning": answer}
+                    )
+
+            except Exception:
+                continue
+
+        return results
+
+    def extract_structured_data(
+        self, image_path: Path, schema: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """
+        Extract structured data from an image using AI vision.
+
+        Args:
+            image_path: Path to image file
+            schema: Dict mapping field names to descriptions
+
+        Returns:
+            Extracted structured data
+        """
+        if not self.client:
+            raise MaxError("AI Client not configured.")
+
+        schema_text = "\n".join(
+            [f"- {field}: {desc}" for field, desc in schema.items()]
+        )
+
+        prompt = f"""Extract structured data from this image. 
+
+Schema:
+{schema_text}
+
+Return a JSON object with the extracted data."""
+
+        try:
+            result = self.analyze_image_content(image_path, prompt)
+            import json
+
+            try:
+                data = json.loads(result)
+                return data
+            except json.JSONDecodeError:
+                return {"raw_text": result, "error": "Could not parse as JSON"}
+        except Exception as e:
+            raise MaxError(f"Data extraction failed: {e}")

@@ -182,3 +182,37 @@ def find_duplicates(
 
     except Exception as e:
         log_error(f"Error finding duplicates: {e}")
+
+
+@app.command("shred")
+def secure_delete(
+    target: Path = typer.Argument(..., help="File to securely delete."),
+    passes: int = typer.Option(
+        3, "--passes", "-p", help="Number of overwrite passes (default 3)."
+    ),
+    force: bool = typer.Option(False, "-f", "--force", help="Skip confirmation."),
+):
+    """
+    Securely delete a file by overwriting with random data before deletion.
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    if target.is_dir():
+        log_error("Cannot shred directories. Use rm -r instead.")
+        raise typer.Exit(1)
+
+    if not force:
+        console.print(f"[red]⚠ This will PERMANENTLY destroy: {target.name}[/red]")
+        if not Confirm.ask("Are you sure?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return
+
+    console.print(f"[cyan]Shredding {target.name} ({passes} passes)...[/cyan]")
+
+    try:
+        organizer.secure_delete(target, passes=passes)
+        log_success(f"File securely deleted: {target.name}")
+    except Exception as e:
+        log_error(f"Secure delete failed: {e}")

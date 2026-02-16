@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF  # type: ignore[import-untyped]
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 from PIL import Image
 import io
 

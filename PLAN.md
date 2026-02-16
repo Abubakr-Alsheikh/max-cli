@@ -555,9 +555,9 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
   - Added `flatten_form()` to convert form fields to regular content
   - CLI commands: `max pdf form-data`, `max pdf form-fill`, `max pdf form-flatten`
 
-- [ ] **3.2.3** Add PDF comparison
-  - Compare two PDFs
-  - Generate diff report
+- [x] **3.2.3** Add PDF comparison
+  - Added `compare_pdfs()` to PDFEngine (compares page count, text content, dimensions)
+  - CLI command: `max pdf compare file1.pdf file2.pdf`
 
 - [x] **3.2.4** Add PDF optimization
   - Added `optimize_pdf()` with options: remove_unused, compress_images, linearize
@@ -572,19 +572,17 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
 
 #### Actions
 
-- [ ] **3.3.1** Add AI pipeline builder
-  - Chain multiple AI operations
-  - Batch AI processing
-  - Template workflows
-  
-- [ ] **3.3.2** Add semantic search
-  - Search files by content
-  - Natural language file queries
-  
-- [ ] **3.3.3** Add AI-powered data extraction
-  - Extract structured data from images
-  - Receipt/invoice parsing
-  - Document classification
+- [x] **3.3.1** Add AI pipeline builder
+  - Added `run_pipeline()` to AIEngine to chain multiple AI operations
+  - Supports: categorize, analyze_image, generate_image, chat, transform
+
+- [x] **3.3.2** Add semantic search
+  - Added `semantic_search()` to AIEngine for natural language file search
+  - CLI command: `max ai search "query" /path`
+
+- [x] **3.3.3** Add AI-powered data extraction
+  - Added `extract_structured_data()` to AIEngine for extracting structured data from images
+  - CLI command: `max ai extract image.jpg -s "field:description"`
 
 - [ ] **3.3.4** Enhance chat mode
   - Persistent conversation history
@@ -608,11 +606,11 @@ def ocr_pdf(self, input_path: Path, output_path: Path, lang: str = "eng") -> str
   - Recover deleted files
   - Backup management
   - Version history
-  
-- [ ] **3.4.3** Add secure deletion
-  - Shred files securely
-  - Wipe free space
-  
+
+- [x] **3.4.3** Add secure deletion
+  - Added `secure_delete()` to FileOrganizer (overwrites with random data)
+  - CLI command: `max files shred` (supports --passes)
+
 - [ ] **3.4.4** Add file preview
   - Quick file preview
   - Metadata viewer

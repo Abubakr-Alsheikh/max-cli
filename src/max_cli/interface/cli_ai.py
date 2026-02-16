@@ -243,3 +243,89 @@ def chat_session():
             except Exception as e:
                 log_error(str(e))
     console.print("[cyan]Goodbye![/cyan]")
+
+
+@app.command("search")
+def semantic_search_cmd(
+    query: str = typer.Argument(..., help="Search query in natural language."),
+    path: Path = typer.Argument(".", help="Folder to search in."),
+    extensions: str = typer.Option(
+        "txt,md,py,json,yaml",
+        "--ext",
+        help="File extensions to search (comma-separated).",
+    ),
+):
+    """
+    Search files by content using AI (semantic search).
+    """
+
+    if not path.is_dir():
+        log_error(f"Folder not found: {path}")
+        raise typer.Exit(1)
+
+    exts = [f".{e.strip()}" for e in extensions.split(",")]
+    files = [f for f in path.rglob("*") if f.is_file() and f.suffix.lower() in exts]
+
+    if not files:
+        console.print("[yellow]No matching files found.[/yellow]")
+        return
+
+    console.print(f"[cyan]Searching {len(files)} files for: '{query}'...[/cyan]")
+
+    try:
+        results = engine.semantic_search(query, files)
+
+        if not results:
+            console.print("[yellow]No matches found.[/yellow]")
+        else:
+            console.print(f"[green]Found {len(results)} matching file(s):[/green]\n")
+            for r in results:
+                console.print(f"  [bold]{r['file']}[/bold]")
+                console.print(f"  [dim]{r.get('reasoning', '')}[/dim]\n")
+    except Exception as e:
+        log_error(f"Search failed: {e}")
+
+
+@app.command("extract")
+def extract_data_cmd(
+    target: Path = typer.Argument(..., help="Image file to extract data from."),
+    schema: str = typer.Option(
+        ...,
+        "--schema",
+        "-s",
+        help="Schema as field:description (can specify multiple).",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output JSON file."),
+):
+    """
+    Extract structured data from images (receipts, invoices, etc.).
+
+    Example: max ai extract receipt.jpg -s "total:Total amount" -s "date:Date"
+    """
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    schema_dict = {}
+    for s in schema:
+        if ":" in s:
+            field, desc = s.split(":", 1)
+            schema_dict[field.strip()] = desc.strip()
+        else:
+            schema_dict[s.strip()] = ""
+
+    console.print(f"[cyan]Extracting data from {target.name}...[/cyan]")
+
+    try:
+        result = engine.extract_structured_data(target, schema_dict)
+
+        console.print("\n[bold green]Extracted Data:[/bold green]")
+        import json
+
+        console.print(json.dumps(result, indent=2))
+
+        if output:
+            output.write_text(json.dumps(result, indent=2))
+            log_success(f"Saved to: {output}")
+    except Exception as e:
+        log_error(f"Extraction failed: {e}")

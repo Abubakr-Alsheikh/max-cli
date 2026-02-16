@@ -613,3 +613,39 @@ def optimize_pdf(
         )
     except Exception as e:
         log_error(f"Optimization failed: {e}")
+
+
+@app.command("compare")
+def compare_pdfs(
+    file1: Path = typer.Argument(..., help="First PDF file."),
+    file2: Path = typer.Argument(..., help="Second PDF file."),
+):
+    """
+    Compare two PDFs and show differences.
+    """
+    if not file1.exists():
+        log_error(f"File not found: {file1}")
+        raise typer.Exit(1)
+    if not file2.exists():
+        log_error(f"File not found: {file2}")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Comparing {file1.name} vs {file2.name}...[/cyan]")
+
+    try:
+        result = engine.compare_pdfs(file1, file2)
+
+        if result["pages_equal"] and not result["differences"]:
+            console.print("[green]✓ PDFs are identical![/green]")
+        else:
+            console.print("[yellow]⚠ PDFs have differences:[/yellow]")
+            for diff in result["differences"]:
+                console.print(f"  - {diff}")
+
+            if result["pages_equal"]:
+                console.print("\n[green]Page count and content match.[/green]")
+            else:
+                console.print("\n[red]PDFs are different.[/red]")
+
+    except Exception as e:
+        log_error(f"Comparison failed: {e}")

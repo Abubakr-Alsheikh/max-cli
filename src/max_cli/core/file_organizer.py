@@ -106,3 +106,37 @@ class FileOrganizer:
 
         duplicates = {k: v for k, v in hash_map.items() if len(v) > 1}
         return duplicates
+
+    def secure_delete(self, path: Path, passes: int = 3) -> bool:
+        """
+        Securely delete a file by overwriting with random data.
+
+        Args:
+            path: File to securely delete
+            passes: Number of overwrite passes (default 3)
+
+        Returns:
+            True if successful
+        """
+        import os
+
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        if path.is_dir():
+            raise ValueError("Cannot securely delete directories")
+
+        file_size = path.stat().st_size
+
+        try:
+            with open(path, "ba+") as f:
+                for _ in range(passes):
+                    f.seek(0)
+                    f.write(os.urandom(file_size))
+                    f.flush()
+                    os.fsync(f.fileno())
+
+            path.unlink()
+            return True
+        except OSError as e:
+            raise OSError(f"Secure delete failed: {e}")
