@@ -15,8 +15,8 @@ console = Console(theme=custom_theme)
 
 
 def log_error(message: str):
-    console.print(f"[error]✖ Error:[/error] {message}")
+    console.print(f"[error]X Error:[/error] {message}")
 
 
 def log_success(message: str):
-    console.print(f"[success]✔ Success:[/success] {message}")
+    console.print(f"[success]V Success:[/success] {message}")

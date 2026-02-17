@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     GRAB_STRIP_PLAYLIST: bool = True  # If True, removes '&list=...' from video URLs
     GRAB_INCLUDE_METADATA: bool = True  # If True, embeds tags/thumbnails
 
+    # New: Default path and type for downloads
+    GRAB_DEFAULT_PATH: Path = Path.home() / "Max Downloads"
+    GRAB_DEFAULT_TYPE: str = "video"  # "video" or "audio"
+    GRAB_QUEUE_ENABLED: bool = True
+
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]
         env_file_encoding = "utf-8"

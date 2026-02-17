@@ -47,8 +47,12 @@ app.add_typer(cli_network.app, name="net", help="Network tools (Download, Speedt
 
 app.add_typer(cli_ai.app, name="ai", help="Ask AI to run commands.")
 
-# Create a top-level shortcut because 'max grab' is very common
-app.command("grab")(cli_network.download_media)
+# Register grab-related commands at top level
+app.add_typer(
+    cli_network.app,
+    name="grab",
+    help="Download media from various platforms.",
+)
 
 # Register the group (optional, if you want 'max tools share')
 app.add_typer(cli_tools.app, name="tools", help="System utilities (Clipboard, QR).")
@@ -75,11 +79,11 @@ def main():
         app()
     except MaxError as e:
         # Expected errors (User mistake, missing file)
-        console.print(f"[bold red]✖ Error:[/bold red] {e}")
+        console.print(f"[bold red]X Error:[/bold red] {e}")
         sys.exit(1)
     except Exception as e:
         # Unexpected crashes (Bugs)
-        console.print("[bold red]💥 Critical Error (Unexpected)[/bold red]")
+        console.print("[bold red]!! Critical Error (Unexpected)[/bold red]")
         console.print(f"An error occurred: {e}")
         console.print("[dim]If this persists, please report it to the developer.[/dim]")
         # Uncomment the next line during development to see the full stack trace:

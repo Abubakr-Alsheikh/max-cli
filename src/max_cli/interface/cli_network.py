@@ -1,24 +1,20 @@
-import typer
 import urllib.parse
 from pathlib import Path
 from typing import Optional
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    TextColumn,
-    DownloadColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
-)
+
+import typer
 from rich.prompt import Confirm, Prompt
+from rich.table import Table
+from rich import box
 
 from max_cli.core.network_engine import NetworkEngine
+from max_cli.core.queue_manager import get_queue_manager
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
 
-app = typer.Typer()
+app = typer.Typer(help="Download media from various platforms.")
 engine = NetworkEngine()
+queue_manager = get_queue_manager()
 
 
 def _clean_url(url: str, strip_playlist: bool) -> str:
@@ -31,9 +27,7 @@ def _clean_url(url: str, strip_playlist: bool) -> str:
     parsed = urllib.parse.urlparse(url)
     query = urllib.parse.parse_qs(parsed.query)
 
-    # Only strip if it's a video AND a list (e.g. youtube.com/watch?v=...&list=...)
     if "v" in query and "list" in query:
-        # Rebuild query with only 'v' (and keep other stuff like 't' for timestamp)
         new_query = {"v": query["v"]}
         if "t" in query:
             new_query["t"] = query["t"]
@@ -48,55 +42,152 @@ def _clean_url(url: str, strip_playlist: bool) -> str:
     return url
 
 
-@app.command("grab")
+@app.command("download")
 def download_media(
-    url: str = typer.Argument(..., help="URL to download."),
-    # We use Optional[str] = None so we can detect if the User provided a flag or not.
+    url: Optional[str] = typer.Argument(None, help="URL to download."),
     quality: Optional[str] = typer.Option(
         None,
         "--quality",
         "-q",
         help=f"Quality: [s]mall, [m]edium, [h]igh, [x]best. (Default: {settings.GRAB_QUALITY})",
     ),
+    video: bool = typer.Option(False, "--video", "-v", help="Force video download."),
     audio: bool = typer.Option(False, "--audio", "-a", help="Audio only."),
-    # Index/Playlist Controls
-    index: str = typer.Option(
+    index: Optional[str] = typer.Option(
         None, "--index", "-i", help="Playlist index (e.g. '1', '1-5')."
     ),
     no_playlist: bool = typer.Option(
         False, "--no-playlist", help="Force single video download."
     ),
-    # Metadata: We default to None to allow Config fallback, but allow --no-meta/--nom to override
     no_meta: bool = typer.Option(
         False,
         "--no-meta",
-        "--nom",  # <--- New Shortcut
-        help=f"Disable metadata/thumbnails. (Default Setting: {'Include' if settings.GRAB_INCLUDE_METADATA else 'Exclude'})",
+        "--nom",
+        help=f"Disable metadata/thumbnails. (Default: {'Include' if settings.GRAB_INCLUDE_METADATA else 'Exclude'})",
     ),
-    output: Path = typer.Option(Path("."), "--output", "-o"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+    queue: bool = typer.Option(
+        False, "--queue", "-Q", help="Add to queue instead of downloading immediately."
+    ),
+    no_process: bool = typer.Option(
+        False, "--no-process", help="Add to queue but don't process immediately."
+    ),
 ):
     """
     Download media using saved preferences or overrides.
+
+    Examples:
+        max grab                                    # Interactive mode
+        max grab https://youtube.com/watch?v=...   # Download directly
+        max grab -v https://...                    # Force video
+        max grab -a https://...                    # Audio only
     """
-    if not output.exists():
-        output.mkdir(parents=True, exist_ok=True)
-
-    # --- 1. Resolve Settings Priority (Flag > Config > Default) ---
     final_quality = quality if quality else settings.GRAB_QUALITY
-
-    # Logic for Metadata:
-    # If user passed --no-meta (True), we force False.
-    # If user didn't pass it (False), we use the Config setting.
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA
 
-    # --- 2. URL Cleaning ---
-    # If the user explicitly asks for an index or no_playlist, we don't mess with the URL.
-    # Otherwise, we check the config preference.
-    if not index and not no_playlist:
-        url = _clean_url(url, settings.GRAB_STRIP_PLAYLIST)
+    is_audio = audio
+    if video:
+        is_audio = False
 
-    # --- 3. Playlist Check Logic ---
-    # Only perform the check if we haven't already stripped the playlist info
+    if settings.GRAB_DEFAULT_TYPE == "audio" and not video and not audio:
+        is_audio = True
+
+    target_output = output or settings.GRAB_DEFAULT_PATH
+    if not target_output.exists():
+        target_output.mkdir(parents=True, exist_ok=True)
+
+    if url is None:
+        console.print("[cyan]Interactive Mode - Enter URL(s) to download[/cyan]")
+        console.print(
+            "[dim]Enter empty line when done. Paste multiple URLs (one per line).[/dim]\n"
+        )
+        urls = []
+        while True:
+            line = Prompt.ask("[bold]URL[/bold] (or Enter to finish)", default="")
+            if not line.strip():
+                break
+            urls.append(line.strip())
+
+        if not urls:
+            console.print("[yellow]No URLs provided.[/yellow]")
+            raise typer.Exit()
+
+        for u in urls:
+            # Clean URL to strip playlist info if configured
+            clean_u = _clean_url(
+                u, settings.GRAB_STRIP_PLAYLIST and not index and not no_playlist
+            )
+            _add_to_queue_or_download(
+                clean_u,
+                final_quality,
+                is_audio,
+                include_metadata,
+                index,
+                no_playlist,
+                target_output,
+                queue,
+            )
+
+        # Process queue after all URLs are added
+        if (settings.GRAB_QUEUE_ENABLED or queue) and not no_process:
+            console.print("[dim]Processing queue...[/dim]")
+            queue_manager.process_now()
+    else:
+        clean_url = _clean_url(
+            url, settings.GRAB_STRIP_PLAYLIST and not index and not no_playlist
+        )
+        _add_to_queue_or_download(
+            clean_url,
+            final_quality,
+            is_audio,
+            include_metadata,
+            index,
+            no_playlist,
+            target_output,
+            queue,
+        )
+        if (settings.GRAB_QUEUE_ENABLED or queue) and not no_process:
+            console.print("[dim]Processing queue...[/dim]")
+            queue_manager.process_now()
+
+
+def _add_to_queue_or_download(
+    url: str,
+    quality: str,
+    audio_only: bool,
+    include_metadata: bool,
+    index: Optional[str],
+    no_playlist: bool,
+    output_path: Path,
+    queue_enabled: bool,
+) -> None:
+    """Add to queue or download immediately based on settings."""
+    if settings.GRAB_QUEUE_ENABLED or queue_enabled:
+        queue_manager.add(
+            url=url,
+            quality=quality,
+            audio_only=audio_only,
+            output_path=output_path,
+            include_metadata=include_metadata,
+            playlist_items=index,
+            no_playlist=no_playlist,
+        )
+    else:
+        _download_immediate(
+            url, quality, audio_only, include_metadata, index, no_playlist, output_path
+        )
+
+
+def _download_immediate(
+    url: str,
+    quality: str,
+    audio_only: bool,
+    include_metadata: bool,
+    index: Optional[str],
+    no_playlist: bool,
+    output_path: Path,
+) -> None:
+    """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
 
     if should_check_playlist:
@@ -116,16 +207,24 @@ def download_media(
                             raise typer.Exit()
                         index = choice
             except Exception:
-                pass  # Fail silently on check, let downloader handle errors
+                pass
 
-    # --- 4. Execution ---
     console.print(
-        f"[cyan]Grabbing {'Audio' if audio else 'Video'} ({final_quality.upper()})...[/cyan]"
+        f"[cyan]Grabbing {'Audio' if audio_only else 'Video'} ({quality.upper()})...[/cyan]"
     )
     if not include_metadata:
         console.print("[dim]Metadata disabled.[/dim]")
 
-    # Setup Rich Progress (Same as before)
+    from rich.progress import (
+        Progress,
+        SpinnerColumn,
+        BarColumn,
+        TextColumn,
+        DownloadColumn,
+        TransferSpeedColumn,
+        TimeRemainingColumn,
+    )
+
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[bold blue]{task.fields[filename]}", justify="left"),
@@ -161,10 +260,10 @@ def download_media(
         try:
             engine.download_media(
                 url=url,
-                output_path=output,
-                quality=final_quality,  # Use the resolved quality
-                audio_only=audio,
-                include_metadata=include_metadata,  # Use resolved meta
+                output_path=output_path,
+                quality=quality,
+                audio_only=audio_only,
+                include_metadata=include_metadata,
                 playlist_items=index,
                 no_playlist=no_playlist,
                 progress_hook=rich_hook,
@@ -172,3 +271,102 @@ def download_media(
             log_success("Download Finished.")
         except Exception as e:
             log_error(str(e))
+
+
+@app.command("queue")
+def show_queue():
+    """Show the current download queue."""
+    items = queue_manager.get_all()
+    stats = queue_manager.get_stats()
+
+    console.print("\n[bold]Queue Status:[/bold]")
+    console.print(
+        f"  Pending: {stats['pending']} | Downloading: {stats['downloading']} | Completed: {stats['completed']} | Failed: {stats['failed']}\n"
+    )
+
+    if not items:
+        console.print("[dim]Queue is empty.[/dim]")
+        return
+
+    table = Table(title="Download Queue", box=box.ROUNDED)
+    table.add_column("ID", style="cyan", width=8)
+    table.add_column("Status", width=12)
+    table.add_column("Title/URL", width=40)
+    table.add_column("Progress", justify="right", width=10)
+    table.add_column("Type", width=8)
+
+    for item in items:
+        status_color = {
+            "pending": "yellow",
+            "downloading": "cyan",
+            "completed": "green",
+            "failed": "red",
+        }.get(item.status, "white")
+
+        title = item.title if item.title else item.url
+        title = (title[:37] + "...") if len(title) > 40 else title
+        progress = f"{item.progress:.0f}%" if item.status == "downloading" else "-"
+
+        table.add_row(
+            item.id,
+            f"[{status_color}]{item.status}[/{status_color}]",
+            title,
+            progress,
+            "Audio" if item.audio_only else "Video",
+        )
+
+    console.print(table)
+
+
+@app.command("clear")
+def clear_queue(
+    all: bool = typer.Option(
+        False, "--all", "-a", help="Clear including completed/failed."
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation."),
+):
+    """Clear the download queue."""
+    if all:
+        if not force:
+            if not Confirm.ask(
+                "[red]Clear ALL items including completed/failed?[/red]"
+            ):
+                console.print("[yellow]Aborted.[/yellow]")
+                return
+        count = queue_manager.clear()
+        log_success(f"Cleared {count} items from queue.")
+    else:
+        pending = queue_manager.get_pending()
+        if not pending:
+            console.print("[dim]No pending items to clear.[/dim]")
+            return
+
+        if not force:
+            if not Confirm.ask(f"[yellow]Clear {len(pending)} pending items?[/yellow]"):
+                console.print("[yellow]Aborted.[/yellow]")
+                return
+
+        queue_manager.clear()
+        log_success(f"Cleared {len(pending)} pending items.")
+
+
+@app.command("status")
+def queue_status():
+    """Show detailed queue statistics."""
+    stats = queue_manager.get_stats()
+
+    table = Table(title="Queue Statistics", box=box.ROUNDED)
+    table.add_column("Status", style="cyan")
+    table.add_column("Count", justify="right", style="bold")
+
+    table.add_row("Total", str(stats["total"]))
+    table.add_row("Pending", str(stats["pending"]))
+    table.add_row("Downloading", str(stats["downloading"]))
+    table.add_row("Completed", f"[green]{stats['completed']}[/green]")
+    table.add_row("Failed", f"[red]{stats['failed']}[/red]")
+
+    console.print(table)
+
+
+if __name__ == "__main__":
+    app()

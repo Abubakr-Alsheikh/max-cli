@@ -1,6 +1,6 @@
 # Plan: Grab Media Improvements
 
-> Status: Draft
+> Status: Completed
 > Priority: P0
 
 ## Overview
@@ -26,14 +26,14 @@ This keeps code clean, consistent, and professional.
 
 ## Goals
 
-- [ ] **G1** Add default download path config (e.g., "Max Downloads" in home)
-- [ ] **G2** Add default download type (video/audio) config
-- [ ] **G3** Add `-v` flag to force video download
-- [ ] **G4** Make URL optional - interactive mode prompts for URL
-- [ ] **G5** URL input without quotes (handle spaces automatically)
-- [ ] **G6** Queue system - add URLs to queue, process in background
-- [ ] **G7** Better progress display - show all downloads in a table
-- [ ] **G8** Persist queue info to disk (resume after restart)
+- [x] **G1** Add default download path config (e.g., "Max Downloads" in home)
+- [x] **G2** Add default download type (video/audio) config
+- [x] **G3** Add `-v` flag to force video download
+- [x] **G4** Make URL optional - interactive mode prompts for URL
+- [x] **G5** URL input without quotes (handle spaces automatically)
+- [x] **G6** Queue system - add URLs to queue, process in background
+- [x] **G7** Better progress display - show all downloads in a table
+- [x] **G8** Persist queue info to disk (resume after restart)
 
 ---
 
@@ -100,27 +100,27 @@ src/max_cli/
 > **Important:** Use `max_cli.common` utilities throughout (retry, logger, exceptions, utils)
 
 ### T1: Add Config Settings
-- [ ] Add `GRAB_DEFAULT_PATH` to config.py
-- [ ] Add `GRAB_DEFAULT_TYPE` to config.py  
-- [ ] Update `max config grab` wizard to include these
+- [x] Add `GRAB_DEFAULT_PATH` to config.py
+- [x] Add `GRAB_DEFAULT_TYPE` to config.py  
+- [x] Update `max config grab` wizard to include these
 
 ### T2: Interactive Mode & URL Handling
-- [ ] Make URL argument optional in CLI
-- [ ] If no URL provided, prompt for input
-- [ ] Remove need for quotes - use `shlex.split()` or custom parsing
-- [ ] Add `-v` flag for video override
+- [x] Make URL argument optional in CLI
+- [x] If no URL provided, prompt for input
+- [x] Remove need for quotes - use `shlex.split()` or custom parsing
+- [x] Add `-v` flag for video override
 
 ### T3: Queue System Core
-- [ ] Create `QueueManager` class in queue_manager.py
-- [ ] Add queue persistence (JSON file)
-- [ ] Implement background processing thread
-- [ ] Add queue CLI commands: `queue`, `clear`, `status`
+- [x] Create `QueueManager` class in queue_manager.py
+- [x] Add queue persistence (JSON file)
+- [x] Implement background processing thread
+- [x] Add queue CLI commands: `queue`, `clear`, `status`
 
 ### T4: Enhanced Progress Display
-- [ ] Replace single progress bar with table view
-- [ ] Show: URL, Title, Status, Progress %, Speed, ETA
-- [ ] Real-time updates for all active downloads
-- [ ] Color-coded status (green=complete, yellow=downloading, red=failed)
+- [x] Replace single progress bar with table view
+- [x] Show: URL, Title, Status, Progress %, Speed, ETA
+- [x] Real-time updates for all active downloads
+- [x] Color-coded status (green=complete, yellow=downloading, red=failed)
 
 ### T5: Integration
 - [ ] Connect queue manager to CLI

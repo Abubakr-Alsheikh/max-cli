@@ -177,7 +177,31 @@ def configure_grab():
     )
     current_data["GRAB_INCLUDE_METADATA"] = str(meta)
 
-    # 4. Save
+    # 4. Default Type (video/audio)
+    type_choice = Prompt.ask(
+        "Default download type?",
+        choices=["video", "audio"],
+        default=settings.GRAB_DEFAULT_TYPE,
+    )
+    current_data["GRAB_DEFAULT_TYPE"] = type_choice
+
+    # 5. Default Download Path
+    default_path = Prompt.ask(
+        "Default download folder?",
+        default=str(settings.GRAB_DEFAULT_PATH),
+    )
+    current_data["GRAB_DEFAULT_PATH"] = default_path
+
+    # 6. Queue Enabled
+    queue_enabled = Confirm.ask(
+        "Enable queue system?", default=settings.GRAB_QUEUE_ENABLED
+    )
+    console.print(
+        "[dim]  (Queue allows adding multiple URLs and processing in background)[/dim]"
+    )
+    current_data["GRAB_QUEUE_ENABLED"] = str(queue_enabled)
+
+    # 7. Save
     try:
         # We append/update the global config file
         lines = []
@@ -185,7 +209,14 @@ def configure_grab():
             lines = GLOBAL_CONFIG_PATH.read_text().splitlines()
 
         # Remove old entries for these specific keys to avoid duplicates
-        keys = ["GRAB_QUALITY", "GRAB_STRIP_PLAYLIST", "GRAB_INCLUDE_METADATA"]
+        keys = [
+            "GRAB_QUALITY",
+            "GRAB_STRIP_PLAYLIST",
+            "GRAB_INCLUDE_METADATA",
+            "GRAB_DEFAULT_TYPE",
+            "GRAB_DEFAULT_PATH",
+            "GRAB_QUEUE_ENABLED",
+        ]
         lines = [line for line in lines if not any(line.startswith(k) for k in keys)]
 
         # Add new
@@ -309,6 +340,9 @@ def export_config(
             "GRAB_AUDIO_FORMAT": settings.GRAB_AUDIO_FORMAT,
             "GRAB_STRIP_PLAYLIST": settings.GRAB_STRIP_PLAYLIST,
             "GRAB_INCLUDE_METADATA": settings.GRAB_INCLUDE_METADATA,
+            "GRAB_DEFAULT_TYPE": settings.GRAB_DEFAULT_TYPE,
+            "GRAB_DEFAULT_PATH": str(settings.GRAB_DEFAULT_PATH),
+            "GRAB_QUEUE_ENABLED": settings.GRAB_QUEUE_ENABLED,
         }
     else:
         non_defaults = {
@@ -320,6 +354,9 @@ def export_config(
             "GRAB_AUDIO_FORMAT": settings.GRAB_AUDIO_FORMAT,
             "GRAB_STRIP_PLAYLIST": settings.GRAB_STRIP_PLAYLIST,
             "GRAB_INCLUDE_METADATA": settings.GRAB_INCLUDE_METADATA,
+            "GRAB_DEFAULT_TYPE": settings.GRAB_DEFAULT_TYPE,
+            "GRAB_DEFAULT_PATH": str(settings.GRAB_DEFAULT_PATH),
+            "GRAB_QUEUE_ENABLED": settings.GRAB_QUEUE_ENABLED,
         }
         for k, v in non_defaults.items():
             if v is not None and v != "":
