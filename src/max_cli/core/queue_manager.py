@@ -48,6 +48,10 @@ class QueueItem:
         self.added_at = datetime.now().isoformat()
         self.completed_at: Optional[str] = None
         self.retry_count = 0
+        # Additional fields for history
+        self.file_path: Optional[str] = None
+        self.file_size: int = 0
+        self.duration: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -67,6 +71,9 @@ class QueueItem:
             "added_at": self.added_at,
             "completed_at": self.completed_at,
             "retry_count": self.retry_count,
+            "file_path": self.file_path,
+            "file_size": self.file_size,
+            "duration": self.duration,
         }
 
     @classmethod
@@ -89,6 +96,9 @@ class QueueItem:
         item.added_at = data.get("added_at", item.added_at)
         item.completed_at = data.get("completed_at")
         item.retry_count = data.get("retry_count", 0)
+        item.file_path = data.get("file_path")
+        item.file_size = data.get("file_size", 0)
+        item.duration = data.get("duration")
         return item
 
 
@@ -98,17 +108,61 @@ class QueueManager:
     """
 
     QUEUE_FILE = Path.home() / ".max_cli" / "grab_queue.json"
+    HISTORY_FILE = Path.home() / ".max_cli" / "grab_history.json"
 
     def __init__(self):
         self._queue: List[QueueItem] = []
+        self._history: List[QueueItem] = []
         self._lock = threading.Lock()
         self._engine = NetworkEngine()
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
         self._load_queue()
+        self._load_history()
 
     def _ensure_queue_dir(self) -> None:
         self.QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    def _load_history(self) -> None:
+        """Load download history from persistent storage."""
+        if not self.HISTORY_FILE.exists():
+            return
+        try:
+            data = json.loads(self.HISTORY_FILE.read_text())
+            self._history = [QueueItem.from_dict(item) for item in data]
+        except Exception:
+            self._history = []
+
+    def _save_history(self) -> None:
+        """Save download history to persistent storage."""
+        self._ensure_queue_dir()
+        try:
+            data = [item.to_dict() for item in self._history]
+            self.HISTORY_FILE.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            console.print(f"[red]Failed to save history: {e}[/red]")
+
+    def add_to_history(self, item: QueueItem) -> None:
+        """Add a completed download to history."""
+        with self._lock:
+            self._history.insert(0, item)  # Add to beginning (most recent first)
+            # Keep only last 100 items
+            if len(self._history) > 100:
+                self._history = self._history[:100]
+        self._save_history()
+
+    def get_history(self) -> List[QueueItem]:
+        """Get download history."""
+        with self._lock:
+            return list(self._history)
+
+    def clear_history(self) -> int:
+        """Clear download history."""
+        with self._lock:
+            count = len(self._history)
+            self._history = []
+        self._save_history()
+        return count
 
     def _load_queue(self) -> None:
         """Load queue from persistent storage."""
@@ -272,20 +326,58 @@ class QueueManager:
         if not output_path.exists():
             output_path.mkdir(parents=True, exist_ok=True)
 
+        final_filename = ""
+
         def progress_hook(d: Dict[str, Any]) -> None:
+            nonlocal final_filename
             if d["status"] == "downloading":
                 item.progress = (
                     d.get("downloaded_bytes", 0)
                     / (d.get("total_bytes") or d.get("total_bytes_estimate", 1))
                 ) * 100
                 item.speed = d.get("speed", "")
-                if "filename" in d:
-                    item.title = d["filename"].split("/")[-1][:50]
+                # Get title from info dict if available
+                info = d.get("info", {})
+                if info and "title" in info:
+                    item.title = info["title"][:50]
+                elif "filename" in d:
+                    # Extract just filename without path
+                    fname = d["filename"].split("/")[-1].split("\\")[-1]
+                    # Remove extension
+                    fname = fname.rsplit(".", 1)[0]
+                    item.title = fname[:50]
                 self.update_item(item)
             elif d["status"] == "finished":
                 item.progress = 100
                 item.status = "completed"
                 item.completed_at = datetime.now().isoformat()
+
+                # Get final info
+                info = d.get("info", {})
+                if info:
+                    if "title" in info:
+                        item.title = info["title"][:50]
+                    if "duration" in info:
+                        item.duration = info["duration"]
+
+                # Get final filename
+                if "filename" in d:
+                    final_filename = d["filename"]
+
+                self.update_item(item)
+            elif d["status"] == "finished":
+                item.progress = 100
+                item.status = "completed"
+                item.completed_at = datetime.now().isoformat()
+
+                # Get final info
+                info = d.get("info", {})
+                if info:
+                    if "title" in info:
+                        item.title = info["title"][:50]
+                    if "duration" in info:
+                        item.duration = info["duration"]
+
                 self.update_item(item)
 
         try:
@@ -301,6 +393,25 @@ class QueueManager:
             )
             item.status = "completed"
             item.completed_at = datetime.now().isoformat()
+
+            # Find the downloaded file and get its info
+            if final_filename:
+                # Use the final filename from yt-dlp
+                fpath = Path(final_filename)
+                if fpath.exists():
+                    item.file_path = str(fpath)
+                    item.file_size = fpath.stat().st_size
+            elif item.title:
+                # Fallback: look for downloaded files matching the title
+                for f in output_path.iterdir():
+                    if f.is_file() and f.stem in item.title:
+                        item.file_path = str(f)
+                        item.file_size = f.stat().st_size
+                        break
+
+            # Add to history
+            self.add_to_history(item)
+
         except Exception as e:
             item.status = "failed"
             item.error = str(e)

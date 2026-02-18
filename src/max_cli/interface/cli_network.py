@@ -1,4 +1,5 @@
 import urllib.parse
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -410,6 +411,57 @@ def queue_status():
     table.add_row("Downloading", str(stats["downloading"]))
     table.add_row("Completed", f"[green]{stats['completed']}[/green]")
     table.add_row("Failed", f"[red]{stats['failed']}[/red]")
+
+    console.print(table)
+
+
+@app.command("history")
+def show_history(
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of items to show."),
+    clear: bool = typer.Option(False, "--clear", "-c", help="Clear history."),
+):
+    """Show download history."""
+    if clear:
+        count = queue_manager.clear_history()
+        log_success(f"Cleared {count} items from history.")
+        return
+
+    history = queue_manager.get_history()[:limit]
+
+    if not history:
+        console.print("[dim]No download history.[/dim]")
+        return
+
+    from max_cli.common.utils import format_size
+
+    table = Table(title="Download History", box=box.ROUNDED)
+    table.add_column("Title", style="cyan", width=30)
+    table.add_column("Size", justify="right", width=10)
+    table.add_column("Type", width=8)
+    table.add_column("Quality", width=8)
+    table.add_column("Date", width=20)
+
+    for item in history:
+        title = item.title if item.title else item.url
+        title = (title[:27] + "...") if len(title) > 30 else title
+        size = format_size(item.file_size) if item.file_size > 0 else "-"
+
+        # Format date
+        date = "-"
+        if item.completed_at:
+            try:
+                dt = datetime.fromisoformat(item.completed_at)
+                date = dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+
+        table.add_row(
+            title,
+            size,
+            "Audio" if item.audio_only else "Video",
+            item.quality.upper(),
+            date,
+        )
 
     console.print(table)
 
