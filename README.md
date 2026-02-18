@@ -577,30 +577,75 @@ Max CLI supports plugins for extensibility. Plugins are stored in:
 - `~/.max_cli/plugins/` (user-level)
 - `./plugins/` (project-level)
 
-Example plugin structure:
+#### Plugin Commands
+
+```bash
+# List all installed plugins
+max plugins list
+max plugins list --all    # Include disabled plugins
+
+# Get detailed info about a plugin
+max plugins info <plugin-name>
+
+# Enable or disable a plugin
+max plugins enable <plugin-name>
+max plugins disable <plugin-name>
+```
+
+#### Creating a Plugin
 
 ```python
-from max_cli.plugins.base import CLIPlugin
 import typer
+from max_cli.plugins.base import CLIPlugin
+
 
 class MyPlugin(CLIPlugin):
+    """My custom plugin."""
+
+    def __init__(self):
+        super().__init__(
+            name="my-plugin",
+            version="1.0.0",
+            description="My custom plugin description",
+            author="Your Name",
+            author_email="you@example.com",
+            url="https://github.com/you/plugin",
+            license="MIT",
+            tags=["custom", "example"],
+        )
+
     @property
-    def name(self) -> str:
-        return "my-plugin"
-    
-    @property
-    def version(self) -> str:
-        return "1.0.0"
-    
-    @property
-    def description(self) -> str:
-        return "My custom plugin"
-    
+    def priority(self) -> int:
+        """Lower = registered first. Default is 100."""
+        return 100
+
+    def validate(self) -> tuple[bool, str | None]:
+        """Validate plugin requirements."""
+        return True, None
+
+    def on_load(self, context) -> None:
+        """Called when plugin loads."""
+        pass
+
+    def on_unload(self) -> None:
+        """Called when plugin unloads."""
+        pass
+
     def register(self, app: typer.Typer) -> None:
         @app.command("my-command")
-        def my_command():
-            typer.echo("Hello from my plugin!")
+        @app.command("mc")  # Alias
+        def my_command(
+            name: str = typer.Option("World", "--name", "-n", help="Name to greet"),
+        ) -> None:
+            """My custom command."""
+            typer.echo(f"Hello, {name}!")
+
+
+# IMPORTANT: Instantiate at module level
+plugin = MyPlugin()
 ```
+
+For detailed documentation, see `PLANS/docs/plugins.md`.
 
 ### Architecture
 

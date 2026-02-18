@@ -202,6 +202,96 @@ def command_name(
 
 This keeps code clean, consistent, and professional.
 
+## Plugin System
+
+The max-cli plugin system allows extending CLI functionality via plugins. See `PLANS/docs/plugins.md` for full documentation.
+
+### Plugin Architecture
+
+```
+src/max_cli/plugins/
+├── base.py       # Plugin base classes: Plugin, CLIPlugin, EnginePlugin
+├── manager.py   # PluginManager for discovery, loading, and lifecycle
+└── __init__.py # Exports
+```
+
+### Plugin Types
+
+- **CLIPlugin**: Adds CLI commands
+- **EnginePlugin**: Adds business logic
+
+### Key Classes
+
+```python
+# src/max_cli/plugins/base.py
+class Plugin(ABC):
+    @property
+    def name(self) -> str: ...
+    @property
+    def version(self) -> str: ...
+    @property
+    def description(self) -> str: ...
+    @property
+    def metadata(self) -> PluginMetadata: ...
+    @property
+    def priority(self) -> int: ...  # Lower = registered first
+
+    def validate(self) -> tuple[bool, Optional[str]]: ...
+    def on_load(self, context: PluginContext) -> None: ...
+    def on_unload(self) -> None: ...
+    @abstractmethod
+    def register(self, app: typer.Typer) -> None: ...
+    def unregister(self, app: typer.Typer) -> None: ...
+
+@dataclass
+class PluginContext:
+    app: typer.Typer
+    plugin_dir: Optional[Path]
+    config: dict[str, Any]
+
+# src/max_cli/plugins/manager.py
+class PluginManager:
+    def __init__(self, plugin_dirs: list[Path] | None = None, config_dir: Path | None = None): ...
+    def load_all(self, context: PluginContext) -> None: ...
+    def register_all(self, app: typer.Typer) -> None: ...
+    def enable_plugin(self, name: str) -> bool: ...
+    def disable_plugin(self, name: str) -> bool: ...
+    def get_plugin_info(self, name: str) -> dict | None: ...
+    def list_plugins(self, include_disabled: bool = False) -> list[str]: ...
+```
+
+### Adding New Plugin Commands
+
+When adding plugin-related CLI commands, add them to `main.py` in the `plugins_app` typer:
+
+```python
+plugins_app = typer.Typer(name="plugins", help="Manage plugins.")
+
+@plugins_app.command("command-name")
+def plugin_command(...):
+    """Command help text."""
+    ...
+
+app.add_typer(plugins_app, name="plugins")
+```
+
+### Plugin Discovery
+
+Plugins are auto-discovered from:
+- `~/.max_cli/plugins/` (user plugins)
+- `./plugins/` (project plugins)
+
+Configuration saved to: `~/.max_cli/plugins.json`
+
+### Best Practices
+
+1. Use `CLIPlugin` for command extensions
+2. Implement all metadata properties (name, version, description, author)
+3. Add command aliases for convenience (`@app.command("cmd")`, `@app.command("c")`)
+4. Use lifecycle hooks (`on_load`, `on_unload`) for resource management
+5. Validate dependencies in `validate()` method
+6. Instantiate plugin class at module level: `plugin = MyPlugin()`
+
 ## Development Workflow
 
 1. **Setup**: Install dependencies with `pip install -e .[dev]`
