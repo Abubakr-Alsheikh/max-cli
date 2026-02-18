@@ -651,10 +651,23 @@ For detailed documentation, see `PLANS/docs/plugins.md`.
 
 ```
 src/max_cli/
-├── core/           # Business logic (engines)
-├── interface/      # CLI commands (Typer)
-├── common/         # Shared utilities
-└── __init__.py    # Package exports
+├── core/
+│   ├── engines/          # Business logic (AI, media, PDF, etc.)
+│   │   ├── ai_engine.py
+│   │   ├── file_organizer.py
+│   │   ├── image_processor.py
+│   │   ├── media_engine.py
+│   │   ├── network_engine.py
+│   │   ├── pdf_engine.py
+│   │   ├── queue_manager.py
+│   │   └── system_engine.py
+│   └── cli/              # CLI command registration
+│       ├── commands/     # Command modules
+│       ├── plugins.py    # Plugin lifecycle
+│       └── registry.py   # Command registry
+├── interface/            # Typer CLI command interfaces
+├── common/              # Shared utilities and exceptions
+└── __init__.py          # Package exports
 ```
 
 ---

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from max_cli.core.media_engine import MediaEngine
+from max_cli.core.engines.media_engine import MediaEngine
 
 
 class TestMediaEngine:

@@ -2,7 +2,7 @@ import typer
 from pathlib import Path
 from typing import Optional, List
 
-from max_cli.core.media_engine import MediaEngine
+from max_cli.core.engines.media_engine import MediaEngine
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 

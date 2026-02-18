@@ -1,6 +1,6 @@
 import pytest
 from PIL import Image
-from max_cli.core.pdf_engine import PDFEngine
+from max_cli.core.engines.pdf_engine import PDFEngine
 
 
 class TestPDFEngine:

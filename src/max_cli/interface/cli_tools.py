@@ -1,7 +1,7 @@
 import typer
 from pathlib import Path
 
-from max_cli.core.system_engine import SystemEngine
+from max_cli.core.engines.system_engine import SystemEngine
 from max_cli.common.logger import console, log_success, log_error
 
 app = typer.Typer()

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from max_cli.core.network_engine import NetworkEngine
+from max_cli.core.engines.network_engine import NetworkEngine
 
 
 class TestNetworkEngine:

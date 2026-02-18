@@ -1,14 +1,14 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from max_cli.core.ai_engine import AIEngine
+from max_cli.core.engines.ai_engine import AIEngine
 from max_cli.common.exceptions import MaxError
 
 
 class TestAIEngine:
     """Tests for AI operations."""
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_init_with_api_key(self, mock_settings, mock_openai):
         """Test initialization with API key."""
         mock_settings.OPENAI_API_KEY = "test-key"
@@ -19,8 +19,8 @@ class TestAIEngine:
         engine = AIEngine()
         assert engine.client is not None
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_init_without_api_key(self, mock_settings, mock_openai):
         """Test initialization without API key."""
         mock_settings.OPENAI_API_KEY = None
@@ -56,8 +56,8 @@ class TestAIEngine:
 
         assert context == ""
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_interpret_intent_no_client(self, mock_settings, mock_openai):
         """Test interpret intent without client."""
         mock_settings.OPENAI_API_KEY = None
@@ -72,8 +72,8 @@ class TestAIEngine:
         with pytest.raises(MaxError, match="Missing AI"):
             engine.interpret_intent("test prompt", mock_app)
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_categorize_files(self, mock_settings, mock_openai):
         """Test file categorization."""
         mock_settings.OPENAI_API_KEY = "test-key"
@@ -98,9 +98,9 @@ class TestAIEngine:
 
         assert "file1.txt" in result
 
-    @patch("max_cli.core.ai_engine.get_default_cache")
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.get_default_cache")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_categorize_files_fallback(self, mock_settings, mock_openai, mock_cache):
         """Test file categorization fallback on error."""
         mock_cache.return_value.get.return_value = None
@@ -122,8 +122,8 @@ class TestAIEngine:
 
         assert result == {"file1.txt": "Other", "file2.txt": "Other"}
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_generate_image(self, mock_settings, mock_openai):
         """Test image generation."""
         mock_settings.OPENAI_API_KEY = "test-key"
@@ -149,8 +149,8 @@ class TestAIEngine:
 
         assert "https://example.com/image.png" in result
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_generate_image_no_client(self, mock_settings, mock_openai):
         """Test image generation without client."""
         mock_settings.OPENAI_API_KEY = None
@@ -164,8 +164,8 @@ class TestAIEngine:
         with pytest.raises(MaxError, match="AI Client not configured"):
             engine.generate_image("A test image")
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_extract_image_url_markdown(self, mock_settings, mock_openai):
         """Test extracting image URL from markdown."""
         mock_settings.OPENAI_API_KEY = "test-key"
@@ -186,8 +186,8 @@ class TestAIEngine:
 
         assert result == "https://example.com/img.png"
 
-    @patch("max_cli.core.ai_engine.OpenAI")
-    @patch("max_cli.core.ai_engine.settings")
+    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
     def test_extract_image_url_not_found(self, mock_settings, mock_openai):
         """Test error when no image URL found."""
         mock_settings.OPENAI_API_KEY = "test-key"

@@ -1,5 +1,5 @@
 # Command registration modules
-from max_cli.core.commands import (
+from max_cli.core.cli.commands import (
     ai,
     config,
     files,

@@ -4,7 +4,7 @@ from rich.prompt import Confirm
 from rich.panel import Panel
 from rich.text import Text
 
-from max_cli.core.file_organizer import FileOrganizer
+from max_cli.core.engines.file_organizer import FileOrganizer
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.interface.cli_ai import engine  # Import the AIEngine instance
 

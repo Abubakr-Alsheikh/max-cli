@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typer import Typer
 
-from max_cli.core import plugins
+from max_cli.core.cli import plugins
 
 
 def register(app: "Typer") -> None:

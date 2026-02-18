@@ -10,7 +10,7 @@ from max_cli.common.logger import console
 from max_cli.common.retry import retry
 from max_cli.common.exceptions import MaxError
 from max_cli.config import settings
-from max_cli.core.network_engine import NetworkEngine
+from max_cli.core.engines.network_engine import NetworkEngine
 
 
 class QueueError(MaxError):

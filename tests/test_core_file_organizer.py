@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from max_cli.core.file_organizer import FileOrganizer
+from max_cli.core.engines.file_organizer import FileOrganizer
 from max_cli.common.exceptions import ResourceNotFoundError
 
 

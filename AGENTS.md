@@ -65,7 +65,7 @@ from typing import Optional, List, Dict
 
 from PIL import Image, ImageOps
 
-from max_cli.core.image_processor import ImageEngine
+from max_cli.core.engines.image_processor import ImageEngine
 from max_cli.common.logger import console, log_success, log_error
 ```
 
@@ -106,10 +106,30 @@ except Exception as e:
 
 ```
 src/max_cli/
-├── core/           # Business logic and engines
-├── interface/      # Typer CLI commands
-├── common/         # Shared utilities and exceptions
-└── __init__.py    # Package exports
+├── core/
+│   ├── engines/          # Business logic engines
+│   │   ├── ai_engine.py
+│   │   ├── file_organizer.py
+│   │   ├── image_processor.py
+│   │   ├── media_engine.py
+│   │   ├── network_engine.py
+│   │   ├── pdf_engine.py
+│   │   ├── queue_manager.py
+│   │   └── system_engine.py
+│   └── cli/              # CLI registration
+│       ├── commands/     # Command modules
+│       │   ├── ai.py
+│       │   ├── config.py
+│       │   ├── files.py
+│       │   ├── media.py
+│       │   ├── network.py
+│       │   ├── plugins.py
+│       │   └── tools.py
+│       ├── plugins.py     # Plugin lifecycle
+│       └── registry.py   # Command registration
+├── interface/            # Typer CLI command interfaces
+├── common/              # Shared utilities and exceptions
+└── __init__.py          # Package exports
 
 tests/                   # Test files
 ```
@@ -137,11 +157,11 @@ class EngineName:
 
 ```python
 import typer
-from max_cli.core.engine import EngineName
+from max_cli.core.engines.image_processor import ImageEngine
 from max_cli.common.logger import console, log_success, log_error
 
 app = typer.Typer()
-engine = EngineName()
+engine = ImageEngine()
 
 @app.command("command-name")
 def command_name(
@@ -154,6 +174,37 @@ def command_name(
         log_success("Operation completed successfully")
     except MaxError as e:
         log_error(str(e))
+```
+
+#### Adding New Commands
+
+To add a new command group, create a new file in `src/max_cli/core/cli/commands/`:
+
+```python
+# src/max_cli/core/cli/commands/newgroup.py
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typer import Typer
+
+from max_cli.interface import cli_newgroup
+
+
+def register(app: "Typer") -> None:
+    """Register new group commands."""
+    app.add_typer(cli_newgroup.app, name="newgroup", help="Description of new group.")
+```
+
+Then register it in `src/max_cli/core/cli/registry.py`:
+
+```python
+from max_cli.core.cli import commands
+
+def register(app: "Typer") -> None:
+    commands.media.register(app)
+    commands.files.register(app)
+    # ... other commands
+    commands.newgroup.register(app)  # Add your new command
 ```
 
 ### Configuration
@@ -262,17 +313,13 @@ class PluginManager:
 
 ### Adding New Plugin Commands
 
-When adding plugin-related CLI commands, add them to `main.py` in the `plugins_app` typer:
+When adding plugin-related CLI commands, add them to `src/max_cli/core/cli/commands/plugins.py`:
 
 ```python
-plugins_app = typer.Typer(name="plugins", help="Manage plugins.")
-
 @plugins_app.command("command-name")
 def plugin_command(...):
     """Command help text."""
     ...
-
-app.add_typer(plugins_app, name="plugins")
 ```
 
 ### Plugin Discovery

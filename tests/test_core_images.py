@@ -1,6 +1,6 @@
 import pytest
 from PIL import Image
-from max_cli.core.image_processor import ImageEngine
+from max_cli.core.engines.image_processor import ImageEngine
 
 
 @pytest.fixture

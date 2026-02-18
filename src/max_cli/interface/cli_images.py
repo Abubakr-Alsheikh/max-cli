@@ -5,7 +5,7 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.table import Table
 from rich import box
 
-from max_cli.core.image_processor import ImageEngine
+from max_cli.core.engines.image_processor import ImageEngine
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.common.concurrent import process_batch_parallel
 from max_cli.config import settings

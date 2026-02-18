@@ -8,8 +8,8 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich import box
 
-from max_cli.core.network_engine import NetworkEngine
-from max_cli.core.queue_manager import get_queue_manager
+from max_cli.core.engines.network_engine import NetworkEngine
+from max_cli.core.engines.queue_manager import get_queue_manager
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
 

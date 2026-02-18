@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 from typing import Optional
 
-from max_cli.core.ai_engine import AIEngine
+from max_cli.core.engines.ai_engine import AIEngine
 from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()

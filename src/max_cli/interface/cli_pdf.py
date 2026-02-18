@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
-from max_cli.core.pdf_engine import PDFEngine
+from max_cli.core.engines.pdf_engine import PDFEngine
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import natural_sort_key, format_size
 

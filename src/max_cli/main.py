@@ -3,7 +3,7 @@ import sys
 import typer
 
 from max_cli.common.exceptions import MaxError
-from max_cli.core.registry import register, init_plugins
+from max_cli.core.cli.registry import register, init_plugins
 from max_cli.common.logger import console
 
 app = typer.Typer(
