@@ -97,41 +97,87 @@ def download_media(
         target_output.mkdir(parents=True, exist_ok=True)
 
     if url is None:
-        console.print("[cyan]Interactive Mode - Enter URL(s) to download[/cyan]")
         console.print(
-            "[dim]Enter empty line when done. Paste multiple URLs (one per line).[/dim]\n"
+            "[cyan]Interactive Mode - Enter URL to download (Ctrl+C or empty to exit)[/cyan]"
         )
-        urls = []
-        while True:
-            line = Prompt.ask("[bold]URL[/bold] (or Enter to finish)", default="")
-            if not line.strip():
-                break
-            urls.append(line.strip())
+        console.print(
+            "[dim]URL is added to queue. Downloads run in background while you add more.[/dim]\n"
+        )
 
-        if not urls:
-            console.print("[yellow]No URLs provided.[/yellow]")
-            raise typer.Exit()
+        import threading
+        import time
 
-        for u in urls:
-            # Clean URL to strip playlist info if configured
-            clean_u = _clean_url(
-                u, settings.GRAB_STRIP_PLAYLIST and not index and not no_playlist
-            )
-            _add_to_queue_or_download(
-                clean_u,
-                final_quality,
-                is_audio,
-                include_metadata,
-                index,
-                no_playlist,
-                target_output,
-                queue,
-            )
+        # Track if we should keep processing
+        processing = False  # Don't start yet
 
-        # Process queue after all URLs are added
-        if (settings.GRAB_QUEUE_ENABLED or queue) and not no_process:
-            console.print("[dim]Processing queue...[/dim]")
-            queue_manager.process_now()
+        def process_forever():
+            """Process queue items continuously."""
+            while processing:
+                try:
+                    queue_manager.process_now()
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+        # Start processing after first URL is added
+        process_thread = None
+
+        try:
+            while True:
+                # Start processing after first URL is added
+                if process_thread is None:
+                    processing = True
+                    process_thread = threading.Thread(target=process_forever)
+                    process_thread.start()
+
+                line = Prompt.ask("[bold]URL[/bold] (Enter to exit)", default="")
+                if not line.strip():
+                    break
+
+                # Clean URL to strip playlist info if configured
+                clean_u = _clean_url(
+                    line.strip(),
+                    settings.GRAB_STRIP_PLAYLIST and not index and not no_playlist,
+                )
+
+                # Add to queue - background processor will handle it
+                queue_manager.add(
+                    url=clean_u,
+                    quality=final_quality,
+                    audio_only=is_audio,
+                    output_path=target_output,
+                    include_metadata=include_metadata,
+                    playlist_items=index,
+                    no_playlist=no_playlist,
+                )
+                console.print("[green]+ Added[/green]")
+        except KeyboardInterrupt:
+            pass
+
+        # Wait for pending downloads to complete before exiting
+        stats = queue_manager.get_stats()
+        pending = stats["pending"] + stats["downloading"]
+        wait_count = 0
+        if pending > 0:
+            console.print(f"[dim]Waiting for {pending} download(s)...[/dim]")
+            while pending > 0 and wait_count < 30:
+                time.sleep(1)
+                stats = queue_manager.get_stats()
+                pending = stats["pending"] + stats["downloading"]
+                wait_count += 1
+
+        processing = False
+        if process_thread:
+            process_thread.join(timeout=2)
+
+        # Check final status
+        stats = queue_manager.get_stats()
+        if stats["completed"] > 0:
+            console.print(f"[green]Completed: {stats['completed']}[/green]")
+        if stats["failed"] > 0:
+            console.print(f"[red]Failed: {stats['failed']}[/red]")
+
+        raise typer.Exit()
     else:
         clean_url = _clean_url(
             url, settings.GRAB_STRIP_PLAYLIST and not index and not no_playlist

@@ -140,15 +140,12 @@ class QueueManager:
         no_playlist: bool = False,
     ) -> Optional[QueueItem]:
         """Add a new item to the queue. Returns None if already in queue."""
-        # Check if URL already exists in queue (prevent duplicates)
+        # Check if URL already exists in queue (prevent duplicates only if downloading)
         with self._lock:
             for existing in self._queue:
-                if existing.url == url and existing.status in (
-                    "pending",
-                    "downloading",
-                ):
+                if existing.url == url and existing.status == "downloading":
                     console.print(
-                        f"[yellow]URL already in queue (status: {existing.status})[/yellow]"
+                        f"[yellow]URL is currently downloading: {existing.status}[/yellow]"
                     )
                     return None
 
@@ -232,12 +229,10 @@ class QueueManager:
                 break
 
             item = pending[0]
-            console.print(f"[dim]Processing: {item.url}[/dim]")
             try:
                 self._download_item(item)
                 processed += 1
-            except Exception as e:
-                console.print(f"[red]Download failed: {e}[/red]")
+            except Exception:
                 break
 
         return processed
