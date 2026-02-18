@@ -16,6 +16,22 @@ Set configuration value.
 max config set <KEY> <VALUE>
 ```
 
+## grab
+
+Configure download preferences.
+
+```bash
+max config grab
+```
+
+Interactive wizard to set:
+- Default video/audio quality
+- Auto-strip playlist info
+- Embed metadata
+- Default type (video/audio)
+- Default download folder
+- Queue system enabled/disabled
+
 ## reset
 
 Reset configuration to defaults.

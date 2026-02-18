@@ -31,7 +31,9 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 |------|-------------|---------|
 | **Compress videos** | `max video compress` | `max video compress movie.mp4` |
 | **Convert video to audio** | `max video to-audio` | `max video to-audio podcast.mp4` |
-| **Download videos/music** | `max grab` | `max grab "youtube.com/..."` |
+| **Download videos/music** | `max grab download` | `max grab download youtube.com/...` |
+| **Check download queue** | `max grab queue` | `max grab queue` |
+| **Download history** | `max grab history` | `max grab history` |
 | **Merge PDFs** | `max pdf bundle` | `max pdf bundle contracts/` |
 | **Compress images** | `max img compress` | `max img compress photos/` |
 | **Resize images** | `max img resize` | `max img resize logo.png --width 800` |
@@ -208,19 +210,49 @@ Download from almost any website:
 
 ```bash
 # Download video (best quality)
-max grab "https://youtube.com/watch?v=..."
+max grab download "https://youtube.com/watch?v=..."
 
 # Download audio only (MP3)
-max grab "https://youtube.com/watch?v=..." -a
+max grab download "https://youtube.com/watch?v=..." -a
+
+# Force video download (override default)
+max grab download "https://youtube.com/watch?v=..." -v
 
 # Choose quality: s=480p, m=720p, h=1080p, x=4K
-max grab "..." -q h
+max grab download "..." -q h
 
-# Download a playlist
-max grab "https://youtube.com/playlist?list=..."
+# Interactive mode - add URLs and download in background
+max grab download
 
-# Download specific video from playlist
-max grab "..." -i 3
+# Download to specific folder
+max grab download "..." -o ./my-videos
+
+# Add to queue without processing (batch mode)
+max grab download "..." --no-process
+```
+
+#### Interactive Mode
+
+Run `max grab download` without a URL to enter interactive mode:
+
+```bash
+max grab download
+# Enter URL and press Enter - download starts in background
+# Enter another URL while the first is downloading
+# Press Enter with empty input to exit
+```
+
+#### Queue System
+
+```bash
+# Check download queue
+max grab queue
+
+# Show download history
+max grab history
+
+# Clear completed/failed downloads
+max grab clear
 ```
 
 #### Quality Presets Explained
@@ -238,8 +270,13 @@ max grab "..." -i 3
 # Set your defaults once
 max config grab
 
-# Now just run:
-max grab "url"  # Uses your saved preferences
+# Configure:
+# - Default quality (s/m/h/x)
+# - Auto-strip playlist info
+# - Embed metadata
+# - Default type (video/audio)
+# - Default download folder
+# - Enable/disable queue system
 ```
 
 ---
@@ -404,6 +441,9 @@ AI_MODEL=gpt-4o-mini
 DEFAULT_QUALITY=80
 GRAB_QUALITY=h
 GRAB_AUDIO_FORMAT=mp3
+GRAB_DEFAULT_PATH=~/Max Downloads
+GRAB_DEFAULT_TYPE=video
+GRAB_QUEUE_ENABLED=true
 ```
 
 ### Configuration Locations
