@@ -1,4 +1,20 @@
-from max_cli.plugins.base import CLIPlugin, EnginePlugin, Plugin
-from max_cli.plugins.manager import PluginManager
+from max_cli.plugins.base import (
+    CLIPlugin,
+    EnginePlugin,
+    Plugin,
+    PluginContext,
+    PluginMetadata,
+    PluginValidationError,
+)
+from max_cli.plugins.manager import LoadedPlugin, PluginManager
 
-__all__ = ["CLIPlugin", "EnginePlugin", "Plugin", "PluginManager"]
+__all__ = [
+    "CLIPlugin",
+    "EnginePlugin",
+    "Plugin",
+    "PluginContext",
+    "PluginMetadata",
+    "PluginValidationError",
+    "LoadedPlugin",
+    "PluginManager",
+]
