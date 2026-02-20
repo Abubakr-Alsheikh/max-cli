@@ -36,7 +36,7 @@ ocr = [
 ]
 
 [project.scripts]
-max = "max_cli.main:app"
+max = "max_cli.main:main"
 
 [tool.ruff]
 line-length = 88
