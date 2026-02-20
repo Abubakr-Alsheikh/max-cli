@@ -298,7 +298,8 @@ class QueueManager:
             try:
                 self._download_item(item)
                 processed += 1
-            except Exception:
+            except Exception as e:
+                console.print(f"[red]Error processing item: {e}[/red]")
                 break
 
         return processed

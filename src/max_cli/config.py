@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # New: Default path and type for downloads
     GRAB_DEFAULT_PATH: Path = Path.home() / "Max Downloads"
     GRAB_DEFAULT_TYPE: str = "video"  # "video" or "audio"
-    GRAB_QUEUE_ENABLED: bool = True
+    GRAB_QUEUE_ENABLED: bool = False
 
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]

@@ -85,6 +85,11 @@ def download_media(
     no_process: bool = typer.Option(
         False, "--no-process", help="Add to queue but don't process immediately."
     ),
+    progress: bool = typer.Option(
+        True,
+        "--progress/--no-progress",
+        help="Show download progress bar.",
+    ),
 ):
     """
     Download media using saved preferences or overrides.
@@ -208,10 +213,21 @@ def download_media(
             queue,
             subtitles,
             resolution,
+            progress,
         )
-        if (settings.GRAB_QUEUE_ENABLED or queue) and not no_process:
-            console.print("[dim]Processing queue...[/dim]")
-            queue_manager.process_now()
+        if queue:
+            import threading
+
+            console.print("[dim]Processing queue in background...[/dim]")
+
+            def process_background():
+                try:
+                    queue_manager.process_now()
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=process_background, daemon=True)
+            thread.start()
 
 
 def _add_to_queue_or_download(
@@ -225,9 +241,10 @@ def _add_to_queue_or_download(
     queue_enabled: bool,
     subtitles: bool = False,
     custom_height: Optional[int] = None,
+    show_progress: bool = True,
 ) -> None:
     """Add to queue or download immediately based on settings."""
-    if settings.GRAB_QUEUE_ENABLED or queue_enabled:
+    if queue_enabled:
         queue_manager.add(
             url=url,
             quality=quality,
@@ -239,6 +256,7 @@ def _add_to_queue_or_download(
             subtitles=subtitles,
             custom_height=custom_height,
         )
+        log_success("Added to queue.")
     else:
         q_info = engine.get_quality_info(quality, custom_height)
         _download_immediate(
@@ -252,6 +270,7 @@ def _add_to_queue_or_download(
             subtitles=subtitles,
             custom_height=custom_height,
             quality_label=str(q_info["label"]),
+            show_progress=show_progress,
         )
 
 
@@ -266,6 +285,7 @@ def _download_immediate(
     subtitles: bool = False,
     custom_height: Optional[int] = None,
     quality_label: str = "",
+    show_progress: bool = True,
 ) -> None:
     """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
@@ -289,7 +309,12 @@ def _download_immediate(
             except Exception:
                 pass
 
-    quality_display = quality_label if quality_label else quality.upper()
+    if audio_only:
+        q_info = engine.get_quality_info(quality, custom_height)
+        bitrate = q_info.get("bitrate", 192)
+        quality_display = f"{bitrate}kbps"
+    else:
+        quality_display = quality_label if quality_label else quality.upper()
     console.print(
         f"[cyan]Grabbing {'Audio' if audio_only else 'Video'} ({quality_display})...[/cyan]"
     )
@@ -297,6 +322,24 @@ def _download_immediate(
         console.print("[dim]Subtitles: Enabled[/dim]")
     if not include_metadata:
         console.print("[dim]Metadata disabled.[/dim]")
+
+    if not show_progress:
+        try:
+            engine.download_media(
+                url=url,
+                output_path=output_path,
+                quality=quality,
+                audio_only=audio_only,
+                include_metadata=include_metadata,
+                playlist_items=index,
+                no_playlist=no_playlist,
+                subtitles=subtitles,
+                custom_height=custom_height,
+            )
+            log_success("Download Finished.")
+        except Exception as e:
+            log_error(str(e))
+        return
 
     from rich.progress import (
         Progress,
@@ -359,7 +402,11 @@ def _download_immediate(
 
 
 @app.command("queue")
-def show_queue():
+def show_queue(
+    process: bool = typer.Option(
+        False, "--process", "-p", help="Process pending downloads."
+    ),
+):
     """Show the current download queue."""
     items = queue_manager.get_all()
     stats = queue_manager.get_stats()
@@ -369,6 +416,16 @@ def show_queue():
         f"  Pending: {stats['pending']} | Downloading: {stats['downloading']} | Completed: {stats['completed']} | Failed: {stats['failed']}\n"
     )
 
+    if process:
+        console.print("[dim]Processing queue...[/dim]")
+        queue_manager.process_now()
+        stats = queue_manager.get_stats()
+        if stats["completed"] > 0:
+            console.print(f"[green]Completed: {stats['completed']}[/green]")
+        if stats["failed"] > 0:
+            console.print(f"[red]Failed: {stats['failed']}[/red]")
+        return
+
     if not items:
         console.print("[dim]Queue is empty.[/dim]")
         return
@@ -376,7 +433,7 @@ def show_queue():
     table = Table(title="Download Queue", box=box.ROUNDED)
     table.add_column("ID", style="cyan", width=8)
     table.add_column("Status", width=12)
-    table.add_column("Title/URL", width=40)
+    table.add_column("URL", width=50)
     table.add_column("Progress", justify="right", width=10)
     table.add_column("Type", width=8)
 
@@ -388,14 +445,13 @@ def show_queue():
             "failed": "red",
         }.get(item.status, "white")
 
-        title = item.title if item.title else item.url
-        title = (title[:37] + "...") if len(title) > 40 else title
+        url = item.url
         progress = f"{item.progress:.0f}%" if item.status == "downloading" else "-"
 
         table.add_row(
             item.id,
             f"[{status_color}]{item.status}[/{status_color}]",
-            title,
+            url,
             progress,
             "Audio" if item.audio_only else "Video",
         )
@@ -473,7 +529,7 @@ def show_history(
     from max_cli.common.utils import format_size
 
     table = Table(title="Download History", box=box.ROUNDED)
-    table.add_column("Title", style="cyan", width=30)
+    table.add_column("URL/Title", style="cyan", width=50)
     table.add_column("Size", justify="right", width=10)
     table.add_column("Type", width=8)
     table.add_column("Quality", width=8)
@@ -481,7 +537,6 @@ def show_history(
 
     for item in history:
         title = item.title if item.title else item.url
-        title = (title[:27] + "...") if len(title) > 30 else title
         size = format_size(item.file_size) if item.file_size > 0 else "-"
 
         # Format date
