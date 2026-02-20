@@ -1,7 +1,16 @@
 import yt_dlp  # type: ignore[import-untyped]
 from pathlib import Path
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, Union
 import shutil
+
+
+QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
+    "ss": {"height": 360, "bitrate": 64, "label": "360p"},
+    "s": {"height": 480, "bitrate": 64, "label": "480p"},
+    "m": {"height": 720, "bitrate": 128, "label": "720p"},
+    "h": {"height": 1080, "bitrate": 192, "label": "1080p"},
+    "x": {"height": 2160, "bitrate": 320, "label": "4K"},
+}
 
 
 class NetworkEngine:
@@ -10,7 +19,6 @@ class NetworkEngine:
     """
 
     def __init__(self):
-        # Check for JS Runtimes that yt-dlp supports
         self.has_js = any(
             shutil.which(cmd) for cmd in ["node", "deno", "cjs", "quickjs"]
         )
@@ -20,6 +28,23 @@ class NetworkEngine:
         ydl_opts = {"quiet": True, "noplaylist": False, "extract_flat": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
+
+    def get_quality_info(
+        self, quality: str, custom_height: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Get quality information based on quality code or custom height."""
+        if custom_height:
+            return {
+                "height": custom_height,
+                "bitrate": max(32, custom_height // 10),
+                "label": f"{custom_height}p",
+            }
+
+        if quality.lower() == "ss":
+            return QUALITY_MAP["ss"]
+
+        q = quality.lower()[0]
+        return QUALITY_MAP.get(q, QUALITY_MAP["m"])
 
     def download_media(
         self,
@@ -31,6 +56,8 @@ class NetworkEngine:
         playlist_items: Optional[str] = None,
         no_playlist: bool = False,
         progress_hook: Optional[Callable] = None,
+        subtitles: bool = False,
+        custom_height: Optional[int] = None,
     ):
         if not self.has_js:
             from max_cli.common.logger import console
@@ -43,8 +70,10 @@ class NetworkEngine:
             )
 
         q = quality.lower()[0]
-        vid_height = {"s": "480", "m": "720", "h": "1080", "x": "2160"}.get(q, "720")
-        audio_bitrate = {"s": "64", "m": "128", "h": "192", "x": "320"}.get(q, "192")
+
+        quality_info = self.get_quality_info(quality, custom_height)
+        vid_height = quality_info["height"]
+        audio_bitrate = quality_info["bitrate"]
 
         ydl_opts = {
             "outtmpl": str(output_path / "%(title)s.%(ext)s"),
@@ -53,13 +82,17 @@ class NetworkEngine:
             "updatetime": False,
             "noplaylist": no_playlist,
             "playlist_items": playlist_items,
-            "writethumbnail": include_metadata,  # Skip thumb if meta is off
+            "writethumbnail": include_metadata,
         }
+
+        if subtitles:
+            ydl_opts["writesubtitles"] = True
+            ydl_opts["writeautomaticsub"] = True
+            ydl_opts["subtitleslangs"] = ["en", "all"]
 
         if progress_hook:
             ydl_opts["progress_hooks"] = [progress_hook]
 
-        # --- Format & Post-Processors ---
         post_processors = []
         if include_metadata:
             post_processors.append({"key": "FFmpegMetadata", "add_metadata": True})
@@ -83,7 +116,7 @@ class NetworkEngine:
             format_str = (
                 f"bestvideo[height<={vid_height}]+bestaudio/best[height<={vid_height}]"
             )
-            if q == "x":
+            if q == "x" or custom_height is not None:
                 format_str = "bestvideo+bestaudio/best"
 
             ydl_opts.update(

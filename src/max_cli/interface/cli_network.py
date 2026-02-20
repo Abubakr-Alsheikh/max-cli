@@ -50,10 +50,22 @@ def download_media(
         None,
         "--quality",
         "-q",
-        help=f"Quality: [s]mall, [m]edium, [h]igh, [x]best. (Default: {settings.GRAB_QUALITY})",
+        help="Quality: [ss] (360p), [s]mall (480p), [m]edium (720p), [h]igh (1080p), [x]best (4K).",
+    ),
+    resolution: Optional[int] = typer.Option(
+        None,
+        "--resolution",
+        "-r",
+        help="Custom resolution: 144, 240, 360, 480, 720, 1080, etc. Overrides quality.",
     ),
     video: bool = typer.Option(False, "--video", "-v", help="Force video download."),
     audio: bool = typer.Option(False, "--audio", "-a", help="Audio only."),
+    subtitles: bool = typer.Option(
+        False,
+        "--subtitles",
+        "-s",
+        help="Download subtitles/closed captions.",
+    ),
     index: Optional[str] = typer.Option(
         None, "--index", "-i", help="Playlist index (e.g. '1', '1-5')."
     ),
@@ -150,6 +162,8 @@ def download_media(
                     include_metadata=include_metadata,
                     playlist_items=index,
                     no_playlist=no_playlist,
+                    subtitles=subtitles,
+                    custom_height=resolution,
                 )
                 console.print("[green]+ Added[/green]")
         except KeyboardInterrupt:
@@ -192,6 +206,8 @@ def download_media(
             no_playlist,
             target_output,
             queue,
+            subtitles,
+            resolution,
         )
         if (settings.GRAB_QUEUE_ENABLED or queue) and not no_process:
             console.print("[dim]Processing queue...[/dim]")
@@ -207,6 +223,8 @@ def _add_to_queue_or_download(
     no_playlist: bool,
     output_path: Path,
     queue_enabled: bool,
+    subtitles: bool = False,
+    custom_height: Optional[int] = None,
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if settings.GRAB_QUEUE_ENABLED or queue_enabled:
@@ -218,10 +236,22 @@ def _add_to_queue_or_download(
             include_metadata=include_metadata,
             playlist_items=index,
             no_playlist=no_playlist,
+            subtitles=subtitles,
+            custom_height=custom_height,
         )
     else:
+        q_info = engine.get_quality_info(quality, custom_height)
         _download_immediate(
-            url, quality, audio_only, include_metadata, index, no_playlist, output_path
+            url,
+            quality,
+            audio_only,
+            include_metadata,
+            index,
+            no_playlist,
+            output_path,
+            subtitles=subtitles,
+            custom_height=custom_height,
+            quality_label=str(q_info["label"]),
         )
 
 
@@ -233,6 +263,9 @@ def _download_immediate(
     index: Optional[str],
     no_playlist: bool,
     output_path: Path,
+    subtitles: bool = False,
+    custom_height: Optional[int] = None,
+    quality_label: str = "",
 ) -> None:
     """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
@@ -256,9 +289,12 @@ def _download_immediate(
             except Exception:
                 pass
 
+    quality_display = quality_label if quality_label else quality.upper()
     console.print(
-        f"[cyan]Grabbing {'Audio' if audio_only else 'Video'} ({quality.upper()})...[/cyan]"
+        f"[cyan]Grabbing {'Audio' if audio_only else 'Video'} ({quality_display})...[/cyan]"
     )
+    if subtitles:
+        console.print("[dim]Subtitles: Enabled[/dim]")
     if not include_metadata:
         console.print("[dim]Metadata disabled.[/dim]")
 
@@ -314,6 +350,8 @@ def _download_immediate(
                 playlist_items=index,
                 no_playlist=no_playlist,
                 progress_hook=rich_hook,
+                subtitles=subtitles,
+                custom_height=custom_height,
             )
             log_success("Download Finished.")
         except Exception as e:

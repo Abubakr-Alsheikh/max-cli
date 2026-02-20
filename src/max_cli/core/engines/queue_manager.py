@@ -31,6 +31,8 @@ class QueueItem:
         include_metadata: bool = True,
         playlist_items: Optional[str] = None,
         no_playlist: bool = False,
+        subtitles: bool = False,
+        custom_height: Optional[int] = None,
     ):
         self.id = str(uuid4())[:8]
         self.url = url
@@ -40,6 +42,8 @@ class QueueItem:
         self.include_metadata = include_metadata
         self.playlist_items = playlist_items
         self.no_playlist = no_playlist
+        self.subtitles = subtitles
+        self.custom_height = custom_height
         self.status = "pending"  # pending, downloading, completed, failed
         self.title = ""
         self.progress = 0.0
@@ -63,6 +67,8 @@ class QueueItem:
             "include_metadata": self.include_metadata,
             "playlist_items": self.playlist_items,
             "no_playlist": self.no_playlist,
+            "subtitles": self.subtitles,
+            "custom_height": self.custom_height,
             "status": self.status,
             "title": self.title,
             "progress": self.progress,
@@ -86,6 +92,8 @@ class QueueItem:
             include_metadata=data.get("include_metadata", True),
             playlist_items=data.get("playlist_items"),
             no_playlist=data.get("no_playlist", False),
+            subtitles=data.get("subtitles", False),
+            custom_height=data.get("custom_height"),
         )
         item.id = data.get("id", item.id)
         item.status = data.get("status", "pending")
@@ -192,6 +200,8 @@ class QueueManager:
         include_metadata: bool = True,
         playlist_items: Optional[str] = None,
         no_playlist: bool = False,
+        subtitles: bool = False,
+        custom_height: Optional[int] = None,
     ) -> Optional[QueueItem]:
         """Add a new item to the queue. Returns None if already in queue."""
         # Check if URL already exists in queue (prevent duplicates only if downloading)
@@ -211,6 +221,8 @@ class QueueManager:
             include_metadata=include_metadata,
             playlist_items=playlist_items,
             no_playlist=no_playlist,
+            subtitles=subtitles,
+            custom_height=custom_height,
         )
         with self._lock:
             self._queue.append(item)
@@ -390,6 +402,8 @@ class QueueManager:
                 playlist_items=item.playlist_items,
                 no_playlist=item.no_playlist,
                 progress_hook=progress_hook,
+                subtitles=item.subtitles,
+                custom_height=item.custom_height,
             )
             item.status = "completed"
             item.completed_at = datetime.now().isoformat()
