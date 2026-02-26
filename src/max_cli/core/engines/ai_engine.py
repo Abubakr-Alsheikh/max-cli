@@ -282,7 +282,7 @@ If the request is unrelated to the tools or ambiguous, return:
         try:
             response = self.client.chat.completions.create(
                 model=self.current_model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
             )
             return response.choices[0].message.content
         except Exception as e:
