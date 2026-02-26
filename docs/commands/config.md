@@ -1,5 +1,28 @@
 # Config Commands
 
+## setup
+
+Interactive wizard to configure AI providers and models.
+
+```bash
+max config setup
+```
+
+This wizard will guide you through:
+
+- Choosing your AI provider (Google Gemini, OpenAI, Ollama, or custom)
+- Setting model preferences
+- For Ollama: selecting a local model (no API key needed)
+
+**Supported Providers:**
+
+| Provider | API Key | Notes |
+|----------|---------|-------|
+| Gemini | Required | Google's free tier available |
+| OpenAI | Required | Pay-as-you-go |
+| Ollama | Not needed | Run AI locally |
+| Custom | Required | Use your own API endpoint |
+
 ## show
 
 Show current configuration.

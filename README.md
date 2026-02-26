@@ -87,14 +87,33 @@ max config setup
 
 This wizard will guide you through:
 
-- Choosing your AI provider (Google Gemini, OpenAI, or custom)
-- Entering your API key
+- Choosing your AI provider (Google Gemini, OpenAI, Ollama, or custom)
+- Entering your API key (not needed for Ollama)
 - Setting preferences
 
-**Get a free API key:**
+**AI Provider Options:**
 
-- [Google AI Studio](https://aistudio.google.com/app/apikey) - Free tier available
-- [OpenAI](https://platform.openai.com/api-keys) - Pay-as-you-go
+| Provider | API Key Required | Best For |
+|----------|------------------|----------|
+| [Google Gemini](https://aistudio.google.com/app/apikey) | Yes | Free tier, vision support |
+| [OpenAI](https://platform.openai.com/api-keys) | Yes | GPT models, image generation |
+| **Ollama** | No | Local/private AI, no internet needed |
+
+**Using Ollama (Local AI):**
+
+If you want to run AI locally without an internet connection:
+
+1. Install [Ollama](https://ollama.com)
+2. Run `max config setup` and select "ollama"
+3. Choose your model (e.g., llama3, mistral, codellama)
+
+```bash
+# Example Ollama .env settings
+OLLAMA_ENABLED=true
+OLLAMA_MODEL=llama3
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_API_KEY=ollama
+```
 
 ### Step 5: Start Using Max
 

@@ -38,7 +38,7 @@ def setup_config():
 
     provider = Prompt.ask(
         "Select your AI Provider",
-        choices=["gemini", "openai", "custom"],
+        choices=["gemini", "openai", "ollama", "custom"],
         default="gemini",
     )
 
@@ -46,19 +46,28 @@ def setup_config():
         config_data["OPENAI_BASE_URL"] = (
             "https://generativelanguage.googleapis.com/v1beta/openai/"
         )
+        config_data["OLLAMA_ENABLED"] = "false"
         default_text_model = "gemini-1.5-flash"
         default_img_model = "gemini-2.5-flash-image"
     elif provider == "openai":
         config_data["OPENAI_BASE_URL"] = ""
+        config_data["OLLAMA_ENABLED"] = "false"
         default_text_model = "gpt-4o"
         default_img_model = "dall-e-3"
+    elif provider == "ollama":
+        config_data["OPENAI_BASE_URL"] = "http://localhost:11434/v1"
+        config_data["OLLAMA_ENABLED"] = "true"
+        config_data["OPENAI_API_KEY"] = "ollama"
+        default_text_model = Prompt.ask("Ollama Model", default="llama3")
+        config_data["OLLAMA_MODEL"] = default_text_model
+        default_img_model = default_text_model
     else:
         config_data["OPENAI_BASE_URL"] = Prompt.ask("Enter Custom Base URL")
+        config_data["OLLAMA_ENABLED"] = "false"
         default_text_model = "gpt-3.5-turbo"
         default_img_model = "dall-e-3"
-
-    api_key = Prompt.ask(f"Enter {provider.capitalize()} API Key", password=True)
-    config_data["OPENAI_API_KEY"] = api_key
+        api_key = Prompt.ask(f"Enter {provider.capitalize()} API Key", password=True)
+        config_data["OPENAI_API_KEY"] = api_key
 
     console.print("\n[bold]Model Configuration[/bold] (Press Enter to keep default)")
     config_data["AI_MODEL"] = Prompt.ask("Text/Logic Model", default=default_text_model)

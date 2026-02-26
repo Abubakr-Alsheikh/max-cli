@@ -51,6 +51,8 @@ def show_config():
     console.print(f"Image Model: [green]{settings.AI_IMAGE_MODEL}[/green]")
     if settings.OPENAI_BASE_URL:
         console.print(f"Base URL:    [dim]{settings.OPENAI_BASE_URL}[/dim]")
+    if settings.OLLAMA_ENABLED:
+        console.print(f"Ollama:      [green]Enabled ({settings.OLLAMA_MODEL})[/green]")
 
 
 @app.command("save")

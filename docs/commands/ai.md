@@ -1,5 +1,7 @@
 # AI Commands
 
+Max CLI supports multiple AI providers including local models via Ollama.
+
 ## chat
 
 Interactive chat mode with AI.

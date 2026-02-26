@@ -21,11 +21,17 @@ class Settings(BaseSettings):
     # AI Configuration
     # If using OpenAI, leave BASE_URL as None.
     # If using Gemini, set to: https://generativelanguage.googleapis.com/v1beta/openai/
+    # If using Ollama, set to: http://localhost:11434/v1
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
     # Models
     AI_MODEL: str = "gpt-5-nano"  # For 'ask', 'chat', 'analyze'
-    AI_IMAGE_MODEL: str = "gemini-2.5-flash-image"  # For 'create', 'edit'
+    AI_IMAGE_MODEL: str = "gpt-image-1"  # For 'create', 'edit'
+
+    # Ollama Configuration
+    OLLAMA_ENABLED: bool = False
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3"
 
     # --- GRAB (DOWNLOADER) DEFAULTS ---
     # These save your preferences

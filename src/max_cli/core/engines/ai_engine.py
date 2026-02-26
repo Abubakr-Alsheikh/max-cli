@@ -13,14 +13,29 @@ from max_cli.common.cache import get_default_cache
 class AIEngine:
     def __init__(self):
         self.client = None
-        if settings.OPENAI_API_KEY:
+        self.ollama_mode = False
+
+        if settings.OLLAMA_ENABLED:
+            self.ollama_mode = True
+            self.client = OpenAI(
+                api_key="ollama", base_url=f"{settings.OLLAMA_BASE_URL}/v1"
+            )
+        elif settings.OPENAI_API_KEY:
             self.client = OpenAI(
                 api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
             )
+
         self.history: List[Dict[str, str]] = []
         self._history_file = Path.home() / ".max_cli" / "chat_history.json"
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_history()
+
+    @property
+    def current_model(self) -> str:
+        """Get the current model based on provider mode."""
+        if self.ollama_mode:
+            return settings.OLLAMA_MODEL
+        return settings.AI_MODEL
 
     def _load_history(self) -> None:
         """Load conversation history from disk."""
@@ -74,7 +89,7 @@ Return as a JSON array of strings."""
 
         try:
             response = self.client.chat.completions.create(
-                model=settings.AI_MODEL,
+                model=self.current_model,
                 messages=[{"role": "user", "content": prompt}],
             )
             result = json.loads(response.choices[0].message.content)
@@ -136,6 +151,12 @@ Return as a JSON array of strings."""
     ) -> Dict[str, Any]:
         """Translates natural language to CLI commands with local context."""
         if not self.client:
+            if settings.OLLAMA_ENABLED:
+                raise MaxError(
+                    "Missing AI Configuration.\n"
+                    "Please set OLLAMA_ENABLED=true in your .env file.\n"
+                    "Or set OPENAI_API_KEY for cloud AI providers."
+                )
             raise MaxError(
                 "Missing AI Configuration.\n"
                 "Please set OPENAI_API_KEY in your .env file."
@@ -177,7 +198,7 @@ If the request is unrelated to the tools or ambiguous, return:
             messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
-                model=settings.AI_MODEL,
+                model=self.current_model,
                 messages=messages,
             )
 
@@ -216,7 +237,7 @@ If the request is unrelated to the tools or ambiguous, return:
 
         try:
             response = self.client.chat.completions.create(
-                model=settings.AI_MODEL,
+                model=self.current_model,
                 messages=[{"role": "user", "content": prompt}],
             )
             result = json.loads(response.choices[0].message.content)
@@ -260,8 +281,8 @@ If the request is unrelated to the tools or ambiguous, return:
         # 3. Call API
         try:
             response = self.client.chat.completions.create(
-                model=settings.AI_MODEL,
-                messages=messages,
+                model=self.current_model,
+                messages=[{"role": "user", "content": prompt}],
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -413,7 +434,7 @@ If the request is unrelated to the tools or ambiguous, return:
                     input_text = params.get("input", current_data)
                     if transform_prompt and input_text:
                         response = self.client.chat.completions.create(
-                            model=settings.AI_MODEL,
+                            model=self.current_model,
                             messages=[
                                 {
                                     "role": "user",
@@ -485,7 +506,7 @@ Content:
 Does this file match the query? Reply with YES or NO followed by a brief explanation."""
 
                 response = self.client.chat.completions.create(
-                    model=settings.AI_MODEL,
+                    model=self.current_model,
                     messages=[{"role": "user", "content": prompt}],
                 )
 
