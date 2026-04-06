@@ -260,6 +260,7 @@ Max CLI is structured as a tree of sub-applications (Typer `app` instances) regi
 
 - **`cli_images.py` (`max images`)**: Handles static visual media. (Commands: `compress`, `resize`, `convert`, `strip`).
 - **`cli_media.py` (`max video`)**: Handles time-based media via FFmpeg. (Commands: `compress`, `to-audio`, `cut`, `gif`, `concat`, `stream`, etc.).
+- **`cli_audio.py` (`max audio`)**: Handles audio metadata via Mutagen. (Commands: `get`, `set`, `clear`, `batch`).
 - **`cli_pdf.py` (`max pdf`)**: Handles document manipulation via PyMuPDF. (Commands: `merge`, `split`, `compress`, `ocr`, `stamp`, `lock`).
 - **`cli_files.py` (`max files`)**: Handles OS-level file operations. (Commands: `order`, `smart-sort`, `duplicates`, `shred`, `backup`).
 - **`cli_network.py` (`max grab`)**: Handles downloading and queueing via yt-dlp. (Commands: `download`, `queue`, `history`).

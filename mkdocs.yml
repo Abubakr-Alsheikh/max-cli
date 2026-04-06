@@ -49,8 +49,10 @@ nav:
   - Commands:
       - commands/index.md
       - commands/images.md
-      - commands/pdf.md
+      - commands/audio.md
       - commands/media.md
+      - commands/grab.md
+      - commands/pdf.md
       - commands/ai.md
       - commands/files.md
       - commands/config.md

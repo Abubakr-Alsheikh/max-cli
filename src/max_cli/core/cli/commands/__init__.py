@@ -1,6 +1,7 @@
 # Command registration modules
 from max_cli.core.cli.commands import (
     ai,
+    audio,
     config,
     files,
     media,
@@ -9,4 +10,13 @@ from max_cli.core.cli.commands import (
     tools,
 )
 
-__all__ = ["ai", "config", "files", "media", "network", "plugin_commands", "tools"]
+__all__ = [
+    "ai",
+    "audio",
+    "config",
+    "files",
+    "media",
+    "network",
+    "plugin_commands",
+    "tools",
+]
