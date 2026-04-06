@@ -1,448 +1,319 @@
-# AGENTS.md
+# Agents.md - Max CLI
 
-This file contains guidelines for agentic coding agents working on the max-cli repository.
+## 1. Project Identity & Archetype
 
-## Project Overview
+- **Name**: Max CLI
+- **Type**: High-Performance Modular CLI Framework
+- **Primary Language**: Python 3.9+
+- **Paradigm**: OOP / Modular Monolith (Strict Interface vs. Core separation)
+- **Runtime**: Native Python
+- **Key Frameworks**: Typer (CLI Layer), Rich (TUI/Formatting), Pillow/PyMuPDF/yt-dlp (Core Logic), Pydantic (Config)
 
-**max-cli** is a high-performance, modular CLI framework for developers and power users. It provides intelligent automation for media processing, document management, and file organization through a local-first, AI-assisted terminal interface.
+## 2. Essential Commands (File-Scoped)
 
-## Build & Development Commands
-
-### Installation
-
-```bash
-# Install development dependencies
-pip install -e .[dev]
-
-# Install with all dependencies
-pip install -e .
-```
-
-### Code Quality & Type Checking
+Use these commands for rapid, file-scoped feedback during development:
 
 ```bash
-# Run ruff linter (auto-formats and checks style)
-ruff check .
-ruff format .
+# Development
+pip install -e .[dev]          # Install in editable mode with dev dependencies
+python -m build                # Build package for distribution
 
-# Run pytest tests
-pytest tests/
+# Testing
+pytest                         # Run all tests
+pytest [path/to/test.py]       # Run specific test file
+pytest [path] -k [test_name]   # Run specific test function
 
-# Run single test file
-pytest tests/test_core_images.py
-
-# Run specific test function
-pytest tests/test_core_images.py::test_compress_image
+# Quality Assurance
+ruff check [path]              # Lint specific file/directory
+ruff check --fix [path]        # Auto-fix linting issues
+ruff format [path]             # Format specific file/directory
+mypy [path]                    # Type-check specific file/module
 ```
 
-### Package Management
+## 3. Project Architecture Map
 
-```bash
-# Build package
-python -m build
+Max CLI strictly separates business logic from the user interface using a Modular Monolith approach:
 
-# Install editable mode
-pip install -e .
+```text
+src/max_cli/
+├── core/                      # DOMAIN / BUSINESS LOGIC
+│   ├── engines/               # Sub-domain logic (image, pdf, ai, network)
+│   └── cli/                   # Command & Plugin registry
+├── interface/                 # ADAPTERS / CLI LAYER
+│   ├── cli_*.py               # Typer command definitions (No business logic)
+│   └── config/                # CLI config wizards
+├── common/                    # SHARED / INFRASTRUCTURE
+│   ├── cache.py               # Centralized caching
+│   ├── concurrent.py          # Parallel processing workers
+│   ├── exceptions.py          # Custom MaxError classes
+│   └── logger.py              # Rich TUI formatting
+├── plugins/                   # EXTENSIBILITY
+│   ├── base.py                # Plugin abstract base classes
+│   └── manager.py             # Discovery and lifecycle
+└── config.py                  # Global settings via Pydantic
+
+tests/                         # Pytest test suite
+PLANS/                         # Project Management (Active/Deferred tasks)
 ```
 
-## Code Style Guidelines
-
-### Python Standards
-
-- **Python Version**: >=3.9
-- **Line Length**: 88 characters (configured in pyproject.toml)
-- **Type Hints**: Required for all function signatures and class attributes
-- **Imports**: Standard library → third-party → local imports, sorted alphabetically
-
-### Import Organization Example
-
-```python
-import os
-import json
-import typer
-from pathlib import Path
-from typing import Optional, List, Dict
-
-from PIL import Image, ImageOps
-
-from max_cli.core.engines.image_processor import ImageEngine
-from max_cli.common.logger import console, log_success, log_error
-```
+## 4. Code Standards & Patterns
 
 ### Naming Conventions
 
-- **Classes**: PascalCase (e.g., `ImageEngine`, `SystemEngine`)
-- **Functions/Variables**: snake_case (e.g., `process_single_image`, `output_path`)
-- **Constants**: UPPER_SNAKE_CASE (e.g., `SUPPORTED_EXTENSIONS`, `DEFAULT_QUALITY`)
-- **Private methods**: Prefix with underscore (e.g., `_resolve_batch`, `_run_batch`)
-
-### Error Handling
-
-- Use custom exceptions from `max_cli.common.exceptions`:
-  - `MaxError` - Base class for expected errors
-  - `ResourceNotFoundError` - When files/folders are missing
-  - `ValidationError` - When input arguments are invalid
-
-```python
-try:
-    # Your code here
-except MaxError as e:
-    console.print(f"[bold red]✖ Error:[/bold red] {e}")
-    sys.exit(1)
-except Exception as e:
-    console.print("[bold red]💥 Critical Error (Unexpected)[/bold red]")
-    console.print(f"An error occurred: {e}")
-    sys.exit(1)
-```
-
-### Logging & Output
-
-- Use the rich console with custom theme from `max_cli.common.logger`
-- Success messages: `log_success("message")`
-- Error messages: `log_error("message")`
-- Direct console output: `console.print("[color]message[/color]")`
-
-### File Structure
-
-```
-src/max_cli/
-├── core/
-│   ├── engines/          # Business logic engines
-│   │   ├── ai_engine.py
-│   │   ├── file_organizer.py
-│   │   ├── image_processor.py
-│   │   ├── media_engine.py
-│   │   ├── network_engine.py
-│   │   ├── pdf_engine.py
-│   │   ├── queue_manager.py
-│   │   └── system_engine.py
-│   └── cli/              # CLI registration
-│       ├── commands/     # Command modules
-│       │   ├── ai.py
-│       │   ├── config.py
-│       │   ├── files.py
-│       │   ├── media.py
-│       │   ├── network.py
-│       │   ├── plugins.py
-│       │   └── tools.py
-│       ├── plugins.py     # Plugin lifecycle
-│       └── registry.py   # Command registration
-├── interface/            # Typer CLI command interfaces
-├── common/              # Shared utilities and exceptions
-└── __init__.py          # Package exports
-
-tests/                   # Test files
-```
-
-### Core Architecture Patterns
-
-#### Engine Pattern
-
-All core functionality follows the Engine pattern:
-
-```python
-class EngineName:
-    """Business logic for specific domain."""
-    
-    def __init__(self):
-        # Initialize resources
-        pass
-    
-    def method_name(self, param: Type) -> ReturnType:
-        """Docstring describing the method."""
-        pass
-```
-
-#### CLI Interface Pattern
-
-```python
-import typer
-from max_cli.core.engines.image_processor import ImageEngine
-from max_cli.common.logger import console, log_success, log_error
-
-app = typer.Typer()
-engine = ImageEngine()
-
-@app.command("command-name")
-def command_name(
-    target: Path = typer.Argument(Path("."), help="File or folder."),
-    quality: int = typer.Option(85, "-q", help="Quality (1-100)."),
-):
-    """Docstring describing the command."""
-    try:
-        # Command logic
-        log_success("Operation completed successfully")
-    except MaxError as e:
-        log_error(str(e))
-```
+- **Modules/Files**: `snake_case.py`
+- **Classes/Engines**: `PascalCase` (e.g., `ImageEngine`, `QueueManager`)
+- **Functions/Methods**: `snake_case` (Private methods prefixed with `_`)
+- **Constants**: `UPPER_SNAKE_CASE`
 
-#### Adding New Commands
+### Code Organization Principles
 
-To add a new command group, create a new file in `src/max_cli/core/cli/commands/`:
+- **Separation of Concerns**: `interface/` files parse CLI arguments and print output. `core/engines/` files perform the actual computation and return data.
+- **Dependency Direction**: Interface → Core → Common. Core engines must *never* import from `interface/`.
+- **Import Organization**: Standard library → third-party → local imports (alphabetically sorted).
 
-```python
-# src/max_cli/core/cli/commands/newgroup.py
-from typing import TYPE_CHECKING
+### Design Patterns to Follow
 
-if TYPE_CHECKING:
-    from typer import Typer
+- **Engine Pattern (Strategy)**: Domain logic is wrapped in stateless Engine classes (e.g., `AIEngine`, `MediaEngine`).
+- **Decorator Pattern**: Typer commands are defined using `@app.command()`.
+- **Plugin Architecture**: Optional dependencies should be handled via the Plugin system (`CLIPlugin`, `EnginePlugin`).
 
-from max_cli.interface import cli_newgroup
+## 5. Quality Gates & Workflow
 
+### Pre-Commit Requirements
 
-def register(app: "Typer") -> None:
-    """Register new group commands."""
-    app.add_typer(cli_newgroup.app, name="newgroup", help="Description of new group.")
-```
+- [ ] All tests pass (`pytest tests/`)
+- [ ] Type checking passes without ignoring third-party lack of stubs unnecessarily (`mypy src/`)
+- [ ] Code is formatted and linted cleanly (`ruff check . && ruff format .`)
+- [ ] `PLANS/active/` markdown files are updated if fulfilling a planned task.
 
-Then register it in `src/max_cli/core/cli/registry.py`:
+### Git & Task Standards
 
-```python
-from max_cli.core.cli import commands
+- If a task takes too long (e.g., fighting type checkers on 3rd-party libs), mark it `[D]` (Deferred) in the `PLANS/` system and move on.
+- Update `README.md` and `docs/` ONLY if user-facing behavior, CLI commands, or installation steps change.
 
-def register(app: "Typer") -> None:
-    commands.media.register(app)
-    commands.files.register(app)
-    # ... other commands
-    commands.newgroup.register(app)  # Add your new command
-```
+## 6. Boundaries & Permissions
 
-### Configuration
+### ✅ Always Do
 
-- Use `max_cli.config.Settings` for centralized configuration
-- Settings are loaded from `.env` file
-- Access settings via `settings.OPENAI_API_KEY`, `settings.DEFAULT_QUALITY`, etc.
+- Use existing utilities from `max_cli.common` (`@retry`, `process_batch_parallel`, `format_size`).
+- Use custom exceptions from `max_cli.common.exceptions` (`MaxError`, `ResourceNotFoundError`).
+- Use `console`, `log_success`, and `log_error` from `max_cli.common.logger` for user output in the `interface/` layer.
+- Add type hints to all function signatures.
 
-### Testing Guidelines
+### ⚠️ Ask First Before
 
-- Use pytest for all tests
-- Test files should be in `tests/` directory with `test_` prefix
-- Use fixtures for setup/teardown
-- Test both success and error cases
+- Adding new heavy third-party dependencies (e.g., ML libraries, large binaries).
+- Making breaking changes to existing CLI command signatures.
+- Modifying `pyproject.toml` dependencies or entry points.
 
-### Dependencies
+### 🚫 Never Do
 
-- **Core**: typer, rich, pillow, pymupdf, openai, requests
-- **Development**: pytest, ruff
-- **Optional**: ffmpeg (required for media operations)
+- Never expose raw stack traces to the user (wrap top-level calls in try/except).
+- Never use `print()` or `typer.echo()` inside `core/engines/` (Engines return values; Interfaces print them).
+- Never commit secrets, API keys, or `.env` files.
+- Never use `os.path` (strictly use `pathlib.Path`).
 
-### Performance Considerations
+## 7. Reference Implementations
 
-- Use `rich.progress.Progress` for long-running operations
-- Implement batch processing for multiple files
-- Use efficient image processing with Pillow
-- Add proper error handling to prevent crashes
+- **Good Example - Core/Interface Separation**:
+  - Interface: `src/max_cli/interface/cli_images.py`
+  - Core: `src/max_cli/core/engines/image_processor.py`
+  - *Shows: How CLI parses args and passes them to the Engine, which returns stats for the CLI to format into a Rich table.*
+  
+- **Utility Pattern**: `src/max_cli/common/concurrent.py`
+  - *Shows: Standardized ThreadPoolExecutor implementation used across the app.*
+  
+- **Plugin Pattern**: `examples/plugins/hello_world.py`
+  - *Shows: Correct plugin metadata definition, lifecycle hooks, and Typer command registration.*
 
-### Security Best Practices
+## 8. Escalation & Discovery
 
-- Never commit API keys or secrets
-- Validate all user inputs
-- Handle file operations safely with Path objects
-- Use try-except blocks for external API calls
+When uncertain about implementation:
 
-## Code Reuse
+1. **Check the Plans**: Read `PLANS/active/README.md` and related active tasks.
+2. **Review Plugin Docs**: Check `PLANS/docs/plugins.md` if extending functionality.
+3. **Check Base Utilities**: Search `src/max_cli/common/` for existing helpers before writing new ones (e.g., `Cache`, `retry`).
+4. **Propose before rewriting**: If an engine requires significant restructuring, outline the proposed Architecture changes before modifying files.
 
-**Always use existing utilities from `max_cli.common`:**
+## 9. Stack-Specific Notes
 
-- `@retry` decorator from `common/retry.py` - retry logic with exponential backoff
-- `console`, `log_success`, `log_error` from `common/logger.py` - consistent output
-- Custom exceptions from `common/exceptions.py` - proper error handling
-- `format_size`, `natural_sort_key` from `common/utils.py` - helper functions
-- `Cache` class from `common/cache.py` - caching functionality
-- `process_batch_parallel` from `common/concurrent.py` - parallel processing
+### Python & CLI Specifics
 
-This keeps code clean, consistent, and professional.
+- **GIL & Parallelism**: Max CLI utilizes multithreading (not asyncio) for I/O bound tasks via `ThreadPoolExecutor`. CPU-bound tasks rely on native C-extensions (like Pillow) releasing the GIL or subprocesses (like FFmpeg).
+- **Subprocess Handling**: External tools (like FFmpeg via `MediaEngine`) use `subprocess.run`. Always capture `stderr` and wrap failures in a `RuntimeError` or `MaxError`.
+- **Type Checking Limitations**: Many dependencies (Pillow, PyMuPDF, yt-dlp) lack strict type stubs. Use `# type: ignore` sparingly and only on specific lines where third-party types fail, rather than disabling checks globally.
 
-## Plugin System
+## 10. Zero-Tolerance "Anti-Slop" Rules
 
-The max-cli plugin system allows extending CLI functionality via plugins. See `PLANS/docs/plugins.md` for full documentation.
+To maintain Max CLI as a production-grade, enterprise-quality framework, all code contributions must be free of "slop" (lazy programming, messy hacks, and boilerplate).
 
-### Plugin Architecture
+### Strict Coding Constraints
 
-```
-src/max_cli/plugins/
-├── base.py       # Plugin base classes: Plugin, CLIPlugin, EnginePlugin
-├── manager.py   # PluginManager for discovery, loading, and lifecycle
-└── __init__.py # Exports
-```
+- **No Dead Code**: Never leave commented-out code, unused variables, or unused imports in your commits. If code is no longer needed, delete it.
+- **No Blanket Exceptions**: Never use `except Exception: pass`. Always catch specific exceptions (e.g., `FileNotFoundError`, `requests.exceptions.RequestException`). If a broad exception must be caught at the top level, it *must* be logged using `max_cli.common.logger.log_error`.
+- **No Magic Numbers or Strings**: Extract repeated raw strings or numbers into named constants (e.g., `DEFAULT_CHUNK_SIZE = 1024`).
+- **No Vague Naming**: Variables must describe their data. Use `output_file_path` instead of `out`, `page_count` instead of `count`, and `image_metadata` instead of `data`.
+- **No Duplicate Utilities**: Before writing a helper function (e.g., file size formatting, hashing, retries), verify it doesn't already exist in `src/max_cli/common/`.
+- **Enforce Type Checking**: Do not bypass the type checker with `# type: ignore` simply to save time. Only use it when a third-party library genuinely lacks stubs, and always add a brief comment explaining why it is necessary.
 
-### Plugin Types
+## 11. Context & Discovery Mandate (Read Before You Write)
 
-- **CLIPlugin**: Adds CLI commands
-- **EnginePlugin**: Adds business logic
+Agents are strictly forbidden from "guessing" implementations, file structures, or function signatures. You must possess the full context before writing or modifying code.
 
-### Key Classes
-
-```python
-# src/max_cli/plugins/base.py
-class Plugin(ABC):
-    @property
-    def name(self) -> str: ...
-    @property
-    def version(self) -> str: ...
-    @property
-    def description(self) -> str: ...
-    @property
-    def metadata(self) -> PluginMetadata: ...
-    @property
-    def priority(self) -> int: ...  # Lower = registered first
-
-    def validate(self) -> tuple[bool, Optional[str]]: ...
-    def on_load(self, context: PluginContext) -> None: ...
-    def on_unload(self) -> None: ...
-    @abstractmethod
-    def register(self, app: typer.Typer) -> None: ...
-    def unregister(self, app: typer.Typer) -> None: ...
-
-@dataclass
-class PluginContext:
-    app: typer.Typer
-    plugin_dir: Optional[Path]
-    config: dict[str, Any]
+### The "Look Before You Leap" Protocol
 
-# src/max_cli/plugins/manager.py
-class PluginManager:
-    def __init__(self, plugin_dirs: list[Path] | None = None, config_dir: Path | None = None): ...
-    def load_all(self, context: PluginContext) -> None: ...
-    def register_all(self, app: typer.Typer) -> None: ...
-    def enable_plugin(self, name: str) -> bool: ...
-    def disable_plugin(self, name: str) -> bool: ...
-    def get_plugin_info(self, name: str) -> dict | None: ...
-    def list_plugins(self, include_disabled: bool = False) -> list[str]: ...
-```
+1. **Request Missing Context**: If you are asked to modify a file or use a module but the content of that file has not been provided in the prompt context, you **must** request to read the file first (e.g., using a `read_file` tool or asking the user to paste it).
+2. **Verify Imports**: Before importing a class or function from another module within the project, verify its exact location and signature in the source code.
+3. **Analyze the Blast Radius**: If you are changing a Core Engine (e.g., `ImageEngine`), search the `interface/` directory to see how existing CLI commands use that engine to avoid breaking contracts.
+4. **Read the Plans**: Always check the `PLANS/` directory for active architectural decisions or deferred tasks related to your current objective to prevent redundant work.
 
-### Adding New Plugin Commands
+## 12. Executive Summary (TL;DR)
 
-When adding plugin-related CLI commands, add them to `src/max_cli/core/cli/commands/plugins.py`:
+Whenever you reset or start a new task, keep this core philosophy in mind:
 
-```python
-@plugins_app.command("command-name")
-def plugin_command(...):
-    """Command help text."""
-    ...
-```
+**What is Max CLI?**
+Max CLI is a "Lazy, Fast Terminal Assistant." It wraps complex, multi-step operations (like running FFmpeg to compress video, using PyMuPDF to merge PDFs, or hitting AI APIs) into simple, human-friendly terminal commands (e.g., `max video compress movie.mp4`).
 
-### Plugin Discovery
+**The Architectural Golden Rule:**
+The project is built on a **Strict Separation of Concerns**.
 
-Plugins are auto-discovered from:
-- `~/.max_cli/plugins/` (user plugins)
-- `./plugins/` (project plugins)
+- The User Interface (`src/max_cli/interface/`) handles exactly three things: parsing user inputs via Typer, calling the Core Engines, and printing pretty colors/progress bars via Rich.
+- The Core (`src/max_cli/core/`) handles the actual file manipulation, math, and API calls. Core engines know nothing about the terminal, colors, or Typer. They only take Python primitives/objects and return Python primitives/objects.
 
-Configuration saved to: `~/.max_cli/plugins.json`
+By enforcing this modular monolith pattern, utilizing existing shared common tools, and strictly avoiding sloppy coding habits, Max CLI remains robust, scalable, and beautifully clean.
 
-### Best Practices
+## 13. Testing Protocol & Mocks
 
-1. Use `CLIPlugin` for command extensions
-2. Implement all metadata properties (name, version, description, author)
-3. Add command aliases for convenience (`@app.command("cmd")`, `@app.command("c")`)
-4. Use lifecycle hooks (`on_load`, `on_unload`) for resource management
-5. Validate dependencies in `validate()` method
-6. Instantiate plugin class at module level: `plugin = MyPlugin()`
+Max CLI relies on external binaries (FFmpeg) and network calls (AI APIs, Downloads). Tests must run reliably in CI environments where these external dependencies might not exist.
 
-## Development Workflow
+### Testing Rules
 
-1. **Setup**: Install dependencies with `pip install -e .[dev]`
-2. **Code**: Follow the established patterns and style guidelines
-3. **Test**: Run `pytest tests/` to ensure all tests pass
-4. **Lint**: Run `ruff check .` and `ruff format .` for code quality
-5. **Commit**: Follow conventional commit messages if applicable
-
-## Common Patterns
-
-### Batch Processing
-
-```python
-def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
-    if target.is_file():
-        return [target], target.parent
-    files = [f for f in target.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS]
-    out_dir = target.parent / f"{target.name}_optimized"
-    out_dir.mkdir(exist_ok=True)
-    return files, out_dir
-```
-
-### Rich Table Output
-
-```python
-table = Table(title="Summary", box=box.ROUNDED)
-table.add_column("File", style="cyan")
-table.add_column("Original", justify="right")
-table.add_column("Final", justify="right", style="green")
-table.add_column("Saved", justify="right", style="bold yellow")
-for s in stats_list:
-    table.add_row(s["file_name"], s["original_size"], s["final_size"], f"{s['reduction_pct']}%")
-console.print(table)
-```
-
-### Progress Bars
-
-```python
-with Progress(
-    SpinnerColumn(),
-    TextColumn("[progress.description]{task.description}"),
-    BarColumn(),
-    transient=True,
-) as progress:
-    task = progress.add_task("Processing...", total=len(files))
-    for f in files:
-        # Process file
-        progress.advance(task)
-```
-
-## Before Starting
-
-Check for AI-specific instruction files in the project root (e.g., `CLAUDE.md`, `GEMINI.md`). If found, read them first and follow their instructions.
-
-### Time Management & Task Deferral
-
-If a task is taking too much time or effort (e.g., fighting with type checker configurations, fixing LSP errors from third-party libraries, etc.):
-
-1. **Do NOT** spend excessive time trying to perfect it
-2. **Mark the task** as deferred with `[D]`
-3. **Move to the next task** - don't get stuck
-
-The goal is continuous progress, not perfection. It's better to complete 10 tasks well than to spend hours on 1 difficult task.
-
-### Project Plans (PLANS Folder)
-
-This project uses the `PLANS/` folder instead of a single PLAN.md file:
-
-```
-PLANS/
-├── active/       # Current tasks to work on
-├── completed/    # Completed work summaries
-└── deferred/    # Deferred tasks with reasons
-```
-
-**Workflow:**
-
-1. Check `PLANS/active/` for current tasks
-2. Pick a task and implement it
-3. Run quality checks: `pytest tests/ && ruff check . && ruff format .`
-4. Update the plan file to mark complete
-5. Update README.md and docs if user-facing changes require it
-6. For deferred tasks: document why in `PLANS/deferred/`
-
-### When to Update Documentation
-
-**Update README.md:**
-- New CLI commands are added
-- New features that users need to know about
-- Breaking changes to existing commands
-- Installation requirement changes
-
-**Don't update for:**
-- Internal refactoring
-- Test coverage improvements
-- Type hint additions
-- CI/CD improvements
-- Code style changes
-
-**Task Status:**
-
-| Symbol | Meaning |
-|--------|---------|
-| `[ ]` | Pending |
-| `[~]` | In Progress |
-| `[x]` | Completed |
-| `[D]` | Deferred |
+- **No Real Network Calls**: Any test touching `NetworkEngine` or `AIEngine` **must** mock the external API using `unittest.mock.patch` or `responses`.
+- **No Real Binary Execution**: When testing `MediaEngine`, mock `subprocess.run` and `shutil.which` to simulate FFmpeg success/failure without requiring the actual binary.
+- **Use Provided Fixtures**: Always use the fixtures defined in `tests/conftest.py` (e.g., `temp_directory`, `dummy_image`, `dummy_pdf`, `mock_env_vars`) instead of creating ad-hoc test files.
+- **Test Core vs. Interface Independently**:
+  - Test Core Engines by directly instantiating the class and asserting the return values or file state.
+  - Test CLI Interfaces using `typer.testing.CliRunner` to assert stdout output and exit codes.
+
+## 14. Safe File Operations & Idempotency
+
+Because this CLI modifies user files (renaming, deleting, compressing), destructive operations must be handled with extreme care to prevent data loss.
+
+### File Handling Rules
+
+- **Idempotency**: CLI commands should be idempotent where possible. Running a command twice on the same file should not crash; it should either gracefully skip (like `files order`) or safely overwrite if the user intends it.
+- **Destructive Confirmations**: Any command that permanently deletes or fundamentally alters data (e.g., `files shred`, `files duplicates --delete`) must implement a confirmation prompt using `Rich.prompt.Confirm.ask()`, bypassed only by a explicit `--force` or `-f` flag.
+- **Atomic Operations**: When generating a new file (e.g., downloading or compressing), write to a temporary file first or ensure the process completes before replacing the original file. Do not leave half-written, corrupted files if the user hits `Ctrl+C`.
+- **Cross-Platform Paths**: Exclusively use `pathlib.Path`. Never use string concatenation for file paths (e.g., `dir + "/" + file`).
+
+## 15. Agent Communication & Workflow (Meta-Rules)
+
+When responding to the user or generating code in this project, adhere strictly to these communication standards:
+
+- **Concise Explanations**: Do not write long essays explaining standard Python concepts unless asked. Focus your explanation on *why* a specific architectural decision was made.
+- **Unified Diffs / Snippets over Full Files**: When modifying an existing file, do not regurgitate the entire 500-line file. Provide only the relevant modified functions or classes with enough surrounding context to apply the patch cleanly.
+- **Self-Correction Logging**: If you write code, run a test, and the test fails, do not silently ignore it. Acknowledge the failure, explain the root cause briefly, and provide the corrected implementation.
+- **Completion Check**: Before saying a task is "done", verify you have:
+  1. Written the logic.
+  2. Registered the command (if applicable).
+  3. Added Type Hints.
+  4. Written/Updated Tests.
+  5. Updated `PLANS/active/[task].md` (if applicable).
+
+## 16. Security & Subprocess Safety (CRITICAL)
+
+Because Max CLI takes user input, translates it via AI, and executes local system commands (like FFmpeg or file operations), security is paramount.
+
+- **No `shell=True`**: Never use `subprocess.run(..., shell=True)` under any circumstances. It introduces severe shell injection vulnerabilities. Always pass a list of arguments (e.g., `["ffmpeg", "-i", input]`).
+- **Input Sanitization**: If a user-provided string must be passed to a command line interface, use `shlex.split()` to safely parse it, or better yet, handle it entirely via Python's native `pathlib` and standard library.
+- **AI Output Validation**: When parsing JSON responses from the `AIEngine`, never trust the structure blindly. Always use `.get()` with safe defaults or wrap the parsing in a `try/except json.JSONDecodeError` block.
+
+## 17. Cross-Platform Compatibility (Windows vs. POSIX)
+
+Max CLI must work seamlessly on Linux, macOS, and Windows. AI agents often default to Linux-centric assumptions, which breaks Windows builds.
+
+- **Temporary Files**: Never hardcode paths like `/tmp/`. Always use Python’s built-in `tempfile` module or the dedicated `Path.home() / ".max_cli" / "cache"` directory.
+- **Executable Resolution**: Do not assume binaries are simply named `ffmpeg`. Always use `shutil.which("ffmpeg")` to resolve the path, as it handles `.exe` extensions on Windows automatically.
+- **Line Endings & Encoding**: When reading or writing text files, always explicitly specify `encoding="utf-8"`. Do not rely on the OS default encoding, which might be `cp1252` on Windows and will crash on emojis or special characters.
+
+## 18. API Rate Limiting, State, & Caching
+
+Max CLI interfaces with external APIs (OpenAI, Google Gemini). Hitting these APIs unnecessarily causes rate-limit errors and wastes user credits.
+
+- **Use the Built-in Cache**: If you are adding a feature that fetches static metadata, categorizes files, or performs an expensive operation, you MUST wrap it using the `@cached` decorator from `max_cli.common.cache` or explicitly use `get_default_cache()`.
+- **Background Queue Awareness**: For long-running network tasks (like `yt-dlp` downloads), never block the main thread. Ensure integration with `max_cli.core.engines.queue_manager.QueueManager` to allow background processing.
+
+## 19. The "Halt and Catch Fire" Rule (Anti-Looping)
+
+AI coding agents sometimes get stuck in a loop: writing code, running a test, failing, writing the exact same code, failing again, and wasting context tokens.
+
+- **The 2-Strike Rule**: If you attempt to fix a failing test or a type-check error twice and it still fails, **STOP**.
+- Do not attempt a third guess.
+- Instead, output a `[HALT]` message. Summarize exactly what is failing, state your hypotheses for why it's happening, and ask the human user how they would like to proceed.
+- **Graceful Degradation**: If a new feature requires an external dependency that is failing to resolve in the environment, write the code so that it degrades gracefully (e.g., catching `ImportError` and showing a friendly Typer warning) rather than crashing the whole CLI.
+
+## 20. CLI App Ecosystem & Routing Summary
+
+Max CLI is structured as a tree of sub-applications (Typer `app` instances) registered in `src/max_cli/interface/`. Agents must understand this ecosystem to place new commands in the correct domain.
+
+### The Core Apps (What they have and do)
+
+- **`cli_images.py` (`max images`)**: Handles static visual media. (Commands: `compress`, `resize`, `convert`, `strip`).
+- **`cli_media.py` (`max video`)**: Handles time-based media via FFmpeg. (Commands: `compress`, `to-audio`, `cut`, `gif`, `concat`, `stream`, etc.).
+- **`cli_pdf.py` (`max pdf`)**: Handles document manipulation via PyMuPDF. (Commands: `merge`, `split`, `compress`, `ocr`, `stamp`, `lock`).
+- **`cli_files.py` (`max files`)**: Handles OS-level file operations. (Commands: `order`, `smart-sort`, `duplicates`, `shred`, `backup`).
+- **`cli_network.py` (`max grab`)**: Handles downloading and queueing via yt-dlp. (Commands: `download`, `queue`, `history`).
+- **`cli_ai.py` (`max ai`)**: Handles LLM and Vision API interactions. (Commands: `ask`, `chat`, `analyze`, `create`, `search`).
+- **`cli_config.py` (`max config`)**: Handles environment variables, global state, and setup wizards.
+- **`cli_tools.py` (`max tools`)**: Lightweight system utilities (clipboard management, QR codes).
+
+### The Importance of Strict App Routing
+
+You must respect these boundaries. Never put an image-resizing command inside `cli_files.py`, and never put a text-translation command inside `cli_tools.py`.
+
+1. **The "Router" Principle**: Typer Apps are strictly **routers**. Their only job is to parse arguments, display Rich progress bars, catch `MaxError` exceptions, and pass validated data to the Core Engines. They must contain **zero business logic**.
+2. **The Plugin Migration Roadmap**: Max CLI is actively migrating heavy command groups (`ai`, `video`, `grab`, `pdf`) into optional, lazy-loaded plugins (see `PLANS/active/plugin_commands_migration.md`). If you leak business logic or heavy imports (like `import ffmpeg` or `from openai import OpenAI`) into the Interface Apps instead of keeping them hidden in the Core Engines, you will break the lazy-loading architecture and crash the CLI for users who haven't installed those optional dependencies.
+3. **User Experience (UX) Consistency**: The Typer Apps auto-generate the CLI's `--help` documentation. By placing commands in their correct Apps, the `--help` menu remains logical and discoverable for the end-user.
+
+## 21. Final Agent Directives (The "Max" Philosophy)
+
+As an AI coding on this repository, you are not just writing Python scripts; you are building a tool designed for humans who want to save time.
+
+- **Be Lazy for the User**: If a command takes 5 arguments, provide smart defaults for 4 of them.
+- **Be Fast for the User**: Use threading for batch jobs. Use caching for repeated AI calls.
+- **Be Beautiful for the User**: Never let a command succeed or fail silently. Always use `Rich` panels, spinners, and color-coded text to tell the user exactly what just happened.
+
+## 22. The Living Documentation Mandate (Continuous Updates)
+
+Max CLI relies on accurate documentation for both human users and future AI agents. **You are strictly responsible for keeping the documentation in sync with the code.**
+
+Never consider a task "complete" until the following documentation checks are resolved:
+
+### 1. Agent-to-Agent Memory (`AGENTS.md`)
+
+`AGENTS.md` is the collective memory of this project. If you make a systemic change, you MUST update this file so future agents know about it.
+
+- **Update it when:** You introduce a new architectural pattern, add a new Core Engine, implement a new core utility in `common/`, or change a strict coding rule.
+- **Do NOT update it when:** You fix a simple bug, add a standard command to an existing Engine, or refactor an isolated function.
+
+### 2. User-Facing Documentation (`README.md` & `docs/`)
+
+If a human user cannot find out how to use your new feature, the feature does not exist.
+
+- **Update it when:** You add a new Typer command, add a new CLI flag/argument, change default behaviors, or add new configuration variables to `.env.example`/`config.py`.
+- **Where to update:**
+  1. Add the command and its examples to the main `README.md`.
+  2. Update the specific markdown file in `docs/commands/` (e.g., if you add a PDF command, update `docs/commands/pdf.md`).
+  3. If you create an entirely new command group (e.g., `docs/commands/zip.md`), you MUST register that new file in the `nav` section of `mkdocs.yml`.
+
+### 3. The "Doc-Sync" Workflow
+
+When generating your final response for a completed feature:
+
+1. Write/modify the Python code.
+2. Write/modify the Pytest tests.
+3. Check if the change alters the user experience. If yes, update `README.md` and `docs/`.
+4. Check if the change alters the developer architecture. If yes, update `AGENTS.md`.
+5. Explicitly state in your final output: *"Documentation has been synchronized."*
+
+**[END OF AGENTS.MD]**
