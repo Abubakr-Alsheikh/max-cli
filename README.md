@@ -34,6 +34,7 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 | **Get audio metadata** | `max audio get` | `max audio get song.mp3` |
 | **Set audio metadata** | `max audio set` | `max audio set song.mp3 --artist "Artist" --album "Album"` |
 | **Batch organize audio** | `max audio batch` | `max audio batch "folder/*.mp3" --album "My Album" --artist "Band"` |
+| **Organize to folders** | `max audio organize` | `max audio organize "*.mp3" --pattern artist` |
 | **Download videos/music** | `max grab download` | `max grab download youtube.com/...` |
 | **Check download queue** | `max grab queue` | `max grab queue` |
 | **Download history** | `max grab history` | `max grab history` |

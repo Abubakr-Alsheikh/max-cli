@@ -184,3 +184,61 @@ def batch_set_metadata(
             console.print(f"[red]Failed on {target.name}: {e}[/red]")
 
     log_success(f"Updated {count} files successfully.")
+
+
+@app.command("organize")
+def organize_files(
+    targets: List[Path] = typer.Argument(
+        ..., help="Audio files to organize (supports glob patterns)."
+    ),
+    output: Path = typer.Option(
+        None, "-o", "--output", help="Target directory (default: same as source)."
+    ),
+    pattern: str = typer.Option(
+        "artist",
+        "--pattern",
+        "-p",
+        help="Folder structure: artist, album, genre, artist-album.",
+    ),
+):
+    """
+    Organize audio files into folders by metadata.
+
+    Default: Files are moved to folders named by artist.
+    Example patterns:
+      - artist:     Music/Artist Name/Song.mp3
+      - album:      Music/Album Name/Song.mp3
+      - genre:      Music/Rock/Song.mp3
+      - artist-album: Music/Artist Name/Album Name/Song.mp3
+    """
+    if not targets:
+        log_error("No files provided.")
+        return
+
+    valid_patterns = ["artist", "album", "genre", "artist-album"]
+    if pattern not in valid_patterns:
+        log_error(f"Invalid pattern. Use: {', '.join(valid_patterns)}")
+        return
+
+    target_dir = output if output else targets[0].parent
+
+    console.print(f"[cyan]Organizing {len(targets)} files into {target_dir}...[/cyan]")
+
+    with console.status("[bold green]Organizing files...[/bold green]"):
+        result = engine.organize(targets, target_dir, pattern)
+
+    if result["total_moved"]:
+        console.print(f"[green]Moved {result['total_moved']} files:[/green]")
+        for move in result["moved"][:5]:
+            console.print(f"  [dim]{move}[/dim]")
+        if len(result["moved"]) > 5:
+            console.print(f"  [dim]...and {len(result['moved']) - 5} more[/dim]")
+
+    if result["total_errors"]:
+        console.print(f"[red]Errors ({result['total_errors']}):[/red]")
+        for err in result["errors"][:5]:
+            console.print(f"  [red]{err}[/red]")
+
+    log_success(
+        f"Done! Moved: {result['total_moved']}, Errors: {result['total_errors']}"
+    )

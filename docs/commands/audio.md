@@ -85,6 +85,36 @@ max audio batch "folder/*.mp3" --album "My Album" --artist "John Doe"
 max audio batch "folder/*.mp3" --album "My Album" --start 1
 ```
 
+## organize
+
+Organize audio files into folders based on their metadata. This is the default behavior to help organize your music library.
+
+```bash
+max audio organize <files...> [OPTIONS]
+```
+
+**Options:**
+- `--output`, `-o` - Target directory (default: same as source)
+- `--pattern`, `-p` - Folder structure: `artist`, `album`, `genre`, `artist-album` (default: `artist`)
+
+**Patterns:**
+- `artist` - `Music/Artist Name/Song.mp3`
+- `album` - `Music/Album Name/Song.mp3`
+- `genre` - `Music/Rock/Song.mp3`
+- `artist-album` - `Music/Artist Name/Album Name/Song.mp3`
+
+**Example:**
+```bash
+# Organize all MP3s by artist (default)
+max audio organize "downloads/*.mp3"
+
+# Organize by album into a specific folder
+max audio organize "downloads/*.mp3" --output "Music Library" --pattern album
+
+# Organize by artist and album
+max audio organize "downloads/*.mp3" --pattern artist-album
+```
+
 ## Supported Formats
 
 - MP3

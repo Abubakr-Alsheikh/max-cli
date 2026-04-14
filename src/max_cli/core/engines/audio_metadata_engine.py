@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict, Optional, Any, List
-from mutagen import File as MutagenFile
+from mutagen._file import File as MutagenFile
 
 
 SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
@@ -222,3 +222,96 @@ class AudioMetadataEngine:
             title=title,
             artist=artist,
         )
+
+    def organize(
+        self,
+        source_paths: List[Path],
+        target_dir: Path,
+        pattern: str = "artist",
+    ) -> Dict[str, Any]:
+        """
+        Organize audio files into folders by metadata.
+
+        Args:
+            source_paths: List of audio files to organize
+            target_dir: Root directory to organize into
+            pattern: Folder structure - 'artist', 'album', 'artist-album', 'genre'
+
+        Returns:
+            Dict with 'moved', 'skipped', 'errors' counts and details
+        """
+        moved: List[str] = []
+        skipped: List[str] = []
+        errors: List[str] = []
+
+        for file_path in source_paths:
+            try:
+                if not file_path.exists():
+                    errors.append(f"{file_path.name}: File not found")
+                    continue
+
+                metadata = self.get_metadata(file_path)
+
+                artist = metadata.get("artist", "Unknown Artist")
+                album = metadata.get("album", "Unknown Album")
+                genre = metadata.get("genre", "Unknown Genre")
+                title = metadata.get("title", file_path.stem)
+                track = metadata.get("tracknumber", "")
+
+                artist = self._sanitize_filename(artist)
+                album = self._sanitize_filename(album)
+                genre = self._sanitize_filename(genre)
+                title = self._sanitize_filename(title)
+
+                if pattern == "artist":
+                    dest_dir = target_dir / artist
+                elif pattern == "album":
+                    dest_dir = target_dir / album
+                elif pattern == "genre":
+                    dest_dir = target_dir / genre
+                else:
+                    dest_dir = target_dir / artist / album
+
+                dest_dir.mkdir(parents=True, exist_ok=True)
+
+                if track:
+                    new_name = f"{track} - {title}{file_path.suffix}"
+                else:
+                    new_name = f"{title}{file_path.suffix}"
+
+                dest_path = dest_dir / new_name
+                counter = 1
+                while dest_path.exists():
+                    if track:
+                        new_name = f"{track} - {title} ({counter}){file_path.suffix}"
+                    else:
+                        new_name = f"{title} ({counter}){file_path.suffix}"
+                    dest_path = dest_dir / new_name
+                    counter += 1
+
+                file_path.rename(dest_path)
+                moved.append(f"{file_path.name} -> {dest_path}")
+
+            except Exception as e:
+                errors.append(f"{file_path.name}: {str(e)}")
+
+        return {
+            "moved": moved,
+            "skipped": skipped,
+            "errors": errors,
+            "total_moved": len(moved),
+            "total_skipped": len(skipped),
+            "total_errors": len(errors),
+        }
+
+    def _sanitize_filename(self, name: str) -> str:
+        """Remove invalid characters from folder/file names."""
+        if not name:
+            return "Unknown"
+
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            name = name.replace(char, "_")
+
+        name = name.strip()
+        return name if name else "Unknown"
