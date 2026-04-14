@@ -24,6 +24,7 @@ def _check_engine():
 
 
 @app.command("compress")
+@app.command("c", hidden=True)
 def compress_video(
     target: Path = typer.Argument(..., help="Video file to compress."),
     output: Optional[Path] = typer.Option(None, "-o", help="Output path."),
@@ -72,6 +73,7 @@ def compress_video(
 
 
 @app.command("convert")
+@app.command("cv", hidden=True)
 def convert_format(
     target: Path = typer.Argument(..., help="Input video file."),
     fmt: str = typer.Option(
@@ -95,6 +97,7 @@ def convert_format(
 
 
 @app.command("to-audio")
+@app.command("rip", hidden=True)
 def video_to_audio(
     target: Path = typer.Argument(..., help="Source video file."),
     format: str = typer.Option(

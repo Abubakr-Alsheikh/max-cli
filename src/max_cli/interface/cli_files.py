@@ -13,6 +13,7 @@ organizer = FileOrganizer()
 
 
 @app.command("order")
+@app.command("ord", hidden=True)
 def order_files(
     folder: Path = typer.Argument(..., help="The folder containing files to order."),
     dry_run: bool = typer.Option(
@@ -90,6 +91,7 @@ def order_files(
 
 
 @app.command("smart-sort")
+@app.command("ss", hidden=True)
 def smart_sort(
     path: Path = typer.Argument(".", help="Folder to organize."),
     dry_run: bool = typer.Option(
@@ -131,6 +133,7 @@ def smart_sort(
 
 
 @app.command("duplicates")
+@app.command("dup", hidden=True)
 def find_duplicates(
     folder: Path = typer.Argument(".", help="Folder to scan for duplicates."),
     recursive: bool = typer.Option(

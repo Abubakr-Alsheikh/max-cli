@@ -9,6 +9,7 @@ engine = SystemEngine()
 
 
 @app.command("share")
+@app.command("qr", hidden=True)
 def share_qr(
     data: str = typer.Argument(..., help="Text or URL to convert to QR Code."),
 ):

@@ -28,6 +28,7 @@ def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
 
 
 @app.command("compress")
+@app.command("c", hidden=True)
 def compress_images(
     target: Path = typer.Argument(Path("."), help="File or folder."),
     quality: int = typer.Option(
@@ -64,6 +65,7 @@ def compress_images(
 
 
 @app.command("resize")
+@app.command("r", hidden=True)
 def resize_images(
     target: Path = typer.Argument(Path("."), help="File or folder."),
     width: Optional[int] = typer.Option(None, "-w", help="Width in px."),
@@ -90,6 +92,7 @@ def resize_images(
 
 
 @app.command("convert")
+@app.command("cv", hidden=True)
 def convert_images(
     target: Path = typer.Argument(Path("."), help="File or folder."),
     to: str = typer.Option(..., help="Target format (webp, jpg, png)."),
@@ -103,6 +106,7 @@ def convert_images(
 
 
 @app.command("strip")
+@app.command("s", hidden=True)
 def strip_metadata(
     target: Path = typer.Argument(Path("."), help="File or folder."),
     workers: int = typer.Option(

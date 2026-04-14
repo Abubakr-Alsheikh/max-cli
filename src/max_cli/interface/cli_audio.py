@@ -11,6 +11,7 @@ engine = AudioMetadataEngine()
 
 
 @app.command("get")
+@app.command("g", hidden=True)
 def get_metadata(
     target: Path = typer.Argument(..., help="Audio file to read metadata from."),
 ):
@@ -34,6 +35,7 @@ def get_metadata(
 
 
 @app.command("set")
+@app.command("s", hidden=True)
 def set_metadata(
     target: Path = typer.Argument(..., help="Audio file to modify."),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="Song title."),
@@ -102,6 +104,7 @@ def set_metadata(
 
 
 @app.command("clear")
+@app.command("cl", hidden=True)
 def clear_metadata(
     target: Path = typer.Argument(..., help="Audio file to clear metadata from."),
     keep_duration: bool = typer.Option(
@@ -123,6 +126,7 @@ def clear_metadata(
 
 
 @app.command("batch")
+@app.command("b", hidden=True)
 def batch_set_metadata(
     targets: List[Path] = typer.Argument(
         ..., help="Audio files to update (supports glob patterns)."
@@ -187,6 +191,7 @@ def batch_set_metadata(
 
 
 @app.command("organize")
+@app.command("org", hidden=True)
 def organize_files(
     targets: List[Path] = typer.Argument(
         ..., help="Audio files to organize (supports glob patterns)."

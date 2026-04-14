@@ -20,6 +20,7 @@ MAIN_APP_REF: Optional[typer.Typer] = None
 
 
 @app.command("ask")
+@app.command("a", hidden=True)
 def ask_ai(
     prompt: str = typer.Argument(..., help="What do you want to do?"),
     explain: bool = typer.Option(
@@ -92,6 +93,7 @@ def ask_ai(
 
 
 @app.command("analyze")
+@app.command("ana", hidden=True)
 def analyze_image(
     target: Path = typer.Argument(..., help="Path to the image."),
     prompt: str = typer.Option(
@@ -132,6 +134,7 @@ def analyze_image(
 
 
 @app.command("create")
+@app.command("c", hidden=True)
 def create_image(
     prompt: str = typer.Argument(..., help="Description of the image to create."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Save path."),
@@ -197,6 +200,7 @@ def _handle_image_result(url: str, output_path: Optional[Path], default_name: st
 
 
 @app.command("chat")
+@app.command("ch", hidden=True)
 def chat_session(
     clear: bool = typer.Option(False, "--clear", help="Clear conversation history."),
     export: Optional[Path] = typer.Option(
@@ -291,6 +295,7 @@ def chat_session(
 
 
 @app.command("search")
+@app.command("s", hidden=True)
 def semantic_search_cmd(
     query: str = typer.Argument(..., help="Search query in natural language."),
     path: Path = typer.Argument(".", help="Folder to search in."),

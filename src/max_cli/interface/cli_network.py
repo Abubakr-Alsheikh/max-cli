@@ -44,6 +44,7 @@ def _clean_url(url: str, strip_playlist: bool) -> str:
 
 
 @app.command("download")
+@app.command("do", hidden=True)
 def download_media(
     url: Optional[str] = typer.Argument(None, help="URL to download."),
     quality: Optional[str] = typer.Option(

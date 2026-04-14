@@ -13,6 +13,7 @@ engine = PDFEngine()
 
 
 @app.command("merge")
+@app.command("m", hidden=True)
 def merge_pdfs(
     inputs: Optional[List[Path]] = typer.Argument(
         None, help="List of files OR a single folder."
@@ -50,6 +51,7 @@ def merge_pdfs(
 
 
 @app.command("compress")
+@app.command("c", hidden=True)
 def compress_pdf(
     target: Path = typer.Argument(..., help="PDF file OR Folder to compress."),
     dpi: int = typer.Option(
@@ -140,6 +142,7 @@ def compress_pdf(
 
 
 @app.command("bundle")
+@app.command("b", hidden=True)
 def bundle_pdfs(
     inputs: Optional[List[Path]] = typer.Argument(
         None, help="Files or Folder to bundle."
@@ -281,6 +284,7 @@ def _resolve_files(inputs: List[Path]) -> List[Path]:
 
 
 @app.command("split")
+@app.command("sp", hidden=True)
 def split_pdf(
     target: Path = typer.Argument(..., help="PDF file to split."),
     start: int = typer.Option(
@@ -385,6 +389,7 @@ def split_pdf(
 
 
 @app.command("stamp")
+@app.command("st", hidden=True)
 def stamp_pdf(
     target: Path = typer.Argument(..., help="PDF to watermark."),
     text: str = typer.Argument("DRAFT", help="Text to overlay."),
@@ -402,6 +407,7 @@ def stamp_pdf(
 
 
 @app.command("lock")
+@app.command("l", hidden=True)
 def lock_pdf(
     target: Path = typer.Argument(..., help="PDF to encrypt."),
     password: str = typer.Option(
@@ -444,6 +450,7 @@ def rip_content(
 
 
 @app.command("ocr")
+@app.command("o", hidden=True)
 def ocr_pdf(
     target: Path = typer.Argument(..., help="PDF file to OCR."),
     lang: str = typer.Option(
