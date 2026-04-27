@@ -167,11 +167,18 @@ class MediaEngine:
         elif duration:
             cmd.extend(["-t", duration])
 
-        # We re-encode to ensure the cut is frame-perfect.
-        # Using "copy" (-c copy) is faster but can result in black frames at the start.
-        cmd.extend(
-            ["-c:v", "libx264", "-c:a", "aac", "-loglevel", "error", str(output_path)]
-        )
+        audio_extensions = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
+        is_audio = input_path.suffix.lower() in audio_extensions
+
+        if is_audio:
+            output_path = output_path.with_suffix(".mp3")
+            cmd.extend(
+                ["-c:a", "libmp3lame", "-loglevel", "error", str(output_path)]
+            )
+        else:
+            cmd.extend(
+                ["-c:v", "libx264", "-c:a", "aac", "-loglevel", "error", str(output_path)]
+            )
 
         self._run(cmd)
 

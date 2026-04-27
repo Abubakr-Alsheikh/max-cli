@@ -187,14 +187,21 @@ def cut_video(
     Trim a video file. Provide --end OR --duration.
     """
     _check_engine()
+    audio_extensions = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
+    is_audio = target.suffix.lower() in audio_extensions
+
     if not output:
-        output = target.parent / f"{target.stem}_cut.mp4"
+        output = (
+            target.parent / f"{target.stem}_cut.mp3"
+            if is_audio
+            else target.parent / f"{target.stem}_cut.mp4"
+        )
 
     if not end and not duration:
         log_error("You must provide either --end or --duration.")
         raise typer.Exit(1)
 
-    console.print(f"[cyan]Cutting video from {start}...[/cyan]")
+    console.print(f"[cyan]Cutting {'audio' if is_audio else 'video'} from {start}...[/cyan]")
     with console.status("[bold green]Processing cut...[/bold green]"):
         try:
             engine.trim_video(target, output, start, end, duration)
