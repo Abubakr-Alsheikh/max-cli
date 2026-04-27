@@ -184,7 +184,7 @@ def cut_video(
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
 ):
     """
-    Trim a video file. Provide --end OR --duration.
+    Trim a video file. Provide --end OR --duration, or neither to cut to end of file.
     """
     _check_engine()
     audio_extensions = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
@@ -196,10 +196,6 @@ def cut_video(
             if is_audio
             else target.parent / f"{target.stem}_cut.mp4"
         )
-
-    if not end and not duration:
-        log_error("You must provide either --end or --duration.")
-        raise typer.Exit(1)
 
     console.print(f"[cyan]Cutting {'audio' if is_audio else 'video'} from {start}...[/cyan]")
     with console.status("[bold green]Processing cut...[/bold green]"):
