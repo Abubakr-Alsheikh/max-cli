@@ -1,6 +1,31 @@
-# Audio Metadata Commands
+# Audio Commands
 
-Manage audio file metadata (title, artist, album, genre, etc.) using the `max audio` command group.
+Manage audio files: read/write metadata, compress large recordings, and organize your music library using the `max audio` command group.
+
+## compress
+
+Compress an audio file by re-encoding to a lower bitrate. Perfect for shrinking oversized recordings (e.g., a 4-minute WAV at 80MB → ~3MB MP3).
+
+```bash
+max audio compress <file> [OPTIONS]
+```
+
+**Options:**
+- `--output`, `-o` - Output audio file path (default: `{stem}_compressed.mp3`)
+- `--quality`, `-q` - Quality preset: `s` (64k), `m` (96k), `h` (128k), `x` (192k) (default: `h`)
+- `--mono`, `-m` - Convert to mono for maximum compression
+
+**Examples:**
+```bash
+# Default compression (128k MP3)
+max audio compress recording.wav
+
+# Maximum compression (64k mono MP3)
+max audio compress recording.wav -q s --mono
+
+# Custom output file
+max audio compress recording.wav -o recording_compressed.mp3 -q m
+```
 
 ## get
 

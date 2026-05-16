@@ -583,6 +583,59 @@ class MediaEngine:
         ]
         self._run(cmd)
 
+    def compress_audio(
+        self,
+        input_path: Path,
+        output_path: Path,
+        bitrate: str = "128k",
+        sample_rate: Optional[int] = None,
+        channels: Optional[int] = None,
+    ) -> None:
+        """
+        Compress audio by re-encoding to a lower bitrate.
+
+        Args:
+            input_path: Input audio file
+            output_path: Output audio file path (extension determines codec)
+            bitrate: Target audio bitrate (e.g., 128k, 96k, 64k, 32k)
+            sample_rate: Target sample rate in Hz (e.g., 44100, 22050, 16000)
+            channels: Number of audio channels (1=mono, 2=stereo)
+        """
+        codec_map = {
+            ".mp3": "libmp3lame",
+            ".aac": "aac",
+            ".m4a": "aac",
+            ".ogg": "libvorbis",
+            ".wav": "pcm_s16le",
+            ".flac": "flac",
+        }
+
+        ext = output_path.suffix.lower()
+        codec = codec_map.get(ext, "libmp3lame")
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-vn",
+            "-acodec",
+            codec,
+        ]
+
+        if codec in ["libmp3lame", "aac", "libvorbis"]:
+            cmd.extend(["-b:a", bitrate])
+
+        if sample_rate is not None:
+            cmd.extend(["-ar", str(sample_rate)])
+
+        if channels is not None:
+            cmd.extend(["-ac", str(channels)])
+
+        cmd.extend(["-loglevel", "error", str(output_path)])
+
+        self._run(cmd)
+
     def convert_audio(
         self,
         input_path: Path,

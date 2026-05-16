@@ -4,10 +4,90 @@ from typing import Optional, List
 from rich.table import Table
 
 from max_cli.core.engines.audio_metadata_engine import AudioMetadataEngine
+from max_cli.core.engines.media_engine import MediaEngine
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.common.utils import format_size
 
 app = typer.Typer()
 engine = AudioMetadataEngine()
+
+_media_engine: Optional[MediaEngine] = None
+try:
+    _media_engine = MediaEngine()
+except RuntimeError:
+    pass
+
+
+def _check_engine():
+    if not _media_engine:
+        log_error(
+            "FFmpeg is not installed. Please install it to use audio compression."
+        )
+        log_error("Try: 'brew install ffmpeg' or 'sudo apt install ffmpeg'")
+        raise typer.Exit(1)
+
+
+@app.command("compress")
+@app.command("c", hidden=True)
+def compress_audio(
+    target: Path = typer.Argument(..., help="Audio file to compress."),
+    output: Optional[Path] = typer.Option(
+        None, "-o", "--output", help="Output audio file path."
+    ),
+    quality: str = typer.Option(
+        "h",
+        "--quality",
+        "-q",
+        help="Quality: [s]mall (64k), [m]edium (96k), [h]igh (128k), [x]treme (192k).",
+    ),
+    mono: bool = typer.Option(
+        False, "--mono", "-m", help="Convert to mono for maximum compression."
+    ),
+):
+    """
+    Compress an audio file by re-encoding to a lower bitrate.
+
+    Great for shrinking large recordings (e.g., 80MB -> ~3MB for a 4-min file).
+    Defaults to high-quality MP3 (128k) with stereo.
+    Use --quality s and --mono for maximum space savings.
+    """
+    _check_engine()
+    assert _media_engine is not None
+
+    if not target.exists():
+        log_error(f"File not found: {target}")
+        raise typer.Exit(1)
+
+    bitrate_map = {"s": "64k", "m": "96k", "h": "128k", "x": "192k"}
+    bitrate = bitrate_map.get(quality.lower()[0], "128k")
+
+    if not output:
+        output = target.parent / f"{target.stem}_compressed.mp3"
+
+    console.print(
+        f"[cyan]Compressing audio ({bitrate}, {'mono' if mono else 'stereo'})...[/cyan]"
+    )
+
+    with console.status("[bold green]Encoding audio...[/bold green]"):
+        try:
+            _media_engine.compress_audio(
+                target,
+                output,
+                bitrate=bitrate,
+                channels=1 if mono else None,
+            )
+
+            orig_size = target.stat().st_size
+            new_size = output.stat().st_size
+            reduction = ((orig_size - new_size) / orig_size) * 100
+
+            log_success(f"Audio compressed: {output}")
+            console.print(
+                f"Size: {format_size(orig_size)} -> [bold green]{format_size(new_size)}[/bold green] (-{reduction:.1f}%)"
+            )
+
+        except Exception as e:
+            log_error(f"Compression failed: {e}")
 
 
 @app.command("get")

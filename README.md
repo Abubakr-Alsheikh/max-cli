@@ -31,6 +31,7 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 |------|-------------|---------|
 | **Compress videos** | `max video compress` | `max video compress movie.mp4` |
 | **Convert video to audio** | `max video to-audio` | `max video to-audio podcast.mp4` |
+| **Compress audio** | `max audio compress` | `max audio compress recording.wav` |
 | **Get audio metadata** | `max audio get` | `max audio get song.mp3` |
 | **Set audio metadata** | `max audio set` | `max audio set song.mp3 --artist "Artist" --album "Album"` |
 | **Batch organize audio** | `max audio batch` | `max audio batch "folder/*.mp3" --album "My Album" --artist "Band"` |
