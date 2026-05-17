@@ -1,3 +1,4 @@
+import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -325,21 +326,31 @@ def _download_immediate(
         console.print("[dim]Metadata disabled.[/dim]")
 
     if not show_progress:
-        try:
-            engine.download_media(
-                url=url,
-                output_path=output_path,
-                quality=quality,
-                audio_only=audio_only,
-                include_metadata=include_metadata,
-                playlist_items=index,
-                no_playlist=no_playlist,
-                subtitles=subtitles,
-                custom_height=custom_height,
-            )
-            log_success("Download Finished.")
-        except Exception as e:
-            log_error(str(e))
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                engine.download_media(
+                    url=url,
+                    output_path=output_path,
+                    quality=quality,
+                    audio_only=audio_only,
+                    include_metadata=include_metadata,
+                    playlist_items=index,
+                    no_playlist=no_playlist,
+                    subtitles=subtitles,
+                    custom_height=custom_height,
+                )
+                log_success("Download Finished.")
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    wait = 5 * (attempt + 1)
+                    console.print(
+                        f"[yellow]Download failed (attempt {attempt + 1}/3). Retrying in {wait}s...[/yellow]"
+                    )
+                    time.sleep(wait)
+        log_error(str(last_error))
         return
 
     from rich.progress import (
@@ -384,22 +395,36 @@ def _download_immediate(
             progress.update(task_id, filename="Processing...")
 
     with progress:
-        try:
-            engine.download_media(
-                url=url,
-                output_path=output_path,
-                quality=quality,
-                audio_only=audio_only,
-                include_metadata=include_metadata,
-                playlist_items=index,
-                no_playlist=no_playlist,
-                progress_hook=rich_hook,
-                subtitles=subtitles,
-                custom_height=custom_height,
-            )
-            log_success("Download Finished.")
-        except Exception as e:
-            log_error(str(e))
+        retry_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                progress.update(task_id, filename="Fetching info...", start=False)
+                engine.download_media(
+                    url=url,
+                    output_path=output_path,
+                    quality=quality,
+                    audio_only=audio_only,
+                    include_metadata=include_metadata,
+                    playlist_items=index,
+                    no_playlist=no_playlist,
+                    progress_hook=rich_hook,
+                    subtitles=subtitles,
+                    custom_height=custom_height,
+                )
+                log_success("Download Finished.")
+                break
+            except Exception as e:
+                retry_error = e
+                if attempt < 2:
+                    wait = 5 * (attempt + 1)
+                    progress.update(
+                        task_id,
+                        filename=f"Failed, retrying in {wait}s...",
+                        start=True,
+                    )
+                    time.sleep(wait)
+        else:
+            log_error(str(retry_error))
 
 
 @app.command("queue")

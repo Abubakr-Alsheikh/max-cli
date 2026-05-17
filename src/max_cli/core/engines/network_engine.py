@@ -83,6 +83,11 @@ class NetworkEngine:
             "noplaylist": no_playlist,
             "playlist_items": playlist_items,
             "writethumbnail": include_metadata,
+            "socket_timeout": 60,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 5,
+            "extractor_retries": 5,
         }
 
         if subtitles:
