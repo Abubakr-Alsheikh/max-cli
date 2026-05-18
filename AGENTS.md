@@ -148,6 +148,7 @@ def compress_images(...):
 - Use existing utilities from `max_cli.common` (`@retry`, `process_batch_parallel`, `format_size`).
 - Use custom exceptions from `max_cli.common.exceptions` (`MaxError`, `ResourceNotFoundError`).
 - Use `console`, `log_success`, and `log_error` from `max_cli.common.logger` for user output in the `interface/` layer.
+- Use the event system (`EventEmitter` from `max_cli.common.events`, `EventSubscriber` from `max_cli.interface.event_subscriber`) for progress tracking — never pass Rich UI objects into core/common functions.
 - Add type hints to all function signatures.
 
 ### ⚠️ Ask First Before
@@ -183,6 +184,13 @@ def compress_images(...):
   - Engine: `src/max_cli/core/engines/image_processor.py` (PIL imported inside methods)
   - Interface: `src/max_cli/interface/cli_images.py` (uses `_get_engine()` helper)
   - *Shows: Heavy imports deferred until first use, keeping startup under 200ms.*
+
+- **Event-Driven Progress Pattern**:
+  - Events: `src/max_cli/common/events.py` (EventEmitter, event models)
+  - Subscriber: `src/max_cli/interface/event_subscriber.py` (Rich UI updates)
+  - Batch: `src/max_cli/common/concurrent.py` (emits events, zero Rich imports)
+  - Interface: `src/max_cli/interface/cli_images.py` (uses EventSubscriber)
+  - *Shows: Core emits pure events, interface translates to Rich progress bars. Core stays 100% UI-agnostic.*
 
 ## 8. Escalation & Discovery
 

@@ -2,10 +2,11 @@ import typer
 import os
 from pathlib import Path
 from typing import List, Optional
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import natural_sort_key, format_size
+from max_cli.common.events import get_emitter
+from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer()
 
@@ -96,40 +97,29 @@ def compress_pdf(
     success_count = 0
     total_saved = 0
 
-    # Using Rich Progress Bar for better UX
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        transient=True,
-    ) as progress:
-        task = progress.add_task("Compressing...", total=len(targets))
+    emitter = get_emitter()
+    subscriber = EventSubscriber(emitter)
+    subscriber.subscribe()
 
+    with subscriber.create_progress_context(len(targets), "Compressing PDFs..."):
         for pdf in targets:
-            progress.update(task, description=f"Compressing {pdf.name}...")
-
             if target.is_dir():
-                # Folder mode: save to ./compressed/filename.pdf
                 out_path = output_dir / pdf.name
             else:
-                # Single file mode: save to filename_compressed.pdf
                 out_path = output_dir / f"{pdf.stem}_compressed.pdf"
 
             try:
-                eng = _get_engine()
-                eng.compress_pdf(pdf, out_path, dpi, quality)
-
-                # Stats calculation
+                engine = _get_engine()
+                engine.compress_pdf(pdf, out_path, dpi, quality)
                 orig = pdf.stat().st_size
                 new = out_path.stat().st_size
                 diff = orig - new
                 total_saved += diff
-
                 success_count += 1
             except Exception as e:
                 console.print(f"[red]Failed to compress {pdf.name}: {e}[/red]")
 
-            progress.advance(task)
+    subscriber.unsubscribe()
 
     log_success(f"Finished! Processed {success_count}/{len(targets)} files.")
     if total_saved > 0:

@@ -9,8 +9,10 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich import box
 
+from max_cli.common.events import get_emitter
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
+from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer(help="Download media from various platforms.")
 
@@ -370,52 +372,16 @@ def _download_immediate(
         log_error(str(last_error))
         return
 
-    from rich.progress import (
-        Progress,
-        SpinnerColumn,
-        BarColumn,
-        TextColumn,
-        DownloadColumn,
-        TransferSpeedColumn,
-        TimeRemainingColumn,
-    )
+    emitter = get_emitter()
+    subscriber = EventSubscriber(emitter)
+    subscriber.subscribe()
 
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[bold blue]{task.fields[filename]}", justify="left"),
-        BarColumn(bar_width=None),
-        "[progress.percentage]{task.percentage:>3.0f}%",
-        "•",
-        DownloadColumn(),
-        "•",
-        TransferSpeedColumn(),
-        "•",
-        TimeRemainingColumn(),
-        console=console,
-        transient=True,
-    )
-
-    task_id = progress.add_task("Starting...", filename="Fetching info...", start=False)
-
-    def rich_hook(d):
-        if d["status"] == "downloading":
-            filename = d.get("filename", "").split("/")[-1]
-            filename = (filename[:30] + "...") if len(filename) > 30 else filename
-            progress.update(
-                task_id,
-                total=d.get("total_bytes") or d.get("total_bytes_estimate"),
-                completed=d.get("downloaded_bytes"),
-                filename=filename,
-                start=True,
-            )
-        elif d["status"] == "finished":
-            progress.update(task_id, filename="Processing...")
-
-    with progress:
+    with subscriber.create_progress_context(
+        1, f"Grabbing {'Audio' if audio_only else 'Video'}..."
+    ):
         retry_error: Optional[Exception] = None
         for attempt in range(3):
             try:
-                progress.update(task_id, filename="Fetching info...", start=False)
                 eng = _get_engine()
                 eng.download_media(
                     url=url,
@@ -425,7 +391,6 @@ def _download_immediate(
                     include_metadata=include_metadata,
                     playlist_items=index,
                     no_playlist=no_playlist,
-                    progress_hook=rich_hook,
                     subtitles=subtitles,
                     custom_height=custom_height,
                 )
@@ -435,14 +400,14 @@ def _download_immediate(
                 retry_error = e
                 if attempt < 2:
                     wait = 5 * (attempt + 1)
-                    progress.update(
-                        task_id,
-                        filename=f"Failed, retrying in {wait}s...",
-                        start=True,
+                    console.print(
+                        f"[yellow]Download failed (attempt {attempt + 1}/3). Retrying in {wait}s...[/yellow]"
                     )
                     time.sleep(wait)
         else:
             log_error(str(retry_error))
+
+    subscriber.unsubscribe()
 
 
 @app.command("queue")

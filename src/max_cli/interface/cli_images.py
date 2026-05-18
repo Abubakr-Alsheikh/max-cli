@@ -4,6 +4,8 @@ from typing import Optional, List, Tuple
 
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.common.concurrent import process_batch_parallel
+from max_cli.common.events import get_emitter
+from max_cli.interface.event_subscriber import EventSubscriber
 from max_cli.config import settings
 
 app = typer.Typer()
@@ -123,7 +125,6 @@ def strip_metadata(
 def _run_batch(
     files: List[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
 ):
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
     from rich.table import Table
     from rich import box
 
@@ -136,37 +137,28 @@ def _run_batch(
             out_path = out_dir / f.name
         return engine.process_single_image(f, out_path, **kwargs)
 
-    stats_list: List[dict] = []
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        transient=True,
-    ) as progress:
-        task = progress.add_task(f"[green]{action}...", total=len(files))
+    emitter = get_emitter()
+    subscriber = EventSubscriber(emitter)
+    subscriber.subscribe()
 
+    with subscriber.create_progress_context(len(files), f"{action}..."):
         if workers > 1 and len(files) > 1:
             results = process_batch_parallel(
-                files,
-                process_file,
-                max_workers=workers,
-                progress=progress,
-                task_id=task,
+                files, process_file, max_workers=workers, emitter=emitter, action=action
             )
-            for r in results:
-                if "error" in r:
-                    console.print(f"[red]Error {r['item'].name}: {r['error']}[/red]")
-                else:
-                    stats_list.append(r)
         else:
+            results = []
             for f in files:
                 try:
                     stats = process_file(f)
-                    stats_list.append(stats)
+                    results.append(stats)
                 except Exception as e:
                     console.print(f"[red]Error {f.name}: {e}[/red]")
-                progress.advance(task)
+                    results.append({"error": str(e), "item": f, "success": False})
 
+    subscriber.unsubscribe()
+
+    stats_list = [r for r in results if "error" not in r]
     if not stats_list:
         return
 
