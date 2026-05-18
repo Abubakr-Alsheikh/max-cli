@@ -1,13 +1,5 @@
 from pathlib import Path
 from typing import Optional, Dict, Any
-from PIL import Image, ImageOps
-
-try:
-    from PIL.Image import Resampling
-
-    LANCZOS = Resampling.LANCZOS
-except ImportError:
-    LANCZOS = Image.LANCZOS  # type: ignore
 
 
 class ImageEngine:
@@ -24,6 +16,8 @@ class ImageEngine:
 
     def strip_metadata(self, input_path: Path, output_path: Path) -> None:
         """Removes EXIF and other metadata by re-saving pixel data only."""
+        from PIL import Image
+
         with Image.open(input_path) as img:
             data = list(img.getdata())
             clean_img = Image.new(img.mode, img.size)
@@ -46,6 +40,15 @@ class ImageEngine:
         """
         Versatile processor for compression, resizing, and conversion.
         """
+        from PIL import Image, ImageOps
+
+        try:
+            from PIL.Image import Resampling
+
+            LANCZOS = Resampling.LANCZOS
+        except ImportError:
+            LANCZOS = Image.LANCZOS  # type: ignore
+
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
 

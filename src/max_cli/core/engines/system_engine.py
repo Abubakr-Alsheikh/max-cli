@@ -1,7 +1,6 @@
 import segno
 import pyperclip
 from pathlib import Path
-from PIL import ImageGrab
 
 
 class SystemEngine:
@@ -23,8 +22,8 @@ class SystemEngine:
         """
         Grabs image data from the system clipboard and saves it to disk.
         """
-        # Pillow's grabclipboard returns an Image object if image data is present,
-        # or a list of filenames if files were copied, or None.
+        from PIL import ImageGrab
+
         content = ImageGrab.grabclipboard()
 
         if content is None:

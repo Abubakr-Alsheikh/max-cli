@@ -2,25 +2,28 @@ import typer
 from pathlib import Path
 from typing import Optional, List
 
-from max_cli.core.engines.media_engine import MediaEngine
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 
 app = typer.Typer()
 
-engine: Optional[MediaEngine] = None
 
-try:
-    engine = MediaEngine()
-except RuntimeError:
-    pass
+def _get_engine():
+    try:
+        from max_cli.core.engines.media_engine import MediaEngine
+
+        return MediaEngine()
+    except RuntimeError:
+        return None
 
 
 def _check_engine():
-    if not engine:
+    eng = _get_engine()
+    if not eng:
         log_error("FFmpeg is not installed. Please install it to use media features.")
         log_error("Try: 'brew install ffmpeg' or 'sudo apt install ffmpeg'")
         raise typer.Exit(1)
+    return eng
 
 
 @app.command("compress")
@@ -57,7 +60,8 @@ def compress_video(
     # We use an indeterminate spinner because video encoding time varies wildly
     with console.status("[bold green]Encoding... (CPU working hard)[/bold green]"):
         try:
-            engine.compress_video(target, output, crf=crf)
+            eng = _check_engine()
+            eng.compress_video(target, output, crf=crf)
 
             orig_size = target.stat().st_size
             new_size = output.stat().st_size
@@ -90,7 +94,8 @@ def convert_format(
     console.print(f"[cyan]Converting {target.suffix} -> .{fmt}...[/cyan]")
 
     try:
-        engine.convert_format(target, output)
+        eng = _check_engine()
+        eng.convert_format(target, output)
         log_success(f"Converted file: {output}")
     except Exception as e:
         log_error(f"Conversion failed: {e}")
@@ -137,7 +142,8 @@ def video_to_audio(
 
     with console.status("[bold green]Ripping audio track...[/bold green]"):
         try:
-            engine.extract_audio(target, output, bitrate=bitrate)
+            eng = _check_engine()
+            eng.extract_audio(target, output, bitrate=bitrate)
 
             final_size = output.stat().st_size
             log_success(f"Audio extraction complete: [bold]{output.name}[/bold]")
@@ -165,7 +171,8 @@ def create_gif(
 
     with console.status("[bold green]Rendering palette & GIF...[/bold green]"):
         try:
-            engine.video_to_gif(target, output, fps, width)
+            eng = _check_engine()
+            eng.video_to_gif(target, output, fps, width)
             log_success(f"GIF saved: {output}")
         except Exception as e:
             log_error(f"GIF creation failed: {e}")
@@ -197,10 +204,13 @@ def cut_video(
             else target.parent / f"{target.stem}_cut.mp4"
         )
 
-    console.print(f"[cyan]Cutting {'audio' if is_audio else 'video'} from {start}...[/cyan]")
+    console.print(
+        f"[cyan]Cutting {'audio' if is_audio else 'video'} from {start}...[/cyan]"
+    )
     with console.status("[bold green]Processing cut...[/bold green]"):
         try:
-            engine.trim_video(target, output, start, end, duration)
+            eng = _check_engine()
+            eng.trim_video(target, output, start, end, duration)
             log_success(f"Clip saved: {output}")
         except Exception as e:
             log_error(f"Cut failed: {e}")
@@ -222,7 +232,8 @@ def snapshot(
         output = target.parent / f"{target.stem}_thumb.jpg"
 
     try:
-        engine.get_thumbnail(target, output, time)
+        eng = _check_engine()
+        eng.get_thumbnail(target, output, time)
         log_success(f"Thumbnail saved: {output}")
     except Exception as e:
         log_error(f"Snapshot failed: {e}")
@@ -247,7 +258,8 @@ def boost_volume(
     # This is fast because we copy video stream and only re-encode audio
     with console.status("[bold green]Adjusting audio...[/bold green]"):
         try:
-            engine.adjust_volume(target, output, db)
+            eng = _check_engine()
+            eng.adjust_volume(target, output, db)
             log_success(f"Louder file saved: {output}")
         except Exception as e:
             log_error(f"Volume adjustment failed: {e}")
@@ -268,7 +280,8 @@ def mute_track(
     console.print("[cyan]Removing audio track...[/cyan]")
 
     try:
-        engine.mute_video(target, output)
+        eng = _check_engine()
+        eng.mute_video(target, output)
         log_success(f"Muted video saved: {output}")
     except Exception as e:
         log_error(f"Mute failed: {e}")
@@ -325,7 +338,8 @@ def concat_videos(
     with console.status("[bold green]Merging videos...[/bold green]"):
         try:
             concat_method = "concat" if method == "fast" else "filter"
-            engine.concatenate_videos(input_files, output, method=concat_method)
+            eng = _check_engine()
+            eng.concatenate_videos(input_files, output, method=concat_method)
             log_success(f"Videos merged: {output}")
         except Exception as e:
             log_error(f"Concatenation failed: {e}")
@@ -355,7 +369,8 @@ def adjust_brightness_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            engine.adjust_brightness(target, output, brightness, contrast)
+            eng = _check_engine()
+            eng.adjust_brightness(target, output, brightness, contrast)
             log_success(f"Video saved: {output}")
         except Exception as e:
             log_error(f"Adjustment failed: {e}")
@@ -383,7 +398,8 @@ def color_grade_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            engine.apply_color_preset(target, output, preset)
+            eng = _check_engine()
+            eng.apply_color_preset(target, output, preset)
             log_success(f"Video saved: {output}")
         except Exception as e:
             log_error(f"Color grading failed: {e}")
@@ -407,7 +423,8 @@ def stabilize_cmd(
         "[bold green]Stabilizing (this may take a while)...[/bold green]"
     ):
         try:
-            engine.stabilize_video(target, output)
+            eng = _check_engine()
+            eng.stabilize_video(target, output)
             log_success(f"Stabilized video saved: {output}")
         except Exception as e:
             log_error(f"Stabilization failed: {e}")
@@ -433,7 +450,8 @@ def normalize_audio_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            engine.normalize_audio(target, output, level)
+            eng = _check_engine()
+            eng.normalize_audio(target, output, level)
             log_success(f"Normalized audio saved: {output}")
         except Exception as e:
             log_error(f"Normalization failed: {e}")
@@ -469,7 +487,8 @@ def convert_audio_cmd(
 
     with console.status("[bold green]Converting audio...[/bold green]"):
         try:
-            engine.convert_audio(target, output, bitrate=bitrate)
+            eng = _check_engine()
+            eng.convert_audio(target, output, bitrate=bitrate)
             log_success(f"Audio converted: {output}")
         except Exception as e:
             log_error(f"Conversion failed: {e}")
@@ -495,7 +514,8 @@ def screen_record_cmd(
     console.print("[yellow]Press Ctrl+C to stop[/yellow]")
 
     try:
-        engine.screen_record(output, duration=duration, fps=fps, audio=audio)
+        eng = _check_engine()
+        eng.screen_record(output, duration=duration, fps=fps, audio=audio)
         log_success(f"Recording saved: {output}")
     except Exception as e:
         log_error(f"Recording failed: {e}")
@@ -529,7 +549,8 @@ def stream_video_cmd(
     console.print("[yellow]Press Ctrl+C to stop streaming[/yellow]")
 
     try:
-        engine.stream_to_rtmp(target, rtmp_url, bitrate=bitrate, preset=preset)
+        eng = _check_engine()
+        eng.stream_to_rtmp(target, rtmp_url, bitrate=bitrate, preset=preset)
         log_success("Streaming completed")
     except Exception as e:
         log_error(f"Streaming failed: {e}")
@@ -559,6 +580,7 @@ def live_preview_cmd(
     console.print("[dim]Press Ctrl+C to stop[/dim]")
 
     try:
-        engine.live_preview(target, port=port, bitrate=bitrate)
+        eng = _check_engine()
+        eng.live_preview(target, port=port, bitrate=bitrate)
     except Exception as e:
         log_error(f"Preview failed: {e}")

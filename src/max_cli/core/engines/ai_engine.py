@@ -1,9 +1,7 @@
 import os
 import json
-import typer
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from openai import OpenAI
 from max_cli.config import settings
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
@@ -12,23 +10,36 @@ from max_cli.common.cache import get_default_cache
 
 class AIEngine:
     def __init__(self):
-        self.client = None
+        self._client = None
         self.ollama_mode = False
+        self._client_initialized = False
 
         if settings.OLLAMA_ENABLED:
             self.ollama_mode = True
-            self.client = OpenAI(
-                api_key="ollama", base_url=f"{settings.OLLAMA_BASE_URL}/v1"
-            )
-        elif settings.OPENAI_API_KEY:
-            self.client = OpenAI(
-                api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
-            )
 
         self.history: List[Dict[str, str]] = []
         self._history_file = Path.home() / ".max_cli" / "chat_history.json"
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_history()
+
+    def _get_client(self):
+        """Lazily create OpenAI client on first access."""
+        if self._client is None:
+            from openai import OpenAI
+
+            if self.ollama_mode:
+                self._client = OpenAI(
+                    api_key="ollama", base_url=f"{settings.OLLAMA_BASE_URL}/v1"
+                )
+            elif settings.OPENAI_API_KEY:
+                self._client = OpenAI(
+                    api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL
+                )
+        return self._client
+
+    @property
+    def client(self):
+        return self._get_client()
 
     @property
     def current_model(self) -> str:
@@ -105,7 +116,6 @@ Return as a JSON array of strings."""
         """Scans current directory to give AI 'eyes'."""
         try:
             files = os.listdir(".")
-            # Filter for non-hidden files and limit to 30 for token safety
             visible_files = [f for f in files if not f.startswith(".")][:30]
 
             context = "\n[USER'S CURRENT ENVIRONMENT]\n"
@@ -117,21 +127,19 @@ Return as a JSON array of strings."""
         except Exception:
             return ""
 
-    def generate_cli_schema(self, app: typer.Typer, parent_name: str = "max") -> str:
+    def generate_cli_schema(self, app: Any, parent_name: str = "max") -> str:
         """
         Dynamically traverses the Typer app to build a documentation string.
         """
+
         schema_lines = ["Available Commands:"]
 
-        # 1. Traverse Registered Groups (Sub-commands like 'max images ...')
-        # Typer stores these in .registered_groups
         for group in app.registered_groups:
             if group.hidden or not group.typer_instance:
                 continue
 
             group_name = group.name
 
-            # Access the commands inside the sub-typer
             for cmd_info in group.typer_instance.registered_commands:
                 if cmd_info.hidden:
                     continue
@@ -139,7 +147,6 @@ Return as a JSON array of strings."""
                 full_cmd = f"{parent_name} {group_name} {cmd_info.name}"
                 description = cmd_info.help or "No description provided."
 
-                # We strip newlines to keep the prompt clean
                 description = description.split("\n")[0]
 
                 schema_lines.append(f"- {full_cmd}: {description}")
@@ -169,7 +176,6 @@ Return as a JSON array of strings."""
         )
         context = self._get_local_context()
 
-        # UPDATED PROMPT: Tell Max he CAN chat, but must use the JSON structure.
         system_msg = f"""
 You are "Max", a CLI agent. 
 TOOLS: {tools}
@@ -204,18 +210,15 @@ If the request is unrelated to the tools or ambiguous, return:
 
             raw_content = response.choices[0].message.content
 
-            # --- SAFETY CATCH ---
             try:
                 result = json.loads(raw_content)
             except json.JSONDecodeError:
-                # If AI fails to send JSON, wrap its text into a result dict manually
                 result = {
                     "thought": raw_content.strip(),
                     "command": None,
                     "dangerous": False,
                 }
 
-            # Update history with the response
             self.history.append({"role": "user", "content": user_prompt})
             self.history.append(
                 {"role": "assistant", "content": result.get("thought", "")}
@@ -254,14 +257,11 @@ If the request is unrelated to the tools or ambiguous, return:
         if not self.client:
             raise MaxError("Missing AI Configuration. Check your .env file.")
 
-        # 1. Encode Image
         try:
             base64_image = encode_image_to_base64(image_path)
         except Exception as e:
             raise MaxError(f"Failed to process image: {e}")
 
-        # 2. Build Payload
-        # Note: We do NOT force JSON mode here, as we want natural language description.
         messages = [
             {
                 "role": "user",
@@ -269,16 +269,12 @@ If the request is unrelated to the tools or ambiguous, return:
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            # JPEG header usually works for PNG/WEBP in OpenAI/Gemini APIs
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        },
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
                     },
                 ],
             }
         ]
 
-        # 3. Call API
         try:
             response = self.client.chat.completions.create(
                 model=self.current_model,
@@ -295,7 +291,6 @@ If the request is unrelated to the tools or ambiguous, return:
         if not self.client:
             raise MaxError("AI Client not configured.")
 
-        # If no specific model override is passed in the command, use the config value
         target_model = model or settings.AI_IMAGE_MODEL
 
         try:
@@ -346,19 +341,16 @@ If the request is unrelated to the tools or ambiguous, return:
         """
         Helper to find image URL in Nano Banana response.
         """
-        # 1. Check for standard Markdown URL: ![alt text](url)
         import re
 
         match = re.search(r"\((https?://[^\s)]+)\)", content)
         if match:
             return match.group(1)
 
-        # 2. Check for raw URL in text
         url_match = re.search(r"https?://[^\s]+", content)
         if url_match:
             return url_match.group(0)
 
-        # 3. Check raw response dictionary (Advanced Google implementation)
         raw_dict = raw_response.model_dump()
         if "images" in raw_dict and raw_dict["images"]:
             return raw_dict["images"][0].get("url")
@@ -551,8 +543,6 @@ Return a JSON object with the extracted data."""
 
         try:
             result = self.analyze_image_content(image_path, prompt)
-            import json
-
             try:
                 data = json.loads(result)
                 return data

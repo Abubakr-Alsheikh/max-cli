@@ -10,7 +10,6 @@ from max_cli.common.logger import console
 from max_cli.common.retry import retry
 from max_cli.common.exceptions import MaxError
 from max_cli.config import settings
-from max_cli.core.engines.network_engine import NetworkEngine
 
 
 class QueueError(MaxError):
@@ -122,7 +121,7 @@ class QueueManager:
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
         self._lock = threading.Lock()
-        self._engine = NetworkEngine()
+        self._engine = None
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
         self._load_queue()
@@ -140,6 +139,13 @@ class QueueManager:
             self._history = [QueueItem.from_dict(item) for item in data]
         except Exception:
             self._history = []
+
+    def _get_engine(self):
+        if self._engine is None:
+            from max_cli.core.engines.network_engine import NetworkEngine
+
+            self._engine = NetworkEngine()
+        return self._engine
 
     def _save_history(self) -> None:
         """Save download history to persistent storage."""
@@ -394,7 +400,7 @@ class QueueManager:
                 self.update_item(item)
 
         try:
-            self._engine.download_media(
+            self._get_engine().download_media(
                 url=item.url,
                 output_path=output_path,
                 quality=item.quality,

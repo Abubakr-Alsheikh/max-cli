@@ -9,14 +9,22 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich import box
 
-from max_cli.core.engines.network_engine import NetworkEngine
-from max_cli.core.engines.queue_manager import get_queue_manager
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
 
 app = typer.Typer(help="Download media from various platforms.")
-engine = NetworkEngine()
-queue_manager = get_queue_manager()
+
+
+def _get_engine():
+    from max_cli.core.engines.network_engine import NetworkEngine
+
+    return NetworkEngine()
+
+
+def _get_queue_manager():
+    from max_cli.core.engines.queue_manager import get_queue_manager
+
+    return get_queue_manager()
 
 
 def _clean_url(url: str, strip_playlist: bool) -> str:
@@ -132,9 +140,10 @@ def download_media(
 
         def process_forever():
             """Process queue items continuously."""
+            qm = _get_queue_manager()
             while processing:
                 try:
-                    queue_manager.process_now()
+                    qm.process_now()
                 except Exception:
                     pass
                 time.sleep(0.5)
@@ -161,7 +170,8 @@ def download_media(
                 )
 
                 # Add to queue - background processor will handle it
-                queue_manager.add(
+                qm = _get_queue_manager()
+                qm.add(
                     url=clean_u,
                     quality=final_quality,
                     audio_only=is_audio,
@@ -177,14 +187,15 @@ def download_media(
             pass
 
         # Wait for pending downloads to complete before exiting
-        stats = queue_manager.get_stats()
+        qm = _get_queue_manager()
+        stats = qm.get_stats()
         pending = stats["pending"] + stats["downloading"]
         wait_count = 0
         if pending > 0:
             console.print(f"[dim]Waiting for {pending} download(s)...[/dim]")
             while pending > 0 and wait_count < 30:
                 time.sleep(1)
-                stats = queue_manager.get_stats()
+                stats = qm.get_stats()
                 pending = stats["pending"] + stats["downloading"]
                 wait_count += 1
 
@@ -193,7 +204,7 @@ def download_media(
             process_thread.join(timeout=2)
 
         # Check final status
-        stats = queue_manager.get_stats()
+        stats = qm.get_stats()
         if stats["completed"] > 0:
             console.print(f"[green]Completed: {stats['completed']}[/green]")
         if stats["failed"] > 0:
@@ -223,8 +234,9 @@ def download_media(
             console.print("[dim]Processing queue in background...[/dim]")
 
             def process_background():
+                qm = _get_queue_manager()
                 try:
-                    queue_manager.process_now()
+                    qm.process_now()
                 except Exception:
                     pass
 
@@ -247,7 +259,8 @@ def _add_to_queue_or_download(
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if queue_enabled:
-        queue_manager.add(
+        qm = _get_queue_manager()
+        qm.add(
             url=url,
             quality=quality,
             audio_only=audio_only,
@@ -260,7 +273,8 @@ def _add_to_queue_or_download(
         )
         log_success("Added to queue.")
     else:
-        q_info = engine.get_quality_info(quality, custom_height)
+        eng = _get_engine()
+        q_info = eng.get_quality_info(quality, custom_height)
         _download_immediate(
             url,
             quality,
@@ -295,7 +309,8 @@ def _download_immediate(
     if should_check_playlist:
         with console.status("[dim]Checking URL...[/dim]"):
             try:
-                info = engine.get_info(url)
+                eng = _get_engine()
+                info = eng.get_info(url)
                 if "entries" in info:
                     count = len(info["entries"])
                     if not Confirm.ask(
@@ -312,7 +327,8 @@ def _download_immediate(
                 pass
 
     if audio_only:
-        q_info = engine.get_quality_info(quality, custom_height)
+        eng = _get_engine()
+        q_info = eng.get_quality_info(quality, custom_height)
         bitrate = q_info.get("bitrate", 192)
         quality_display = f"{bitrate}kbps"
     else:
@@ -329,7 +345,8 @@ def _download_immediate(
         last_error: Optional[Exception] = None
         for attempt in range(3):
             try:
-                engine.download_media(
+                eng = _get_engine()
+                eng.download_media(
                     url=url,
                     output_path=output_path,
                     quality=quality,
@@ -399,7 +416,8 @@ def _download_immediate(
         for attempt in range(3):
             try:
                 progress.update(task_id, filename="Fetching info...", start=False)
-                engine.download_media(
+                eng = _get_engine()
+                eng.download_media(
                     url=url,
                     output_path=output_path,
                     quality=quality,
@@ -434,8 +452,9 @@ def show_queue(
     ),
 ):
     """Show the current download queue."""
-    items = queue_manager.get_all()
-    stats = queue_manager.get_stats()
+    qm = _get_queue_manager()
+    items = qm.get_all()
+    stats = qm.get_stats()
 
     console.print("\n[bold]Queue Status:[/bold]")
     console.print(
@@ -444,8 +463,8 @@ def show_queue(
 
     if process:
         console.print("[dim]Processing queue...[/dim]")
-        queue_manager.process_now()
-        stats = queue_manager.get_stats()
+        qm.process_now()
+        stats = qm.get_stats()
         if stats["completed"] > 0:
             console.print(f"[green]Completed: {stats['completed']}[/green]")
         if stats["failed"] > 0:
@@ -500,10 +519,12 @@ def clear_queue(
             ):
                 console.print("[yellow]Aborted.[/yellow]")
                 return
-        count = queue_manager.clear()
+        qm = _get_queue_manager()
+        count = qm.clear()
         log_success(f"Cleared {count} items from queue.")
     else:
-        pending = queue_manager.get_pending()
+        qm = _get_queue_manager()
+        pending = qm.get_pending()
         if not pending:
             console.print("[dim]No pending items to clear.[/dim]")
             return
@@ -513,14 +534,15 @@ def clear_queue(
                 console.print("[yellow]Aborted.[/yellow]")
                 return
 
-        queue_manager.clear()
+        qm.clear()
         log_success(f"Cleared {len(pending)} pending items.")
 
 
 @app.command("status")
 def queue_status():
     """Show detailed queue statistics."""
-    stats = queue_manager.get_stats()
+    qm = _get_queue_manager()
+    stats = qm.get_stats()
 
     table = Table(title="Queue Statistics", box=box.ROUNDED)
     table.add_column("Status", style="cyan")
@@ -542,11 +564,13 @@ def show_history(
 ):
     """Show download history."""
     if clear:
-        count = queue_manager.clear_history()
+        qm = _get_queue_manager()
+        count = qm.clear_history()
         log_success(f"Cleared {count} items from history.")
         return
 
-    history = queue_manager.get_history()[:limit]
+    qm = _get_queue_manager()
+    history = qm.get_history()[:limit]
 
     if not history:
         console.print("[dim]No download history.[/dim]")

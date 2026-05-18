@@ -70,6 +70,56 @@ PLANS/                         # Project Management (Active/Deferred tasks)
 - **Separation of Concerns**: `interface/` files parse CLI arguments and print output. `core/engines/` files perform the actual computation and return data.
 - **Dependency Direction**: Interface → Core → Common. Core engines must *never* import from `interface/`.
 - **Import Organization**: Standard library → third-party → local imports (alphabetically sorted).
+- **Lazy Loading Mandate**: All heavy third-party imports (PIL, fitz, yt_dlp, openai, mutagen, requests) MUST be placed inside the methods that use them, never at module level. Interface files MUST NOT instantiate engines at module level — use `_get_engine()` helper functions instead.
+
+### Lazy Loading Pattern (MANDATORY)
+
+Max CLI enforces lazy loading to keep `max --help` startup under 200ms. Heavy imports are deferred until first use.
+
+**Engine Files (`core/engines/*.py`)** — Move heavy imports inside methods:
+```python
+# WRONG — module-level import (loads at startup)
+from PIL import Image
+
+class ImageEngine:
+    def compress(self, path):
+        img = Image.open(path)
+
+# CORRECT — lazy import (loads only when called)
+class ImageEngine:
+    def compress(self, path):
+        from PIL import Image
+        img = Image.open(path)
+```
+
+**Interface Files (`interface/cli_*.py`)** — Use `_get_engine()` helpers, never module-level instantiation:
+```python
+# WRONG — engine created at module import time
+from max_cli.core.engines.image_processor import ImageEngine
+app = typer.Typer()
+engine = ImageEngine()
+
+# CORRECT — engine created only when a command runs
+app = typer.Typer()
+
+def _get_engine():
+    from max_cli.core.engines.image_processor import ImageEngine
+    return ImageEngine()
+
+@app.command("compress")
+def compress_images(...):
+    engine = _get_engine()
+    engine.compress(...)
+```
+
+**Testing with Lazy Imports** — Mock at the package level, not the module level:
+```python
+# WRONG — OpenAI is no longer at module level in ai_engine
+@patch("max_cli.core.engines.ai_engine.OpenAI")
+
+# CORRECT — mock the actual package
+@patch("openai.OpenAI")
+```
 
 ### Design Patterns to Follow
 
@@ -112,6 +162,9 @@ PLANS/                         # Project Management (Active/Deferred tasks)
 - Never use `print()` or `typer.echo()` inside `core/engines/` (Engines return values; Interfaces print them).
 - Never commit secrets, API keys, or `.env` files.
 - Never use `os.path` (strictly use `pathlib.Path`).
+- Never import heavy third-party libraries at module level (PIL, fitz, yt_dlp, openai, mutagen, requests) — always use lazy imports inside methods.
+- Never instantiate Engine classes at module level in interface files — always use `_get_engine()` helper functions.
+- Never import engine instances from other interface files (e.g., `from cli_ai import engine`) — use local `_get_engine()` calls instead.
 
 ## 7. Reference Implementations
 
@@ -125,6 +178,11 @@ PLANS/                         # Project Management (Active/Deferred tasks)
   
 - **Plugin Pattern**: `examples/plugins/hello_world.py`
   - *Shows: Correct plugin metadata definition, lifecycle hooks, and Typer command registration.*
+
+- **Lazy Loading Pattern**:
+  - Engine: `src/max_cli/core/engines/image_processor.py` (PIL imported inside methods)
+  - Interface: `src/max_cli/interface/cli_images.py` (uses `_get_engine()` helper)
+  - *Shows: Heavy imports deferred until first use, keeping startup under 200ms.*
 
 ## 8. Escalation & Discovery
 
@@ -194,6 +252,8 @@ Max CLI relies on external binaries (FFmpeg) and network calls (AI APIs, Downloa
 - **Test Core vs. Interface Independently**:
   - Test Core Engines by directly instantiating the class and asserting the return values or file state.
   - Test CLI Interfaces using `typer.testing.CliRunner` to assert stdout output and exit codes.
+- **Mock Lazy Imports Correctly**: Since engines no longer import heavy libraries at module level, mock at the package level (`@patch("openai.OpenAI")`), NOT at the module level (`@patch("max_cli.core.engines.ai_engine.OpenAI")`).
+- **Set `_client` Directly**: When testing `AIEngine`, set `engine._client = mock_client` instead of `engine.client = mock_client`, since `client` is now a lazy property.
 
 ## 14. Safe File Operations & Idempotency
 

@@ -1,20 +1,22 @@
 import typer
 from pathlib import Path
 from typing import Optional, List, Tuple
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
-from rich.table import Table
-from rich import box
 
-from max_cli.core.engines.image_processor import ImageEngine
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.common.concurrent import process_batch_parallel
 from max_cli.config import settings
 
 app = typer.Typer()
-engine = ImageEngine()
+
+
+def _get_engine():
+    from max_cli.core.engines.image_processor import ImageEngine
+
+    return ImageEngine()
 
 
 def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
+    engine = _get_engine()
     if target.is_file():
         return [target], target.parent
     files = [
@@ -121,6 +123,12 @@ def strip_metadata(
 def _run_batch(
     files: List[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
 ):
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from rich.table import Table
+    from rich import box
+
+    engine = _get_engine()
+
     def process_file(f: Path) -> dict:
         if len(files) == 1:
             out_path = out_dir / f"{f.stem}_opt{f.suffix}"

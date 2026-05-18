@@ -172,12 +172,18 @@ class MediaEngine:
 
         if is_audio:
             output_path = output_path.with_suffix(".mp3")
-            cmd.extend(
-                ["-c:a", "libmp3lame", "-loglevel", "error", str(output_path)]
-            )
+            cmd.extend(["-c:a", "libmp3lame", "-loglevel", "error", str(output_path)])
         else:
             cmd.extend(
-                ["-c:v", "libx264", "-c:a", "aac", "-loglevel", "error", str(output_path)]
+                [
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    "-loglevel",
+                    "error",
+                    str(output_path),
+                ]
             )
 
         self._run(cmd)

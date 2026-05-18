@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Dict, Optional, Any, List
-from mutagen._file import File as MutagenFile
 
 
 SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
@@ -16,6 +15,8 @@ class AudioMetadataEngine:
         """
         Retrieve all metadata from an audio file.
         """
+        from mutagen._file import File as MutagenFile
+
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -74,6 +75,8 @@ class AudioMetadataEngine:
         Set metadata on an audio file.
         If output_path is provided, writes to a new file; otherwise modifies in place.
         """
+        from mutagen._file import File as MutagenFile
+
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -124,6 +127,8 @@ class AudioMetadataEngine:
         Clear all metadata from an audio file.
         If keep_duration is True, preserves audio info (duration, bitrate, etc.).
         """
+        from mutagen._file import File as MutagenFile
+
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -141,7 +146,7 @@ class AudioMetadataEngine:
             raise ValueError(f"Unable to read file: {file_path}")
 
         if keep_duration and hasattr(audio, "info"):
-            audio.info.length  # Verify we can read info without storing
+            audio.info.length
 
         tags_to_remove = list(audio.keys())
         for key in tags_to_remove:

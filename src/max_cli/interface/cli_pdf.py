@@ -4,12 +4,16 @@ from pathlib import Path
 from typing import List, Optional
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
-from max_cli.core.engines.pdf_engine import PDFEngine
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import natural_sort_key, format_size
 
 app = typer.Typer()
-engine = PDFEngine()
+
+
+def _get_engine():
+    from max_cli.core.engines.pdf_engine import PDFEngine
+
+    return PDFEngine()
 
 
 @app.command("merge")
@@ -44,7 +48,8 @@ def merge_pdfs(
     console.print(f"Merging [bold]{len(files_to_merge)}[/bold] files...")
 
     try:
-        pages = engine.merge_pdfs(files_to_merge, output)
+        eng = _get_engine()
+        pages = eng.merge_pdfs(files_to_merge, output)
         log_success(f"Merged {pages} pages into: [bold]{output}[/bold]")
     except Exception as e:
         log_error(f"Merge failed: {e}")
@@ -111,7 +116,8 @@ def compress_pdf(
                 out_path = output_dir / f"{pdf.stem}_compressed.pdf"
 
             try:
-                engine.compress_pdf(pdf, out_path, dpi, quality)
+                eng = _get_engine()
+                eng.compress_pdf(pdf, out_path, dpi, quality)
 
                 # Stats calculation
                 orig = pdf.stat().st_size
@@ -215,7 +221,8 @@ def bundle_pdfs(
     try:
         # Step 1: Merge
         with console.status("Merging..."):
-            engine.merge_pdfs(files, temp_merged)
+            eng = _get_engine()
+            eng.merge_pdfs(files, temp_merged)
 
         final_size = 0
 
@@ -226,7 +233,7 @@ def bundle_pdfs(
         else:
             # Step 2: Compress
             with console.status("Compressing..."):
-                engine.compress_pdf(temp_merged, output, dpi, quality)
+                eng.compress_pdf(temp_merged, output, dpi, quality)
 
             # Cleanup temp
             if temp_merged.exists():
@@ -248,7 +255,7 @@ def bundle_pdfs(
         log_success("Bundle created successfully!")
         console.print(f"Path: [bold]{output}[/bold]")
         console.print(f"Size: {format_size(final_size)}")
-        console.print(f"Pages: [bold]{engine.get_page_count(output)}[/bold]")
+        console.print(f"Pages: [bold]{eng.get_page_count(output)}[/bold]")
 
     except Exception as e:
         if temp_merged.exists():
@@ -322,7 +329,8 @@ def split_pdf(
         raise typer.Exit(1)
 
     try:
-        total_pages = engine.get_page_count(target)
+        eng = _get_engine()
+        total_pages = eng.get_page_count(target)
     except Exception as e:
         log_error(f"Failed to read PDF: {e}")
         raise typer.Exit(1)
@@ -340,7 +348,7 @@ def split_pdf(
         output_dir.mkdir(exist_ok=True)
 
         console.print(f"[cyan]Splitting into chunks of {chunks} pages...")
-        files = engine.split_into_chunks(target, output_dir, chunks)
+        files = eng.split_into_chunks(target, output_dir, chunks)
 
         console.print(f"[green]Created [bold]{len(files)}[/bold] files:")
         for f in files:
@@ -375,7 +383,7 @@ def split_pdf(
         action_text = "Extracted"
 
     try:
-        count = engine.split_by_range(target, output, start, end, keep=not remove)
+        count = eng.split_by_range(target, output, start, end, keep=not remove)
 
         size = output.stat().st_size
         console.print(f"{action_text} [bold]{count}[/bold] pages -> {output.name}")
@@ -402,7 +410,8 @@ def stamp_pdf(
         output = target.parent / f"{target.stem}_stamped.pdf"
 
     console.print(f"[cyan]Stamping '{text}' onto {target.name}...[/cyan]")
-    engine.watermark_pdf(target, output, text=text)
+    eng = _get_engine()
+    eng.watermark_pdf(target, output, text=text)
     log_success(f"Stamped PDF saved to: {output}")
 
 
@@ -421,7 +430,8 @@ def lock_pdf(
     if not output:
         output = target.parent / f"{target.stem}_locked.pdf"
 
-    engine.set_password(target, output, password)
+    eng = _get_engine()
+    eng.set_password(target, output, password)
     log_success(f"Encrypted file saved to: {output}")
 
 
@@ -441,7 +451,8 @@ def rip_content(
     output_dir.mkdir(exist_ok=True)
 
     console.print(f"Extracting images from [bold]{target.name}[/bold]...")
-    count = engine.extract_assets(target, output_dir)
+    eng = _get_engine()
+    count = eng.extract_assets(target, output_dir)
 
     if count > 0:
         log_success(f"Extracted [bold]{count}[/bold] images to: {output_dir}")
@@ -472,7 +483,8 @@ def ocr_pdf(
     console.print(f"[cyan]Running OCR on {target.name} (lang={lang})...[/cyan]")
 
     try:
-        text = engine.ocr_pdf(target, output, lang=lang)
+        eng = _get_engine()
+        text = eng.ocr_pdf(target, output, lang=lang)
         char_count = len(text)
 
         log_success(f"Text extracted to: {output}")
@@ -501,7 +513,8 @@ def extract_form(
     console.print(f"[cyan]Extracting form data from {target.name}...[/cyan]")
 
     try:
-        form_data = engine.extract_form_data(target)
+        eng = _get_engine()
+        form_data = eng.extract_form_data(target)
         if form_data:
             console.print("[bold]Form Fields:[/bold]")
             for name, value in form_data.items():
@@ -548,7 +561,8 @@ def fill_form(
     console.print(f"[cyan]Filling {len(field_values)} fields...[/cyan]")
 
     try:
-        engine.fill_form(target, output, field_values)
+        eng = _get_engine()
+        eng.fill_form(target, output, field_values)
         log_success(f"Filled form saved to: {output}")
     except Exception as e:
         log_error(f"Failed to fill form: {e}")
@@ -572,7 +586,8 @@ def flatten_form(
     console.print("[cyan]Flattening form...[/cyan]")
 
     try:
-        engine.flatten_form(target, output)
+        eng = _get_engine()
+        eng.flatten_form(target, output)
         log_success(f"Flattened form saved to: {output}")
     except Exception as e:
         log_error(f"Failed to flatten form: {e}")
@@ -604,7 +619,8 @@ def optimize_pdf(
     console.print("[cyan]Optimizing PDF...[/cyan]")
 
     try:
-        engine.optimize_pdf(
+        eng = _get_engine()
+        eng.optimize_pdf(
             target,
             output,
             compress_images=not no_compress,
@@ -640,7 +656,8 @@ def compare_pdfs(
     console.print(f"[cyan]Comparing {file1.name} vs {file2.name}...[/cyan]")
 
     try:
-        result = engine.compare_pdfs(file1, file2)
+        eng = _get_engine()
+        result = eng.compare_pdfs(file1, file2)
 
         if result["pages_equal"] and not result["differences"]:
             console.print("[green]✓ PDFs are identical![/green]")

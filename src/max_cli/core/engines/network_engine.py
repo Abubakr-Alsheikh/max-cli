@@ -1,4 +1,3 @@
-import yt_dlp  # type: ignore[import-untyped]
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable, Union
 import shutil
@@ -25,6 +24,8 @@ class NetworkEngine:
 
     def get_info(self, url: str) -> Dict[str, Any]:
         """Peeks at the URL to see if it's a playlist and count items."""
+        import yt_dlp  # type: ignore[import-untyped]
+
         ydl_opts = {"quiet": True, "noplaylist": False, "extract_flat": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
@@ -59,6 +60,8 @@ class NetworkEngine:
         subtitles: bool = False,
         custom_height: Optional[int] = None,
     ):
+        import yt_dlp  # type: ignore[import-untyped]
+
         if not self.has_js:
             from max_cli.common.logger import console
 
@@ -136,6 +139,5 @@ class NetworkEngine:
             try:
                 ydl.download([url])
             except yt_dlp.utils.DownloadError as e:
-                # Clean error message
                 msg = str(e).replace("ERROR: ", "")
                 raise RuntimeError(f"Download failed: {msg}")

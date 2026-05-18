@@ -5,18 +5,19 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.markdown import Markdown
 from pathlib import Path
-import requests
 from typing import Optional
 
-from max_cli.core.engines.ai_engine import AIEngine
 from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()
-engine = AIEngine()
 
-# We need a reference to the main Typer app to generate docs.
-# We will set this in main.py
 MAIN_APP_REF: Optional[typer.Typer] = None
+
+
+def _get_engine():
+    from max_cli.core.engines.ai_engine import AIEngine
+
+    return AIEngine()
 
 
 @app.command("ask")
@@ -39,7 +40,8 @@ def ask_ai(
 
     with console.status("[bold cyan]Consulting AI...[/bold cyan]"):
         try:
-            result = engine.interpret_intent(prompt, MAIN_APP_REF)
+            eng = _get_engine()
+            result = eng.interpret_intent(prompt, MAIN_APP_REF)
         except Exception as e:
             log_error(str(e))
             raise typer.Exit(1)
@@ -115,8 +117,8 @@ def analyze_image(
 
     with console.status("[bold magenta]Analyzing Vision Data...[/bold magenta]"):
         try:
-            # Call the new engine method
-            result_text = engine.analyze_image_content(target, prompt)
+            eng = _get_engine()
+            result_text = eng.analyze_image_content(target, prompt)
 
             # Render result
             console.print("\n")
@@ -147,7 +149,8 @@ def create_image(
 
     with console.status("[bold green]Nano Banana is generating...[/bold green]"):
         try:
-            url = engine.generate_image(prompt, model=model)
+            eng = _get_engine()
+            url = eng.generate_image(prompt, model=model)
             _handle_image_result(url, output, "created_image.png")
         except Exception as e:
             log_error(str(e))
@@ -173,7 +176,8 @@ def edit_image(
 
     with console.status("[bold green]Applying AI changes...[/bold green]"):
         try:
-            url = engine.edit_image(target, prompt, model=model)
+            eng = _get_engine()
+            url = eng.edit_image(target, prompt, model=model)
             _handle_image_result(url, output, f"edited_{target.name}")
         except Exception as e:
             log_error(str(e))
@@ -181,7 +185,9 @@ def edit_image(
 
 def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
     """Helper to display URL and download image."""
-    console.print("\n[green]✨ Image Ready![/green]")
+    import requests
+
+    console.print("\n[green]Image Ready![/green]")
     console.print(f"🔗 [link={url}]View Online[/link]")
 
     # Auto-download
@@ -216,12 +222,14 @@ def chat_session(
     Use --clear to reset history, --export to save, --import to load previous chats.
     """
     if clear:
-        engine.clear_history()
+        eng = _get_engine()
+        eng.clear_history()
         console.print("[green]Conversation history cleared.[/green]")
         return
 
     if export:
-        engine.export_history(export)
+        eng = _get_engine()
+        eng.export_history(export)
         log_success(f"Conversation exported to: {export}")
         return
 
@@ -229,7 +237,8 @@ def chat_session(
         if not import_file.exists():
             log_error(f"File not found: {import_file}")
             raise typer.Exit(1)
-        engine.import_history(import_file)
+        eng = _get_engine()
+        eng.import_history(import_file)
         log_success(f"Conversation imported from: {import_file}")
         return
 
@@ -240,20 +249,21 @@ def chat_session(
         )
     )
 
-    if engine.history:
+    eng = _get_engine()
+    if eng.history:
         console.print(
-            f"[dim]Loaded {len(engine.history)} messages from previous session[/dim]"
+            f"[dim]Loaded {len(eng.history)} messages from previous session[/dim]"
         )
 
     while True:
-        suggestions = engine.get_suggestions()
+        suggestions = eng.get_suggestions()
         user_input = Prompt.ask(
             "[bold green]User[/bold green]",
             choices=suggestions + ["help", "exit", "quit"],
             show_choices=False,
         )
         if user_input.lower() in ["exit", "quit"]:
-            engine._save_history()
+            eng._save_history()
             break
         if user_input.lower() == "help":
             console.print("[bold cyan]Suggestions:[/bold cyan]")
@@ -264,7 +274,7 @@ def chat_session(
 
         with console.status("[dim]Thinking...[/dim]"):
             try:
-                result = engine.interpret_intent(user_input, MAIN_APP_REF)
+                result = eng.interpret_intent(user_input, MAIN_APP_REF)
 
                 if "error" in result:
                     console.print(f"[red]Max:[/red] {result['error']}")
@@ -290,7 +300,7 @@ def chat_session(
             except Exception as e:
                 log_error(str(e))
 
-    engine._save_history()
+    eng._save_history()
     console.print("[cyan]Goodbye![/cyan]")
 
 
@@ -323,7 +333,8 @@ def semantic_search_cmd(
     console.print(f"[cyan]Searching {len(files)} files for: '{query}'...[/cyan]")
 
     try:
-        results = engine.semantic_search(query, files)
+        eng = _get_engine()
+        results = eng.semantic_search(query, files)
 
         if not results:
             console.print("[yellow]No matches found.[/yellow]")
@@ -367,7 +378,8 @@ def extract_data_cmd(
     console.print(f"[cyan]Extracting data from {target.name}...[/cyan]")
 
     try:
-        result = engine.extract_structured_data(target, schema_dict)
+        eng = _get_engine()
+        result = eng.extract_structured_data(target, schema_dict)
 
         console.print("\n[bold green]Extracted Data:[/bold green]")
         import json

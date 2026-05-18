@@ -4,12 +4,21 @@ from rich.prompt import Confirm
 from rich.panel import Panel
 from rich.text import Text
 
-from max_cli.core.engines.file_organizer import FileOrganizer
 from max_cli.common.logger import console, log_error, log_success
-from max_cli.interface.cli_ai import engine  # Import the AIEngine instance
 
 app = typer.Typer()
-organizer = FileOrganizer()
+
+
+def _get_organizer():
+    from max_cli.core.engines.file_organizer import FileOrganizer
+
+    return FileOrganizer()
+
+
+def _get_ai_engine():
+    from max_cli.core.engines.ai_engine import AIEngine
+
+    return AIEngine()
 
 
 @app.command("order")
@@ -37,7 +46,8 @@ def order_files(
 
     # 1. Get stats first to show the user what will happen
     try:
-        files = organizer.scan_directory(folder)
+        org = _get_organizer()
+        files = org.scan_directory(folder)
     except Exception as e:
         log_error(str(e))
         raise typer.Exit(code=1)
@@ -64,7 +74,7 @@ def order_files(
         f"[bold cyan]Processing files starting at index {start}...[/bold cyan]"
     )
 
-    results = organizer.order_files(folder, dry_run=dry_run, start_index=start)
+    results = _get_organizer().order_files(folder, dry_run=dry_run, start_index=start)
 
     # 4. Report
     # Print the log of actions (limited to last 10 if too many, to avoid spam)
@@ -111,8 +121,8 @@ def smart_sort(
 
     console.print(f"[cyan]Analyzing {len(files)} files with AI...[/cyan]")
 
-    # engine is the AIEngine instance
-    categories = engine.categorize_files(files)
+    ai_eng = _get_ai_engine()
+    categories = ai_eng.categorize_files(files)
 
     for filename, category in categories.items():
         src = path / filename
@@ -153,7 +163,8 @@ def find_duplicates(
     console.print(f"[cyan]Scanning for duplicates in {folder}...[/cyan]")
 
     try:
-        duplicates = organizer.find_duplicates(folder, recursive=recursive)
+        org = _get_organizer()
+        duplicates = org.find_duplicates(folder, recursive=recursive)
 
         if not duplicates:
             console.print("[green]No duplicates found![/green]")
@@ -215,7 +226,8 @@ def secure_delete(
     console.print(f"[cyan]Shredding {target.name} ({passes} passes)...[/cyan]")
 
     try:
-        organizer.secure_delete(target, passes=passes)
+        org = _get_organizer()
+        org.secure_delete(target, passes=passes)
         log_success(f"File securely deleted: {target.name}")
     except Exception as e:
         log_error(f"Secure delete failed: {e}")
@@ -322,7 +334,8 @@ def backup_file(
         raise typer.Exit(1)
 
     try:
-        backup_path = organizer.create_backup(target, label=label)
+        org = _get_organizer()
+        backup_path = org.create_backup(target, label=label)
         log_success(f"Backup created: {backup_path}")
     except Exception as e:
         log_error(f"Backup failed: {e}")
@@ -344,13 +357,15 @@ def list_backups(
 
     if restore:
         try:
-            restored = organizer.restore_backup(restore, output)
+            org = _get_organizer()
+            restored = org.restore_backup(restore, output)
             log_success(f"Restored: {restored}")
         except Exception as e:
             log_error(f"Restore failed: {e}")
         return
 
-    backups = organizer.list_backups(filter)
+    org = _get_organizer()
+    backups = org.list_backups(filter)
 
     if not backups:
         console.print("[yellow]No backups found.[/yellow]")
@@ -385,7 +400,8 @@ def cleanup_backups(
             return
 
     try:
-        removed = organizer.cleanup_old_backups(days)
+        org = _get_organizer()
+        removed = org.cleanup_old_backups(days)
         log_success(f"Removed {removed} old backup(s)")
     except Exception as e:
         log_error(f"Cleanup failed: {e}")

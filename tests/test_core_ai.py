@@ -7,7 +7,7 @@ from max_cli.common.exceptions import MaxError
 class TestAIEngine:
     """Tests for AI operations."""
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_init_with_api_key(self, mock_settings, mock_openai):
         """Test initialization with API key."""
@@ -15,11 +15,14 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
 
         engine = AIEngine()
-        assert engine.client is not None
+        assert engine._client is None
+        client = engine.client
+        assert client is not None
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_init_without_api_key(self, mock_settings, mock_openai):
         """Test initialization without API key."""
@@ -27,9 +30,10 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_openai.return_value = None
+        mock_settings.OLLAMA_ENABLED = False
 
         engine = AIEngine()
+        assert engine._client is None
         assert engine.client is None
 
     @patch("os.listdir")
@@ -56,7 +60,7 @@ class TestAIEngine:
 
         assert context == ""
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_interpret_intent_no_client(self, mock_settings, mock_openai):
         """Test interpret intent without client."""
@@ -64,6 +68,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
         mock_openai.return_value = None
 
         engine = AIEngine()
@@ -72,7 +77,7 @@ class TestAIEngine:
         with pytest.raises(MaxError, match="Missing AI"):
             engine.interpret_intent("test prompt", mock_app)
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_categorize_files(self, mock_settings, mock_openai):
         """Test file categorization."""
@@ -80,6 +85,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
 
         mock_client = MagicMock()
         mock_response = MagicMock()
@@ -92,14 +98,14 @@ class TestAIEngine:
         mock_openai.return_value = mock_client
 
         engine = AIEngine()
-        engine.client = mock_client
+        engine._client = mock_client
 
         result = engine.categorize_files(["file1.txt", "file2.txt"])
 
         assert "file1.txt" in result
 
     @patch("max_cli.core.engines.ai_engine.get_default_cache")
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_categorize_files_fallback(self, mock_settings, mock_openai, mock_cache):
         """Test file categorization fallback on error."""
@@ -109,6 +115,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("API Error")
@@ -116,13 +123,13 @@ class TestAIEngine:
         mock_openai.return_value = mock_client
 
         engine = AIEngine()
-        engine.client = mock_client
+        engine._client = mock_client
 
         result = engine.categorize_files(["file1.txt", "file2.txt"])
 
         assert result == {"file1.txt": "Other", "file2.txt": "Other"}
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_generate_image(self, mock_settings, mock_openai):
         """Test image generation."""
@@ -130,6 +137,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
 
         mock_client = MagicMock()
         mock_response = MagicMock()
@@ -143,13 +151,13 @@ class TestAIEngine:
         mock_openai.return_value = mock_client
 
         engine = AIEngine()
-        engine.client = mock_client
+        engine._client = mock_client
 
         result = engine.generate_image("A test image")
 
         assert "https://example.com/image.png" in result
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_generate_image_no_client(self, mock_settings, mock_openai):
         """Test image generation without client."""
@@ -157,6 +165,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
         mock_openai.return_value = None
 
         engine = AIEngine()
@@ -164,7 +173,7 @@ class TestAIEngine:
         with pytest.raises(MaxError, match="AI Client not configured"):
             engine.generate_image("A test image")
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_extract_image_url_markdown(self, mock_settings, mock_openai):
         """Test extracting image URL from markdown."""
@@ -172,6 +181,7 @@ class TestAIEngine:
         mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
         mock_settings.AI_MODEL = "gpt-4"
         mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+        mock_settings.OLLAMA_ENABLED = False
 
         mock_client = MagicMock()
 
@@ -186,11 +196,12 @@ class TestAIEngine:
 
         assert result == "https://example.com/img.png"
 
-    @patch("max_cli.core.engines.ai_engine.OpenAI")
+    @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
     def test_extract_image_url_not_found(self, mock_settings, mock_openai):
         """Test error when no image URL found."""
         mock_settings.OPENAI_API_KEY = "test-key"
+        mock_settings.OLLAMA_ENABLED = False
 
         mock_openai.return_value = MagicMock()
 

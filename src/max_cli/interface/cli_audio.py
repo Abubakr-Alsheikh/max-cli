@@ -3,28 +3,36 @@ from pathlib import Path
 from typing import Optional, List
 from rich.table import Table
 
-from max_cli.core.engines.audio_metadata_engine import AudioMetadataEngine
-from max_cli.core.engines.media_engine import MediaEngine
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 
 app = typer.Typer()
-engine = AudioMetadataEngine()
-
-_media_engine: Optional[MediaEngine] = None
-try:
-    _media_engine = MediaEngine()
-except RuntimeError:
-    pass
 
 
-def _check_engine():
-    if not _media_engine:
+def _get_engine():
+    from max_cli.core.engines.audio_metadata_engine import AudioMetadataEngine
+
+    return AudioMetadataEngine()
+
+
+def _get_media_engine():
+    try:
+        from max_cli.core.engines.media_engine import MediaEngine
+
+        return MediaEngine()
+    except RuntimeError:
+        return None
+
+
+def _check_media_engine():
+    eng = _get_media_engine()
+    if not eng:
         log_error(
             "FFmpeg is not installed. Please install it to use audio compression."
         )
         log_error("Try: 'brew install ffmpeg' or 'sudo apt install ffmpeg'")
         raise typer.Exit(1)
+    return eng
 
 
 @app.command("compress")
@@ -51,8 +59,7 @@ def compress_audio(
     Defaults to high-quality MP3 (128k) with stereo.
     Use --quality s and --mono for maximum space savings.
     """
-    _check_engine()
-    assert _media_engine is not None
+    _check_media_engine()
 
     if not target.exists():
         log_error(f"File not found: {target}")
@@ -70,7 +77,8 @@ def compress_audio(
 
     with console.status("[bold green]Encoding audio...[/bold green]"):
         try:
-            _media_engine.compress_audio(
+            media_eng = _check_media_engine()
+            media_eng.compress_audio(
                 target,
                 output,
                 bitrate=bitrate,
@@ -99,7 +107,8 @@ def get_metadata(
     Display all metadata from an audio file (title, artist, album, genre, etc.).
     """
     try:
-        metadata = engine.get_metadata(target)
+        eng = _get_engine()
+        metadata = eng.get_metadata(target)
 
         table = Table(title=f"Metadata: {target.name}", show_header=False)
         table.add_column("Field", style="cyan")
@@ -163,7 +172,8 @@ def set_metadata(
         return
 
     try:
-        result = engine.set_metadata(
+        eng = _get_engine()
+        result = eng.set_metadata(
             target,
             output,
             title=title,
@@ -198,7 +208,8 @@ def clear_metadata(
     Remove all metadata from an audio file.
     """
     try:
-        result = engine.clear_metadata(target, output, keep_duration=keep_duration)
+        eng = _get_engine()
+        result = eng.clear_metadata(target, output, keep_duration=keep_duration)
         log_success(f"Cleared metadata: {result}")
 
     except Exception as e:
@@ -249,7 +260,8 @@ def batch_set_metadata(
         try:
             track = str(current_track) if tracknumber or start else None
 
-            engine.set_metadata(
+            eng = _get_engine()
+            eng.set_metadata(
                 target,
                 title=title,
                 artist=artist,
@@ -310,7 +322,8 @@ def organize_files(
     console.print(f"[cyan]Organizing {len(targets)} files into {target_dir}...[/cyan]")
 
     with console.status("[bold green]Organizing files...[/bold green]"):
-        result = engine.organize(targets, target_dir, pattern)
+        eng = _get_engine()
+        result = eng.organize(targets, target_dir, pattern)
 
     if result["total_moved"]:
         console.print(f"[green]Moved {result['total_moved']} files:[/green]")
