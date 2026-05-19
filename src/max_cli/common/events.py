@@ -16,6 +16,8 @@ class EventType(str, Enum):
     STATUS = "status"
     LOG = "log"
     COMPLETE = "complete"
+    DOWNLOAD_PROGRESS = "download_progress"
+    DOWNLOAD_COMPLETE = "download_complete"
 
 
 class EventLevel(str, Enum):
@@ -86,6 +88,24 @@ class CompleteEvent(BaseEvent):
     summary: dict[str, Any] = {}
 
 
+class DownloadProgressEvent(BaseEvent):
+    type: EventType = EventType.DOWNLOAD_PROGRESS
+    url: str = ""
+    filename: str = ""
+    downloaded_bytes: int = 0
+    total_bytes: int = 0
+    speed: float = 0.0
+    eta: int = 0
+    percentage: float = 0.0
+
+
+class DownloadCompleteEvent(BaseEvent):
+    type: EventType = EventType.DOWNLOAD_COMPLETE
+    url: str = ""
+    filename: str = ""
+    total_bytes: int = 0
+
+
 MaxEvent = (
     ProgressEvent
     | BatchProgressEvent
@@ -95,6 +115,8 @@ MaxEvent = (
     | StatusEvent
     | LogEvent
     | CompleteEvent
+    | DownloadProgressEvent
+    | DownloadCompleteEvent
 )
 
 

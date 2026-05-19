@@ -62,6 +62,12 @@ class NetworkEngine:
     ):
         import yt_dlp  # type: ignore[import-untyped]
 
+        from max_cli.common.events import (
+            DownloadCompleteEvent,
+            DownloadProgressEvent,
+            get_emitter,
+        )
+
         if not self.has_js:
             from max_cli.common.logger import console
 
@@ -78,6 +84,35 @@ class NetworkEngine:
         vid_height = quality_info["height"]
         audio_bitrate = quality_info["bitrate"]
 
+        emitter = get_emitter()
+
+        def _yt_dlp_hook(d: dict) -> None:
+            status = d.get("status")
+            if status == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                downloaded = d.get("downloaded_bytes", 0)
+                pct = (downloaded / total * 100) if total > 0 else 0.0
+                emitter.emit(
+                    DownloadProgressEvent(
+                        url=url,
+                        filename=d.get("filename", ""),
+                        downloaded_bytes=downloaded,
+                        total_bytes=total,
+                        speed=d.get("speed", 0),
+                        eta=d.get("eta", 0),
+                        percentage=pct,
+                    )
+                )
+            elif status == "finished":
+                total = d.get("total_bytes", 0)
+                emitter.emit(
+                    DownloadCompleteEvent(
+                        url=url,
+                        filename=d.get("filename", ""),
+                        total_bytes=total,
+                    )
+                )
+
         ydl_opts = {
             "outtmpl": str(output_path / "%(title)s.%(ext)s"),
             "quiet": True,
@@ -91,15 +126,16 @@ class NetworkEngine:
             "fragment_retries": 10,
             "file_access_retries": 5,
             "extractor_retries": 5,
+            "progress_hooks": [_yt_dlp_hook],
         }
+
+        if progress_hook:
+            ydl_opts["progress_hooks"].append(progress_hook)
 
         if subtitles:
             ydl_opts["writesubtitles"] = True
             ydl_opts["writeautomaticsub"] = True
             ydl_opts["subtitleslangs"] = ["en", "all"]
-
-        if progress_hook:
-            ydl_opts["progress_hooks"] = [progress_hook]
 
         post_processors = []
         if include_metadata:
