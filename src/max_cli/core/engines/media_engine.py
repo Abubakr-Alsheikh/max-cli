@@ -12,13 +12,31 @@ class MediaEngine:
     Requires FFmpeg to be installed in the system PATH.
     """
 
-    def __init__(self):
-        self.ffmpeg_path = shutil.which("ffmpeg")
-        if not self.ffmpeg_path:
-            raise RuntimeError(
-                "FFmpeg is not installed or not in PATH. "
-                "Install it via: 'brew install ffmpeg', 'sudo apt install ffmpeg', or Download from ffmpeg.org"
-            )
+    def __init__(self, auto_resolve: bool = True) -> None:
+        self.ffmpeg_path: Path = self._resolve_ffmpeg(auto_resolve)
+
+    def _resolve_ffmpeg(self, auto_resolve: bool) -> Path:
+        system_path = shutil.which("ffmpeg")
+        if system_path:
+            return Path(system_path)
+
+        from max_cli.common.ffmpeg_resolver import FFmpegResolver
+
+        resolver = FFmpegResolver()
+        if resolver.local_path.exists() and resolver._validate_binary(
+            resolver.local_path
+        ):
+            return resolver.local_path
+
+        if auto_resolve:
+            from max_cli.common.ffmpeg_resolver import resolve_ffmpeg
+
+            return resolve_ffmpeg(auto_download=True)
+
+        raise RuntimeError(
+            "FFmpeg is not installed or not in PATH. "
+            "Install it via: 'brew install ffmpeg', 'sudo apt install ffmpeg', or Download from ffmpeg.org"
+        )
 
     def compress_video(
         self, input_path: Path, output_path: Path, crf: int = 28, preset: str = "medium"
@@ -30,7 +48,7 @@ class MediaEngine:
         """
         # cmd structure: ffmpeg -i input -vcodec libx264 -crf 28 -preset fast output
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",  # Overwrite output without asking (Typer handles the safety check)
             "-i",
             str(input_path),
@@ -60,7 +78,7 @@ class MediaEngine:
         """
         # Try copying streams first (Fastest)
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -76,7 +94,7 @@ class MediaEngine:
         except subprocess.CalledProcessError:
             # If copy fails (incompatible container), re-encode
             cmd_reencode = [
-                "ffmpeg",
+                str(self.ffmpeg_path),
                 "-y",
                 "-i",
                 str(input_path),
@@ -109,7 +127,7 @@ class MediaEngine:
         codec = codec_map.get(ext, "libmp3lame")
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -136,7 +154,7 @@ class MediaEngine:
         filters = f"fps={fps},scale={scale}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -162,7 +180,7 @@ class MediaEngine:
         end: Timestamp (e.g., "00:02:00")
         duration: Seconds to keep (e.g., "30")
         """
-        cmd = ["ffmpeg", "-y", "-i", str(input_path), "-ss", start]
+        cmd = [str(self.ffmpeg_path), "-y", "-i", str(input_path), "-ss", start]
 
         if end:
             cmd.extend(["-to", end])
@@ -197,7 +215,7 @@ class MediaEngine:
         Takes a snapshot at a specific time.
         """
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-ss",
             time,
@@ -222,7 +240,7 @@ class MediaEngine:
         # We use the 'volume' filter.
         # Format: "volume=10dB"
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -241,7 +259,7 @@ class MediaEngine:
         Removes audio track completely.
         """
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -271,7 +289,7 @@ class MediaEngine:
             preset: Encoding preset for transcoding
         """
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-re",
             "-i",
             str(input_path),
@@ -307,14 +325,17 @@ class MediaEngine:
             port: HTTP server port
             bitrate: Transcoding bitrate
         """
-        import os
+        import tempfile
         import threading
         from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-        os.makedirs("/tmp/hls", exist_ok=True)
+        from max_cli.common.logger import console
+
+        hls_dir = Path(tempfile.gettempdir()) / "max_cli_hls"
+        hls_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-re",
             "-i",
             str(input_path),
@@ -338,17 +359,22 @@ class MediaEngine:
             "delete_segments",
             "-start_number",
             "1",
-            "/tmp/hls/live.m3u8",
+            str(hls_dir / "live.m3u8"),
         ]
 
         class QuietHandler(SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=str(hls_dir), **kwargs)
+
             def log_message(self, format, *args):
                 pass
 
         def run_server():
-            os.chdir("/tmp/hls")
             server = HTTPServer(("", port), QuietHandler)
-            print(f"Live preview available at http://localhost:{port}/live.m3u8")
+            console.print(
+                f"[cyan]Live preview available at "
+                f"http://localhost:{port}/live.m3u8[/cyan]"
+            )
             server.serve_forever()
 
         thread = threading.Thread(target=run_server, daemon=True)
@@ -399,7 +425,7 @@ class MediaEngine:
                     f.write(f"file '{path.absolute()}'\\n")
 
             cmd = [
-                "ffmpeg",
+                str(self.ffmpeg_path),
                 "-y",
                 "-f",
                 "concat",
@@ -476,7 +502,7 @@ class MediaEngine:
             contrast: 0.0 (grayscale) to 2.0 (more contrast), default 1.0
         """
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -514,7 +540,7 @@ class MediaEngine:
             )
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -537,7 +563,7 @@ class MediaEngine:
 
         try:
             cmd1 = [
-                "ffmpeg",
+                str(self.ffmpeg_path),
                 "-y",
                 "-i",
                 str(input_path),
@@ -550,7 +576,7 @@ class MediaEngine:
             self._run(cmd1)
 
             cmd2 = [
-                "ffmpeg",
+                str(self.ffmpeg_path),
                 "-y",
                 "-i",
                 str(input_path),
@@ -579,7 +605,7 @@ class MediaEngine:
             target_level: Target loudness in dB (default -20.0 LUFS)
         """
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -622,7 +648,7 @@ class MediaEngine:
         codec = codec_map.get(ext, "libmp3lame")
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -671,7 +697,7 @@ class MediaEngine:
         target_codec = codec_map.get(output_path.suffix.lower(), codec)
 
         cmd = [
-            "ffmpeg",
+            str(self.ffmpeg_path),
             "-y",
             "-i",
             str(input_path),
@@ -714,7 +740,12 @@ class MediaEngine:
         else:
             input_source = ":0.0"
 
-        cmd = ["ffmpeg", "-y", "-f", "gdigrab" if system == "Windows" else "x11grab"]
+        cmd = [
+            str(self.ffmpeg_path),
+            "-y",
+            "-f",
+            "gdigrab" if system == "Windows" else "x11grab",
+        ]
 
         if system == "Windows":
             cmd.extend(["-i", "desktop"])

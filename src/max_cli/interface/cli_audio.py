@@ -19,20 +19,10 @@ def _get_media_engine():
     try:
         from max_cli.core.engines.media_engine import MediaEngine
 
-        return MediaEngine()
-    except RuntimeError:
-        return None
-
-
-def _check_media_engine():
-    eng = _get_media_engine()
-    if not eng:
-        log_error(
-            "FFmpeg is not installed. Please install it to use audio compression."
-        )
-        log_error("Try: 'brew install ffmpeg' or 'sudo apt install ffmpeg'")
+        return MediaEngine(auto_resolve=True)
+    except RuntimeError as e:
+        log_error(str(e))
         raise typer.Exit(1)
-    return eng
 
 
 @app.command("compress")
@@ -59,7 +49,7 @@ def compress_audio(
     Defaults to high-quality MP3 (128k) with stereo.
     Use --quality s and --mono for maximum space savings.
     """
-    _check_media_engine()
+    _get_media_engine()
 
     if not target.exists():
         log_error(f"File not found: {target}")
@@ -77,7 +67,7 @@ def compress_audio(
 
     with console.status("[bold green]Encoding audio...[/bold green]"):
         try:
-            media_eng = _check_media_engine()
+            media_eng = _get_media_engine()
             media_eng.compress_audio(
                 target,
                 output,

@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from max_cli.core.engines.media_engine import MediaEngine
 
@@ -6,13 +7,17 @@ from max_cli.core.engines.media_engine import MediaEngine
 class TestMediaEngine:
     """Tests for media manipulation operations."""
 
+    @patch("max_cli.common.ffmpeg_resolver.FFmpegResolver")
     @patch("shutil.which")
-    def test_init_without_ffmpeg(self, mock_which):
+    def test_init_without_ffmpeg(self, mock_which, mock_resolver_class):
         """Test initialization fails without FFmpeg."""
         mock_which.return_value = None
+        mock_resolver = MagicMock()
+        mock_resolver.local_path.exists.return_value = False
+        mock_resolver_class.return_value = mock_resolver
 
         with pytest.raises(RuntimeError, match="FFmpeg is not installed"):
-            MediaEngine()
+            MediaEngine(auto_resolve=False)
 
     @patch("shutil.which")
     def test_init_with_ffmpeg(self, mock_which):
@@ -20,7 +25,7 @@ class TestMediaEngine:
         mock_which.return_value = "/usr/bin/ffmpeg"
 
         engine = MediaEngine()
-        assert engine.ffmpeg_path == "/usr/bin/ffmpeg"
+        assert engine.ffmpeg_path == Path("/usr/bin/ffmpeg")
 
     @patch("subprocess.run")
     @patch("shutil.which")
@@ -169,3 +174,38 @@ class TestMediaEngine:
 
         with pytest.raises(RuntimeError, match="FFmpeg Error"):
             engine.compress_video(input_path, output_path)
+
+
+class TestMediaEngineResolvedPath:
+    def test_uses_resolved_path(self):
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            engine = MediaEngine()
+            assert engine.ffmpeg_path == Path("/usr/bin/ffmpeg")
+
+    def test_compress_video_uses_resolved_path(self, tmp_path):
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock()
+            input_path = tmp_path / "input.mp4"
+            output_path = tmp_path / "output.mp4"
+            input_path.write_text("video content")
+
+            engine = MediaEngine()
+            engine.compress_video(input_path, output_path, crf=28, preset="medium")
+
+            call_args = mock_run.call_args[0][0]
+            assert call_args[0] == str(Path("/usr/bin/ffmpeg"))
+            assert call_args[0] != "ffmpeg"
+
+    def test_auto_resolve_on_init(self):
+        mock_path = Path("/custom/ffmpeg")
+        with (
+            patch("shutil.which", return_value=None),
+            patch(
+                "max_cli.common.ffmpeg_resolver.resolve_ffmpeg", return_value=mock_path
+            ),
+        ):
+            engine = MediaEngine()
+            assert engine.ffmpeg_path == mock_path

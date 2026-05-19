@@ -167,6 +167,8 @@ def compress_images(...):
 - Never import heavy third-party libraries at module level (PIL, fitz, yt_dlp, openai, mutagen, requests) — always use lazy imports inside methods.
 - Never instantiate Engine classes at module level in interface files — always use `_get_engine()` helper functions.
 - Never import engine instances from other interface files (e.g., `from cli_ai import engine`) — use local `_get_engine()` calls instead.
+- Never hardcode `"ffmpeg"` in subprocess commands — always use `str(self.ffmpeg_path)` from the resolved path.
+- Never hardcode `/tmp/` paths — always use `tempfile.gettempdir()` or `Path.home() / ".max_cli"`.
 
 ## 7. Reference Implementations
 
@@ -199,6 +201,12 @@ def compress_images(...):
   - Interface: `src/max_cli/interface/cli_queue.py` (`max queue` command group)
   - Executors: `src/max_cli/core/engines/media_engine.py` (registers video task executors)
   - *Shows: Heavy commands support `--queue` flag, tasks are executed via registered executors, results persisted to history.*
+
+- **FFmpeg Auto-Resolution Pattern**:
+  - Resolver: `src/max_cli/common/ffmpeg_resolver.py` (3-tier: PATH → `~/.max_cli/bin/` → auto-download)
+  - Engine: `src/max_cli/core/engines/media_engine.py` (`__init__` calls `_resolve_ffmpeg`, uses `self.ffmpeg_path` in all commands)
+  - Interface: `src/max_cli/interface/cli_media.py` (`_get_engine()` with `auto_resolve=True`)
+  - *Shows: Zero-friction onboarding — user never sees "FFmpeg not found". Binary auto-downloaded, validated, and cached.*
 
 ## 8. Escalation & Discovery
 

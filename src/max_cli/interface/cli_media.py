@@ -12,18 +12,10 @@ def _get_engine():
     try:
         from max_cli.core.engines.media_engine import MediaEngine
 
-        return MediaEngine()
-    except RuntimeError:
-        return None
-
-
-def _check_engine():
-    eng = _get_engine()
-    if not eng:
-        log_error("FFmpeg is not installed. Please install it to use media features.")
-        log_error("Try: 'brew install ffmpeg' or 'sudo apt install ffmpeg'")
+        return MediaEngine(auto_resolve=True)
+    except RuntimeError as e:
+        log_error(str(e))
         raise typer.Exit(1)
-    return eng
 
 
 @app.command("compress")
@@ -39,7 +31,7 @@ def compress_video(
     """
     Compress video files to H.264 MP4.
     """
-    _check_engine()
+    _get_engine()
 
     crf_map = {
         "high": 23,
@@ -81,7 +73,7 @@ def compress_video(
 
     with console.status("[bold green]Encoding... (CPU working hard)[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.compress_video(target, output, crf=crf)
 
             orig_size = target.stat().st_size
@@ -108,14 +100,14 @@ def convert_format(
     """
     Convert video containers (e.g., MKV -> MP4).
     """
-    _check_engine()
+    _get_engine()
 
     output = target.parent / f"{target.stem}.{fmt}"
 
     console.print(f"[cyan]Converting {target.suffix} -> .{fmt}...[/cyan]")
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.convert_format(target, output)
         log_success(f"Converted file: {output}")
     except Exception as e:
@@ -140,7 +132,7 @@ def video_to_audio(
     """
     Convert a video file into a standalone audio file.
     """
-    _check_engine()
+    _get_engine()
 
     if not target.exists():
         log_error(f"File not found: {target}")
@@ -163,7 +155,7 @@ def video_to_audio(
 
     with console.status("[bold green]Ripping audio track...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.extract_audio(target, output, bitrate=bitrate)
 
             final_size = output.stat().st_size
@@ -183,7 +175,7 @@ def create_gif(
     """
     Convert a video clip into a high-quality GIF.
     """
-    _check_engine()
+    _get_engine()
 
     if not output:
         output = target.parent / f"{target.stem}.gif"
@@ -192,7 +184,7 @@ def create_gif(
 
     with console.status("[bold green]Rendering palette & GIF...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.video_to_gif(target, output, fps, width)
             log_success(f"GIF saved: {output}")
         except Exception as e:
@@ -214,7 +206,7 @@ def cut_video(
     """
     Trim a video file. Provide --end OR --duration, or neither to cut to end of file.
     """
-    _check_engine()
+    _get_engine()
     audio_extensions = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
     is_audio = target.suffix.lower() in audio_extensions
 
@@ -230,7 +222,7 @@ def cut_video(
     )
     with console.status("[bold green]Processing cut...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.trim_video(target, output, start, end, duration)
             log_success(f"Clip saved: {output}")
         except Exception as e:
@@ -248,12 +240,12 @@ def snapshot(
     """
     Take a high-quality JPG screenshot at a specific time.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         output = target.parent / f"{target.stem}_thumb.jpg"
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.get_thumbnail(target, output, time)
         log_success(f"Thumbnail saved: {output}")
     except Exception as e:
@@ -269,7 +261,7 @@ def boost_volume(
     """
     Increase volume (Useful for quiet recordings).
     """
-    _check_engine()
+    _get_engine()
     if not output:
         ext = target.suffix
         output = target.parent / f"{target.stem}_boosted{ext}"
@@ -279,7 +271,7 @@ def boost_volume(
     # This is fast because we copy video stream and only re-encode audio
     with console.status("[bold green]Adjusting audio...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.adjust_volume(target, output, db)
             log_success(f"Louder file saved: {output}")
         except Exception as e:
@@ -294,14 +286,14 @@ def mute_track(
     """
     Remove audio track from video.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         output = target.parent / f"{target.stem}_mute.mp4"
 
     console.print("[cyan]Removing audio track...[/cyan]")
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.mute_video(target, output)
         log_success(f"Muted video saved: {output}")
     except Exception as e:
@@ -324,7 +316,7 @@ def concat_videos(
 
     Use a text file with 'file /path/to/video.mp4' lines, or a glob pattern.
     """
-    _check_engine()
+    _get_engine()
 
     input_files: List[Path] = []
 
@@ -359,7 +351,7 @@ def concat_videos(
     with console.status("[bold green]Merging videos...[/bold green]"):
         try:
             concat_method = "concat" if method == "fast" else "filter"
-            eng = _check_engine()
+            eng = _get_engine()
             eng.concatenate_videos(input_files, output, method=concat_method)
             log_success(f"Videos merged: {output}")
         except Exception as e:
@@ -380,7 +372,7 @@ def adjust_brightness_cmd(
     """
     Adjust video brightness and contrast.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         output = target.parent / f"{target.stem}_adjusted.mp4"
 
@@ -390,7 +382,7 @@ def adjust_brightness_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.adjust_brightness(target, output, brightness, contrast)
             log_success(f"Video saved: {output}")
         except Exception as e:
@@ -411,7 +403,7 @@ def color_grade_cmd(
     """
     Apply color grading presets to video.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         output = target.parent / f"{target.stem}_{preset}.mp4"
 
@@ -419,7 +411,7 @@ def color_grade_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.apply_color_preset(target, output, preset)
             log_success(f"Video saved: {output}")
         except Exception as e:
@@ -434,7 +426,7 @@ def stabilize_cmd(
     """
     Stabilize shaky video footage.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         output = target.parent / f"{target.stem}_stabilized.mp4"
 
@@ -444,7 +436,7 @@ def stabilize_cmd(
         "[bold green]Stabilizing (this may take a while)...[/bold green]"
     ):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.stabilize_video(target, output)
             log_success(f"Stabilized video saved: {output}")
         except Exception as e:
@@ -462,7 +454,7 @@ def normalize_audio_cmd(
     """
     Normalize audio loudness to a target level.
     """
-    _check_engine()
+    _get_engine()
     if not output:
         ext = target.suffix
         output = target.parent / f"{target.stem}_normalized{ext}"
@@ -471,7 +463,7 @@ def normalize_audio_cmd(
 
     with console.status("[bold green]Processing...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.normalize_audio(target, output, level)
             log_success(f"Normalized audio saved: {output}")
         except Exception as e:
@@ -492,7 +484,7 @@ def convert_audio_cmd(
     """
     Convert audio between formats (e.g., WAV to MP3).
     """
-    _check_engine()
+    _get_engine()
 
     bitrate_map = {"s": "128k", "m": "192k", "h": "320k"}
     bitrate = bitrate_map.get(quality.lower()[0], "192k")
@@ -508,7 +500,7 @@ def convert_audio_cmd(
 
     with console.status("[bold green]Converting audio...[/bold green]"):
         try:
-            eng = _check_engine()
+            eng = _get_engine()
             eng.convert_audio(target, output, bitrate=bitrate)
             log_success(f"Audio converted: {output}")
         except Exception as e:
@@ -529,13 +521,13 @@ def screen_record_cmd(
 
     Press Ctrl+C to stop recording (if no duration specified).
     """
-    _check_engine()
+    _get_engine()
 
     console.print("[cyan]Starting screen recording...[/cyan]")
     console.print("[yellow]Press Ctrl+C to stop[/yellow]")
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.screen_record(output, duration=duration, fps=fps, audio=audio)
         log_success(f"Recording saved: {output}")
     except Exception as e:
@@ -560,7 +552,7 @@ def stream_video_cmd(
 
     Example: max media stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
     """
-    _check_engine()
+    _get_engine()
 
     if not target.exists():
         log_error(f"File not found: {target}")
@@ -570,7 +562,7 @@ def stream_video_cmd(
     console.print("[yellow]Press Ctrl+C to stop streaming[/yellow]")
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.stream_to_rtmp(target, rtmp_url, bitrate=bitrate, preset=preset)
         log_success("Streaming completed")
     except Exception as e:
@@ -590,7 +582,7 @@ def live_preview_cmd(
 
     Open http://localhost:8080/live.m3u8 in a player to watch.
     """
-    _check_engine()
+    _get_engine()
 
     if not target.exists():
         log_error(f"File not found: {target}")
@@ -601,7 +593,7 @@ def live_preview_cmd(
     console.print("[dim]Press Ctrl+C to stop[/dim]")
 
     try:
-        eng = _check_engine()
+        eng = _get_engine()
         eng.live_preview(target, port=port, bitrate=bitrate)
     except Exception as e:
         log_error(f"Preview failed: {e}")
