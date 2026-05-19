@@ -1,7 +1,9 @@
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
 
 class MediaEngine:
@@ -745,3 +747,62 @@ class MediaEngine:
         )
 
         self._run(cmd)
+
+
+def _video_compress_executor(task: TaskItem) -> Dict[str, Any]:
+    engine = MediaEngine()
+    payload = task.payload
+    input_path = Path(payload["input_path"])
+    output_path = Path(
+        payload.get(
+            "output_path", input_path.parent / f"{input_path.stem}_compressed.mp4"
+        )
+    )
+    engine.compress_video(
+        input_path=input_path,
+        output_path=output_path,
+        crf=payload.get("crf", 28),
+        preset=payload.get("preset", "medium"),
+    )
+    return {
+        "output_path": str(output_path),
+        "output_files": [str(output_path)],
+    }
+
+
+def _video_convert_executor(task: TaskItem) -> Dict[str, Any]:
+    engine = MediaEngine()
+    payload = task.payload
+    input_path = Path(payload["input_path"])
+    output_path = Path(
+        payload.get("output_path", input_path.parent / f"{input_path.stem}.mp4")
+    )
+    engine.convert_format(input_path=input_path, output_path=output_path)
+    return {
+        "output_path": str(output_path),
+        "output_files": [str(output_path)],
+    }
+
+
+def _video_to_audio_executor(task: TaskItem) -> Dict[str, Any]:
+    engine = MediaEngine()
+    payload = task.payload
+    input_path = Path(payload["input_path"])
+    ext = payload.get("format", "mp3")
+    output_path = Path(
+        payload.get("output_path", input_path.parent / f"{input_path.stem}.{ext}")
+    )
+    engine.extract_audio(
+        input_path=input_path,
+        output_path=output_path,
+        bitrate=payload.get("bitrate", "192k"),
+    )
+    return {
+        "output_path": str(output_path),
+        "output_files": [str(output_path)],
+    }
+
+
+register_executor(TaskType.VIDEO_COMPRESS, _video_compress_executor)
+register_executor(TaskType.VIDEO_CONVERT, _video_convert_executor)
+register_executor(TaskType.VIDEO_TO_AUDIO, _video_to_audio_executor)

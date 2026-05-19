@@ -149,6 +149,7 @@ def compress_images(...):
 - Use custom exceptions from `max_cli.common.exceptions` (`MaxError`, `ResourceNotFoundError`).
 - Use `console`, `log_success`, and `log_error` from `max_cli.common.logger` for user output in the `interface/` layer.
 - Use the event system (`EventEmitter` from `max_cli.common.events`, `EventSubscriber` from `max_cli.interface.event_subscriber`) for progress tracking — never pass Rich UI objects into core/common functions.
+- Use the task queue system (`DaemonManager` from `max_cli.core.engines.daemon_manager`, `TaskItem`/`TaskType` from `max_cli.core.engines.task_queue`) for long-running operations — add `--queue` flag to heavy commands.
 - Add type hints to all function signatures.
 
 ### ⚠️ Ask First Before
@@ -191,6 +192,13 @@ def compress_images(...):
   - Batch: `src/max_cli/common/concurrent.py` (emits events, zero Rich imports)
   - Interface: `src/max_cli/interface/cli_images.py` (uses EventSubscriber)
   - *Shows: Core emits pure events, interface translates to Rich progress bars. Core stays 100% UI-agnostic.*
+
+- **Task Queue Pattern**:
+  - Schema: `src/max_cli/core/engines/task_queue.py` (TaskItem, TaskType, executor registry)
+  - Manager: `src/max_cli/core/engines/daemon_manager.py` (queue operations, daemon processing)
+  - Interface: `src/max_cli/interface/cli_queue.py` (`max queue` command group)
+  - Executors: `src/max_cli/core/engines/media_engine.py` (registers video task executors)
+  - *Shows: Heavy commands support `--queue` flag, tasks are executed via registered executors, results persisted to history.*
 
 ## 8. Escalation & Discovery
 

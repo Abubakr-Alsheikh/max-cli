@@ -34,22 +34,44 @@ def compress_video(
     level: str = typer.Option(
         "balanced", help="Quality: high, balanced, max (smaller size)."
     ),
+    queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue"),
 ):
     """
     Compress video files to H.264 MP4.
     """
     _check_engine()
 
+    crf_map = {
+        "high": 23,
+        "balanced": 28,
+        "max": 35,
+    }
+
+    if queue:
+        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_queue import TaskItem, TaskType
+
+        dm = DaemonManager()
+        if not output:
+            output = target.parent / f"{target.stem}_compressed.mp4"
+        task = TaskItem(
+            type=TaskType.VIDEO_COMPRESS,
+            title=f"Compress {target.name}",
+            description=f"CRF={crf_map.get(level.lower(), 28)}, preset=medium",
+            payload={
+                "input_path": str(target),
+                "output_path": str(output),
+                "crf": crf_map.get(level.lower(), 28),
+                "preset": "medium",
+            },
+        )
+        dm.add(task)
+        console.print(f"[green]Queued:[/green] {target.name} (ID: {task.id})")
+        console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+        return
+
     if not output:
         output = target.parent / f"{target.stem}_compressed.mp4"
-
-    # Map friendly names to CRF values
-    # CRF: Lower = Better Quality / Higher Size
-    crf_map = {
-        "high": 23,  # Default FFmpeg quality
-        "balanced": 28,  # Good compression, decent quality
-        "max": 35,  # Very small size, visible artifacts
-    }
 
     crf = crf_map.get(level.lower(), 28)
 
@@ -57,7 +79,6 @@ def compress_video(
         f"[cyan]Compressing video (Level: {level})... This may take time.[/cyan]"
     )
 
-    # We use an indeterminate spinner because video encoding time varies wildly
     with console.status("[bold green]Encoding... (CPU working hard)[/bold green]"):
         try:
             eng = _check_engine()

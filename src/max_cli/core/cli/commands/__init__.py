@@ -7,6 +7,7 @@ from max_cli.core.cli.commands import (
     media,
     network,
     plugins as plugin_commands,
+    queue,
     tools,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "media",
     "network",
     "plugin_commands",
+    "queue",
     "tools",
 ]

@@ -17,6 +17,7 @@ def register(app: "Typer") -> None:
     commands.config.register(app)
     commands.plugin_commands.register(app)
     commands.audio.register(app)
+    commands.queue.register(app)
 
 
 init_plugins = plugins.init_plugins
