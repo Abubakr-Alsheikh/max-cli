@@ -74,10 +74,19 @@ def order_files(
         f"[bold cyan]Processing files starting at index {start}...[/bold cyan]"
     )
 
-    results = _get_organizer().order_files(folder, dry_run=dry_run, start_index=start)
+    txn = None
+    if not dry_run:
+        from max_cli.common.transaction_log import TransactionLog
 
-    # 4. Report
-    # Print the log of actions (limited to last 10 if too many, to avoid spam)
+        txn = TransactionLog(command="files order")
+
+    results = _get_organizer().order_files(
+        folder, dry_run=dry_run, start_index=start, transaction_log=txn
+    )
+
+    if txn:
+        txn.save()
+
     actions = results["actions"]
     if len(actions) > 20:
         for action in actions[:10]:
@@ -98,6 +107,7 @@ def order_files(
         )
     else:
         log_success("File ordering complete!")
+        console.print("[dim]Undo with: max files undo[/dim]")
 
 
 @app.command("smart-sort")
@@ -124,20 +134,25 @@ def smart_sort(
     ai_eng = _get_ai_engine()
     categories = ai_eng.categorize_files(files)
 
-    for filename, category in categories.items():
-        src = path / filename
-        dest_dir = path / category
+    txn = None
+    if not dry_run:
+        from max_cli.common.transaction_log import TransactionLog
 
-        console.print(
-            f"  [dim]{filename}[/dim][/dim] -> [bold cyan]{category}/[/bold cyan]"
-        )
+        txn = TransactionLog(command="files smart-sort")
 
-        if not dry_run:
-            dest_dir.mkdir(exist_ok=True)
-            src.rename(dest_dir / filename)
+    results = _get_organizer().smart_sort(
+        path, categories, dry_run=dry_run, transaction_log=txn
+    )
+
+    if txn:
+        txn.save()
+
+    for action in results["actions"]:
+        console.print(f"  {action}")
 
     if not dry_run:
-        log_success(f"Successfully organized {len(files)} files.")
+        log_success(f"Successfully organized {results['moved']} files.")
+        console.print("[dim]Undo with: max files undo[/dim]")
     else:
         console.print("[yellow]Dry run complete. No files moved.[/yellow]")
 
@@ -182,15 +197,21 @@ def find_duplicates(
             console.print()
 
         if delete:
-            removed = 0
-            for hash_val, paths in duplicates.items():
-                keep = paths[0]
-                for p in paths[1:]:
-                    p.unlink()
-                    removed += 1
-                    console.print(f"[red]Deleted:[/red] {p}")
+            from max_cli.common.transaction_log import TransactionLog
 
-            log_success(f"Removed {removed} duplicate(s). Kept: {keep}")
+            txn = TransactionLog(command="files duplicates --delete")
+
+            results = org.delete_duplicates(
+                folder, duplicates, transaction_log=txn, auto_backup=True
+            )
+
+            txn.save()
+
+            log_success(f"Removed {results['removed']} duplicate(s).")
+            if results["errors"]:
+                for err in results["errors"]:
+                    console.print(f"  [red]{err}[/red]")
+            console.print("[dim]Undo with: max files undo[/dim]")
         else:
             console.print("[dim]Run with --delete to remove duplicates[/dim]")
 
@@ -226,9 +247,15 @@ def secure_delete(
     console.print(f"[cyan]Shredding {target.name} ({passes} passes)...[/cyan]")
 
     try:
+        from max_cli.common.transaction_log import TransactionLog
+
+        txn = TransactionLog(command="files shred")
+
         org = _get_organizer()
-        org.secure_delete(target, passes=passes)
+        org.secure_delete(target, passes=passes, transaction_log=txn, auto_backup=True)
+        txn.save()
         log_success(f"File securely deleted: {target.name}")
+        console.print("[dim]Undo with: max files undo (restores from backup)[/dim]")
     except Exception as e:
         log_error(f"Secure delete failed: {e}")
 
@@ -405,3 +432,101 @@ def cleanup_backups(
         log_success(f"Removed {removed} old backup(s)")
     except Exception as e:
         log_error(f"Cleanup failed: {e}")
+
+
+@app.command("undo")
+def undo_last():
+    """Undo the last file operation (rename, move, delete)."""
+    from max_cli.common.transaction_log import TransactionLog, TransactionError
+
+    latest = TransactionLog.get_latest_group()
+    if not latest:
+        console.print("[yellow]No transaction history found. Nothing to undo.[/yellow]")
+        return
+
+    if latest["undo_status"] == "undone":
+        console.print(
+            f"[yellow]Last transaction ({latest['group_id']}) is already undone.[/yellow]"
+        )
+        console.print(
+            f"[dim]Command was: {latest['command']} at {latest['timestamp']}[/dim]"
+        )
+        return
+
+    console.print(
+        f"[cyan]Undoing: {latest['command']} "
+        f"({latest['operation_count']} operations)...[/cyan]"
+    )
+
+    try:
+        txn = TransactionLog.load(latest["group_id"])
+        results = txn.undo()
+
+        for msg in results:
+            console.print(f"  [green]+[/green] {msg}")
+
+        log_success("Undo complete! Files have been restored.")
+    except TransactionError as e:
+        log_error(f"Undo failed: {e}")
+        console.print(
+            "[yellow]Some files may have been partially restored. "
+            "Check the transaction log for details.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+
+@app.command("history")
+@app.command("hist", hidden=True)
+def transaction_history(
+    limit: int = typer.Option(10, "-n", "--limit", help="Number of entries to show."),
+    verbose: bool = typer.Option(
+        False, "-v", "--verbose", help="Show individual operations."
+    ),
+):
+    """Show recent file operation history."""
+    from datetime import datetime
+
+    from max_cli.common.transaction_log import TransactionLog
+
+    groups = TransactionLog.list_groups()
+    if not groups:
+        console.print("[yellow]No transaction history found.[/yellow]")
+        return
+
+    console.print(
+        f"[cyan]Recent file operations (showing {min(limit, len(groups))}):[/cyan]\n"
+    )
+
+    for g in groups[:limit]:
+        status_icon = "✓" if g["undo_status"] == "undone" else "•"
+        status_color = "dim" if g["undo_status"] == "undone" else "cyan"
+
+        try:
+            ts = datetime.fromisoformat(g["timestamp"])
+            time_str = ts.strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            time_str = g["timestamp"]
+
+        console.print(
+            f"  [{status_color}]{status_icon}[/{status_color}] "
+            f"[bold]{g['command']}[/bold] — {time_str}"
+        )
+        console.print(
+            f"     ID: {g['group_id']} | "
+            f"Operations: {g['operation_count']} | "
+            f"Status: {g['status']}"
+        )
+        if g["undo_status"]:
+            console.print(f"     Undo: {g['undo_status']}")
+
+        if verbose:
+            txn = TransactionLog.load(g["group_id"])
+            for op in txn.operations:
+                op_type = op["op_type"]
+                orig = op["original_path"] or "(none)"
+                new = op["new_path"] or "(none)"
+                console.print(f"       {op_type}: {orig} -> {new}")
+
+        console.print()
+
+    console.print("[dim]Undo the last operation with: max files undo[/dim]")

@@ -1,5 +1,8 @@
 from pathlib import Path
-from typing import Dict, Optional, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from max_cli.common.transaction_log import TransactionLog
 
 
 SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
@@ -233,6 +236,7 @@ class AudioMetadataEngine:
         source_paths: List[Path],
         target_dir: Path,
         pattern: str = "artist",
+        transaction_log: Optional["TransactionLog"] = None,
     ) -> Dict[str, Any]:
         """
         Organize audio files into folders by metadata.
@@ -293,6 +297,15 @@ class AudioMetadataEngine:
                         new_name = f"{title} ({counter}){file_path.suffix}"
                     dest_path = dest_dir / new_name
                     counter += 1
+
+                if transaction_log:
+                    from max_cli.common.transaction_log import TransactionLog
+
+                    transaction_log.record(
+                        op_type=TransactionLog.OP_MOVE,
+                        original_path=file_path,
+                        new_path=dest_path,
+                    )
 
                 file_path.rename(dest_path)
                 moved.append(f"{file_path.name} -> {dest_path}")

@@ -169,6 +169,7 @@ def compress_images(...):
 - Never import engine instances from other interface files (e.g., `from cli_ai import engine`) — use local `_get_engine()` calls instead.
 - Never hardcode `"ffmpeg"` in subprocess commands — always use `str(self.ffmpeg_path)` from the resolved path.
 - Never hardcode `/tmp/` paths — always use `tempfile.gettempdir()` or `Path.home() / ".max_cli"`.
+- Never use unquoted type annotations for `TYPE_CHECKING` imports — always use `"ClassName"` string quotes in function signatures.
 
 ## 7. Reference Implementations
 
@@ -207,6 +208,12 @@ def compress_images(...):
   - Engine: `src/max_cli/core/engines/media_engine.py` (`__init__` calls `_resolve_ffmpeg`, uses `self.ffmpeg_path` in all commands)
   - Interface: `src/max_cli/interface/cli_media.py` (`_get_engine()` with `auto_resolve=True`)
   - *Shows: Zero-friction onboarding — user never sees "FFmpeg not found". Binary auto-downloaded, validated, and cached.*
+
+- **Transaction Log Pattern**:
+  - Log: `src/max_cli/common/transaction_log.py` (TransactionLog, TransactionError, JSON persistence)
+  - Engine: `src/max_cli/core/engines/file_organizer.py` (optional `transaction_log` param on all mutating methods)
+  - Interface: `src/max_cli/interface/cli_files.py` (`max files undo`, `max files history`)
+  - *Shows: Every destructive file operation is recorded; `max files undo` reverses the last group atomically. Auto-backups protect deletes.*
 
 ## 8. Escalation & Discovery
 

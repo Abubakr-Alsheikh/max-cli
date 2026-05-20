@@ -1,5 +1,9 @@
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import TYPE_CHECKING, List, Dict, Any, Optional
+
+if TYPE_CHECKING:
+    from max_cli.common.transaction_log import TransactionLog
+
 from max_cli.common.exceptions import ResourceNotFoundError
 
 
@@ -21,7 +25,11 @@ class FileOrganizer:
         return files
 
     def order_files(
-        self, folder: Path, dry_run: bool = False, start_index: int = 1
+        self,
+        folder: Path,
+        dry_run: bool = False,
+        start_index: int = 1,
+        transaction_log: Optional["TransactionLog"] = None,
     ) -> Dict[str, Any]:
         """
         Renames files by prepending numbers (1_file.txt, 2_file.txt).
@@ -30,30 +38,34 @@ class FileOrganizer:
         files = self.scan_directory(folder)
         renamed_count = 0
         skipped_count = 0
-        actions = []  # Log of what happened/would happen
+        actions = []
 
         current_index = start_index
 
         for file_path in files:
             original_name = file_path.name
 
-            # 1. Safety Check: Skip if already numbered (e.g., "1_document.pdf")
-            # We check if the bit before the first underscore is a digit
             parts = original_name.split("_")
             if len(parts) > 1 and parts[0].isdigit():
                 skipped_count += 1
                 continue
 
-            # 2. Construct new name
             new_name = f"{current_index}_{original_name}"
             new_path = folder / new_name
 
-            # 3. Perform Rename (or Simulate)
             if dry_run:
                 actions.append(
                     f"[DRY RUN] Would rename '{original_name}' -> '{new_name}'"
                 )
             else:
+                if transaction_log:
+                    from max_cli.common.transaction_log import TransactionLog
+
+                    transaction_log.record(
+                        op_type=TransactionLog.OP_RENAME,
+                        original_path=file_path,
+                        new_path=new_path,
+                    )
                 try:
                     file_path.rename(new_path)
                     actions.append(f"Renamed '{original_name}' -> '{new_name}'")
@@ -107,13 +119,114 @@ class FileOrganizer:
         duplicates = {k: v for k, v in hash_map.items() if len(v) > 1}
         return duplicates
 
-    def secure_delete(self, path: Path, passes: int = 3) -> bool:
+    def delete_duplicates(
+        self,
+        folder: Path,
+        duplicates: Dict[str, List[Path]],
+        transaction_log: Optional["TransactionLog"] = None,
+        auto_backup: bool = True,
+    ) -> Dict[str, Any]:
+        """Delete duplicate files, keeping the first in each group."""
+        removed = 0
+        kept_paths: list[Path] = []
+        errors: list[str] = []
+
+        for hash_val, paths in duplicates.items():
+            keep = paths[0]
+            kept_paths.append(keep)
+
+            for p in paths[1:]:
+                try:
+                    backup_path = None
+                    if auto_backup:
+                        backup_path = self.create_backup(p, label="pre_dedupe")
+
+                    if transaction_log:
+                        from max_cli.common.transaction_log import TransactionLog
+
+                        transaction_log.record(
+                            op_type=TransactionLog.OP_DELETE,
+                            original_path=p,
+                            new_path=None,
+                            backup_path=backup_path,
+                        )
+
+                    p.unlink()
+                    removed += 1
+                except OSError as e:
+                    errors.append(f"Failed to delete {p}: {e}")
+
+        return {
+            "removed": removed,
+            "kept": kept_paths,
+            "errors": errors,
+        }
+
+    def smart_sort(
+        self,
+        path: Path,
+        categories: Dict[str, str],
+        dry_run: bool = False,
+        transaction_log: Optional["TransactionLog"] = None,
+    ) -> Dict[str, Any]:
+        moved = 0
+        skipped = 0
+        errors = 0
+        actions = []
+
+        for filename, category in categories.items():
+            src = path / filename
+            dest_dir = path / category
+            dest = dest_dir / filename
+
+            if not src.exists():
+                errors += 1
+                continue
+
+            if dry_run:
+                actions.append(f"[DRY RUN] {filename} -> {category}/")
+                continue
+
+            try:
+                if transaction_log:
+                    from max_cli.common.transaction_log import TransactionLog
+
+                    transaction_log.record(
+                        op_type=TransactionLog.OP_MOVE,
+                        original_path=src,
+                        new_path=dest,
+                    )
+
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                src.rename(dest)
+                actions.append(f"{filename} -> {category}/")
+                moved += 1
+            except OSError as e:
+                errors += 1
+                actions.append(f"[Error] {filename}: {e}")
+
+        return {
+            "moved": moved,
+            "skipped": skipped,
+            "errors": errors,
+            "actions": actions,
+        }
+
+    def secure_delete(
+        self,
+        path: Path,
+        passes: int = 3,
+        transaction_log: Optional["TransactionLog"] = None,
+        auto_backup: bool = True,
+    ) -> bool:
         """
         Securely delete a file by overwriting with random data.
 
         Args:
             path: File to securely delete
             passes: Number of overwrite passes (default 3)
+            transaction_log: Optional transaction log for recording operations
+            auto_backup: Automatically create backup before deletion (default True)
 
         Returns:
             True if successful
@@ -125,6 +238,20 @@ class FileOrganizer:
 
         if path.is_dir():
             raise ValueError("Cannot securely delete directories")
+
+        backup_path = None
+        if auto_backup:
+            backup_path = self.create_backup(path, label="pre_shred")
+
+        if transaction_log:
+            from max_cli.common.transaction_log import TransactionLog
+
+            transaction_log.record(
+                op_type=TransactionLog.OP_DELETE,
+                original_path=path,
+                new_path=None,
+                backup_path=backup_path,
+            )
 
         file_size = path.stat().st_size
 
