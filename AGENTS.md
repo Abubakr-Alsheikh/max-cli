@@ -215,6 +215,13 @@ def compress_images(...):
   - Interface: `src/max_cli/interface/cli_files.py` (`max files undo`, `max files history`)
   - *Shows: Every destructive file operation is recorded; `max files undo` reverses the last group atomically. Auto-backups protect deletes.*
 
+- **TUI Dashboard Pattern**:
+  - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command, graceful fallback if textual missing)
+  - App: `src/max_cli/interface/tui/app.py` (Textual App with TabbedContent, auto-refresh timer, CSS)
+  - Widgets: `src/max_cli/interface/tui/widgets/` (QueuePanel, HistoryPanel, ConfigPanel, SystemPanel)
+  - Tests: `tests/interface/tui/` (Textual Pilot API for simulating interactions)
+  - *Shows: Optional dependency (`max-cli[tui]`), live auto-refreshing panels, interactive controls, graceful degradation.*
+
 ## 8. Escalation & Discovery
 
 When uncertain about implementation:

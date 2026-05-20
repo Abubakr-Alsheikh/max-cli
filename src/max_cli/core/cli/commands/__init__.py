@@ -9,6 +9,7 @@ from max_cli.core.cli.commands import (
     plugins as plugin_commands,
     queue,
     tools,
+    tui,
 )
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "plugin_commands",
     "queue",
     "tools",
+    "tui",
 ]
