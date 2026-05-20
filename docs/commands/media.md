@@ -1,5 +1,18 @@
 # Media Commands
 
+## FFmpeg Auto-Resolution
+
+Max automatically resolves FFmpeg using a 3-tier strategy:
+1. Check system PATH (`shutil.which`)
+2. Check `~/.max_cli/bin/` for previously downloaded binary
+3. Auto-download platform-specific binary with user confirmation
+
+No manual FFmpeg installation is required. To manually install:
+
+```bash
+max config setup-ffmpeg
+```
+
 ## compress
 
 Compress video files.

@@ -33,6 +33,17 @@ pip install -e .
 | `dev` | Development dependencies (pytest, ruff, mypy, mkdocs) |
 | `ocr` | OCR support (pytesseract) |
 | `ai` | AI features (openai) |
+| `tui` | Interactive TUI dashboard (textual) |
+
+## FFmpeg Auto-Resolution
+
+Max automatically detects FFmpeg in your PATH. If not found, you'll be prompted to auto-download it to `~/.max_cli/bin/`. Platform-specific binaries are downloaded and validated automatically.
+
+To manually trigger FFmpeg installation:
+
+```bash
+max config setup-ffmpeg
+```
 
 ## Verify Installation
 

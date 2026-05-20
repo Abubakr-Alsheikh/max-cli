@@ -86,3 +86,17 @@ Import configuration from file.
 ```bash
 max config import <file.json>
 ```
+
+## setup-ffmpeg
+
+Auto-download and install FFmpeg to `~/.max_cli/bin/`. Platform-specific binaries are downloaded and validated automatically.
+
+```bash
+max config setup-ffmpeg
+```
+
+This command:
+- Detects your OS and architecture
+- Downloads the appropriate FFmpeg binary
+- Validates the binary after download
+- Stores it in `~/.max_cli/bin/` for automatic resolution

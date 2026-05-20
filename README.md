@@ -45,6 +45,9 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 | **Ask AI anything** | `max ai ask` | `max ai ask "Merge and Compress those pdf files"` |
 | **Generate images** | `max ai create` | `max ai create "A cat on a bike"` |
 | **Organize files** | `max files smart-sort` | `max files smart-sort downloads/` |
+| **Undo file ops** | `max files undo` | `max files undo` |
+| **File history** | `max files history` | `max files history -v` |
+| **TUI Dashboard** | `max dashboard` | `max dashboard` |
 
 ---
 
@@ -60,7 +63,15 @@ Max runs on Python. If you don't have it:
 
 ### Step 2: Install FFmpeg (For Video/Audio)
 
-Max needs FFmpeg to process videos. Don't worry, it's easy:
+Max automatically detects and downloads FFmpeg if it's not in your PATH. On first use of a video/audio command, you'll be prompted to auto-install it to `~/.max_cli/bin/`.
+
+To manually install FFmpeg:
+
+```bash
+max config setup-ffmpeg
+```
+
+Or install via your package manager:
 
 ```bash
 # Mac
@@ -418,6 +429,49 @@ max files smart-sort ./downloads
 max files order ./photos
 ```
 
+#### Undo File Operations
+
+```bash
+# Reverse the last file operation
+max files undo
+
+# View operation history
+max files history
+
+# Verbose history with individual file paths
+max files history -v
+```
+
+All file operations are automatically recorded. Destructive commands like `shred` and `duplicates --delete` create auto-backups before running.
+
+---
+
+### 🖥 TUI Dashboard
+
+Max includes an interactive terminal dashboard for monitoring queues, history, and system status.
+
+```bash
+# Install TUI dependencies
+pip install max-cli[tui]
+
+# Launch dashboard
+max dashboard
+
+# Dev mode with hot-reload
+max dashboard --dev
+```
+
+**Dashboard Tabs:**
+
+| Tab | Description |
+|-----|-------------|
+| **Queue** | Live download queue with progress |
+| **History** | Filterable operation history |
+| **Config** | Editable configuration panel |
+| **System** | Disk usage and system info |
+
+If `textual` is not installed, `max dashboard` will show a friendly message with install instructions.
+
 ---
 
 ### 🔧 System Tools
@@ -480,9 +534,10 @@ Local settings override global settings.
 ### Other Config Commands
 
 ```bash
-max config show     # View current configuration
-max config grab     # Configure downloader defaults
-max config save     # Save local settings as global defaults
+max config show             # View current configuration
+max config grab             # Configure downloader defaults
+max config save             # Save local settings as global defaults
+max config setup-ffmpeg     # Auto-download and install FFmpeg
 ```
 
 ---
@@ -537,7 +592,7 @@ max pdf --help
 
 ### "FFmpeg not found"
 
-Install FFmpeg (see Step 2 above) and restart your terminal.
+Max now auto-downloads FFmpeg on first use. Run `max config setup-ffmpeg` to install manually, or accept the prompt when running a video/audio command.
 
 ### "API key not found"
 
