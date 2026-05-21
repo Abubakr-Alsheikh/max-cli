@@ -217,10 +217,13 @@ def compress_images(...):
 
 - **TUI Dashboard Pattern**:
   - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command, graceful fallback if textual missing)
-  - App: `src/max_cli/interface/tui/app.py` (Textual App with TabbedContent, auto-refresh timer, CSS)
-  - Widgets: `src/max_cli/interface/tui/widgets/` (QueuePanel, HistoryPanel, ConfigPanel, SystemPanel)
+  - App: `src/max_cli/interface/tui/app.py` (Textual App with 8 tabs: Home, Download, Queue, History, Files, Tools, Config, System)
+  - Widgets: `src/max_cli/interface/tui/widgets/` (HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, ToolsPanel, ConfigPanel, SystemPanel, ChatPanel)
+  - Registry: `src/max_cli/interface/tui/command_registry.py` (command schemas for dynamic form generation)
+  - Executor: `src/max_cli/interface/tui/command_executor.py` (direct engine method calls, not subprocess)
+  - Activity: `src/max_cli/interface/tui/activity_log.py` (unified activity logging across all operations)
   - Tests: `tests/interface/tui/` (Textual Pilot API for simulating interactions)
-  - *Shows: Optional dependency (`max-cli[tui]`), live auto-refreshing panels, interactive controls, graceful degradation.*
+  - *Shows: Optional dependency (`max-cli[tui]`), interactive command execution, unified activity log, file browser, AI chat, graceful degradation.*
 
 ## 8. Escalation & Discovery
 

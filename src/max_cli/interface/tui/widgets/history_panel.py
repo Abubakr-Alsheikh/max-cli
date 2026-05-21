@@ -1,7 +1,7 @@
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, DataTable, Input, Label, Static
+from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 from max_cli.core.engines.daemon_manager import DaemonManager
 
@@ -14,6 +14,19 @@ class HistoryPanel(Vertical):
             "[bold cyan]\U0001f4cb Task History[/bold cyan]", id="history-title"
         )
         with Horizontal(id="history-controls"):
+            yield Select(
+                [
+                    ("All Activity", "all"),
+                    ("Downloads", "download"),
+                    ("Tasks", "task"),
+                    ("File Ops", "file_op"),
+                    ("Commands", "command"),
+                    ("AI", "ai"),
+                ],
+                value="all",
+                id="history-category-filter",
+                allow_blank=False,
+            )
             yield Input(
                 placeholder="\U0001f50d Filter by type, title, or ID...",
                 id="history-filter",
@@ -30,32 +43,40 @@ class HistoryPanel(Vertical):
         self.refresh_data()
 
     def refresh_data(self) -> None:
+        category_select = self.query_one("#history-category-filter", Select)
+        category = category_select.value
+        if category == Select.BLANK:
+            category = "all"
+
         filter_input = self.query_one("#history-filter", Input)
         filter_text = filter_input.value.strip().lower()
 
-        daemon = DaemonManager()
-        history = daemon.get_history(limit=200)
+        from max_cli.interface.tui.activity_log import ActivityLog
+
+        activity = ActivityLog()
+        category_filter = None if category == "all" else category
+        entries = activity.get_entries(category_filter=category_filter, limit=200)
 
         if filter_text:
-            history = [
-                t
-                for t in history
-                if filter_text in t.type.value
-                or filter_text in (t.title or "").lower()
-                or filter_text in t.id.lower()
+            entries = [
+                e
+                for e in entries
+                if filter_text in e.action.lower()
+                or filter_text in str(e.details).lower()
+                or filter_text in e.status.lower()
             ]
 
         table = self.query_one("#history-table", DataTable)
         table.clear()
         if not table.columns:
-            table.add_column("ID", width=10)
-            table.add_column("Type", width=16)
-            table.add_column("Title", width=30)
-            table.add_column("Status", width=12)
-            table.add_column("Completed", width=20)
-            table.add_column("Error", width=30)
+            table.add_column("Time", width=18)
+            table.add_column("Category", width=10)
+            table.add_column("Action", width=20)
+            table.add_column("Status", width=10)
+            table.add_column("Details", width=40)
+            table.add_column("Duration", width=10)
 
-        if not history:
+        if not entries:
             table.add_row(
                 "",
                 "",
@@ -65,26 +86,29 @@ class HistoryPanel(Vertical):
                 "",
             )
 
-        for task in history:
-            status_color = "green" if task.status.value == "completed" else "red"
-            error_str = (task.error or "")[:28]
-            completed_str = (task.completed_at or "N/A")[:19]
-            title = task.title or ""
-            if task.description and not title:
-                title = task.description[:28]
+        for entry in entries:
+            time_str = entry.timestamp[:19] if entry.timestamp else "N/A"
+            status_color = "green" if entry.status == "success" else "red"
+            details = str(entry.details.get("url", entry.details.get("target", "")))[
+                :38
+            ]
 
             table.add_row(
-                task.id,
-                task.type.value,
-                title,
-                f"[{status_color}]{task.status.value}[/{status_color}]",
-                completed_str,
-                f"[red]{error_str}[/red]" if error_str else "",
-                key=task.id,
+                time_str,
+                entry.category,
+                entry.action.replace("_", " ").title(),
+                f"[{status_color}]{entry.status}[/{status_color}]",
+                details,
+                f"{entry.duration_ms:.0f}ms" if entry.duration_ms > 0 else "-",
+                key=entry.id,
             )
 
         count_label = self.query_one("#history-count", Label)
-        count_label.update(f"[dim]{len(history)} items[/dim]")
+        count_label.update(f"{len(entries)} items")
+
+    @on(Select.Changed, "#history-category-filter")
+    def _on_category_changed(self) -> None:
+        self.refresh_data()
 
     @on(Input.Changed, "#history-filter")
     def _on_filter_changed(self) -> None:

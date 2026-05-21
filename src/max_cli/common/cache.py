@@ -100,6 +100,26 @@ class Cache:
                 count += 1
         return count
 
+    def count(self) -> int:
+        """Return the number of cached items.
+
+        Returns:
+            Number of items in cache
+        """
+        return len(list(self.cache_dir.glob("*.json")))
+
+    def get_size(self) -> int:
+        """Return total size of cache in bytes.
+
+        Returns:
+            Total cache size in bytes
+        """
+        total = 0
+        for f in self.cache_dir.glob("*.json"):
+            if f.is_file():
+                total += f.stat().st_size
+        return total
+
     def _hash(self, key: str) -> str:
         """Generate hash for cache key."""
         return hashlib.md5(key.encode()).hexdigest()

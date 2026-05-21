@@ -24,6 +24,16 @@ class SystemPanel(Vertical):
         yield Static("[bold]Disk Usage[/bold]", id="disk-title")
         yield ProgressBar(total=100, show_eta=False, id="disk-progress")
         yield Static("", id="system-disk")
+        yield Static("[bold]Storage Management[/bold]", id="storage-title")
+        yield Static("", id="storage-details")
+        with Horizontal(id="storage-actions"):
+            yield Button("Clear Cache", id="btn-clear-cache", variant="default")
+            yield Button("Cleanup Backups", id="btn-cleanup-backups", variant="default")
+            yield Button("Clean Transactions", id="btn-clean-txn", variant="default")
+        yield Static("[bold]Quick Actions[/bold]", id="quick-actions-title")
+        with Horizontal(id="quick-actions"):
+            yield Button("Clear Queues", id="btn-clear-queues", variant="error")
+            yield Button("Reset Config", id="btn-reset-config", variant="error")
         with Horizontal(id="system-actions"):
             yield Button("\U0001f504 Refresh", id="btn-refresh", variant="primary")
         yield Static("[bold]Recent Activity[/bold]", id="system-log-title")
@@ -35,6 +45,7 @@ class SystemPanel(Vertical):
     def refresh_data(self) -> None:
         self._update_system_info()
         self._update_disk_usage()
+        self._update_storage_info()
         self._update_recent_log()
 
     def _update_system_info(self) -> None:
@@ -100,6 +111,29 @@ class SystemPanel(Vertical):
         current = disk_widget.content or ""
         disk_widget.update(str(current) + "\n".join(summary_lines))
 
+    def _update_storage_info(self) -> None:
+        widget = self.query_one("#storage-details", Static)
+
+        from max_cli.common.cache import get_default_cache
+        from max_cli.core.engines.file_organizer import FileOrganizer
+
+        cache = get_default_cache()
+        cache_size = cache.get_size()
+
+        organizer = FileOrganizer()
+        backup_dir = organizer.get_backup_dir()
+        backup_count = len(list(backup_dir.glob("*"))) if backup_dir.exists() else 0
+        backup_size = self._get_dir_size(backup_dir) if backup_dir.exists() else 0
+
+        txn_dir = Path.home() / ".max_cli" / "transactions"
+        txn_count = len(list(txn_dir.glob("*.json"))) if txn_dir.exists() else 0
+
+        widget.update(
+            f"  Cache: {self._format_bytes(cache_size)} ({cache.count()} items)\n"
+            f"  Backups: {backup_count} files ({self._format_bytes(backup_size)})\n"
+            f"  Transactions: {txn_count} groups"
+        )
+
     def _update_recent_log(self) -> None:
         log_widget = self.query_one("#system-log", Static)
         log_file = DaemonManager.DAEMON_LOG_FILE
@@ -121,6 +155,45 @@ class SystemPanel(Vertical):
             log_widget.update("\n".join(colored_lines))
         else:
             log_widget.update("  No daemon log found.")
+
+    @on(Button.Pressed, "#btn-clear-cache")
+    def _on_clear_cache(self) -> None:
+        from max_cli.common.cache import get_default_cache
+
+        cache = get_default_cache()
+        count = cache.clear()
+        self._update_storage_info()
+        self.notify(f"Cleared {count} cached items", severity="information")
+
+    @on(Button.Pressed, "#btn-cleanup-backups")
+    def _on_cleanup_backups(self) -> None:
+        from max_cli.core.engines.file_organizer import FileOrganizer
+
+        organizer = FileOrganizer()
+        count = organizer.cleanup_old_backups(days=30)
+        self._update_storage_info()
+        self.notify(f"Removed {count} old backups", severity="information")
+
+    @on(Button.Pressed, "#btn-clean-txn")
+    def _on_clean_txn(self) -> None:
+        from max_cli.common.transaction_log import TransactionLog
+
+        count = TransactionLog.cleanup_all()
+        self._update_storage_info()
+        self.notify(f"Cleaned {count} old transactions", severity="information")
+
+    @on(Button.Pressed, "#btn-clear-queues")
+    def _on_clear_queues(self) -> None:
+        daemon = DaemonManager()
+        daemon.clear()
+        self.notify("All queues cleared", severity="information")
+
+    @on(Button.Pressed, "#btn-reset-config")
+    def _on_reset_config(self) -> None:
+        env_path = Path.home() / ".max_config.env"
+        if env_path.exists():
+            env_path.unlink()
+        self.notify("Config reset to defaults", severity="warning")
 
     @on(Button.Pressed, "#btn-refresh")
     def _on_refresh(self) -> None:

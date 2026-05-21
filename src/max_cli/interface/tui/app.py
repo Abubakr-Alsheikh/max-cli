@@ -1,10 +1,15 @@
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
+from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.config_panel import ConfigPanel
+from max_cli.interface.tui.widgets.download_panel import DownloadPanel
+from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
+from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
+from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 
 class MaxDashboardApp(App):
@@ -16,187 +21,146 @@ class MaxDashboardApp(App):
     ]
 
     CSS = """
-    * {
-        scrollbar-background: $surface;
-        scrollbar-background-hover: $surface-darken-1;
-        scrollbar-color: $primary-lighten-2;
-        scrollbar-color-active: $primary;
-        scrollbar-corner-color: $surface;
-    }
-
     MaxDashboardApp {
-        background: $surface;
+        layout: vertical;
     }
-
-    Header {
-        background: $boost;
-        color: $text;
-        text-style: bold;
-        border-bottom: solid $accent;
-    }
-
-    Header > HeaderTitle {
-        dock: left;
-        content-align: left middle;
-        width: 1fr;
-        padding: 0 2;
-    }
-
-    Footer {
-        background: $boost;
-        border-top: solid $accent;
-    }
-
     TabbedContent {
         height: 1fr;
-        padding: 0 1 1 1;
     }
-
-    TabbedContent > ContentTab {
-        padding: 0 2;
-    }
-
-    TabbedContent > ContentTab.-active {
-        text-style: bold;
-    }
-
     TabbedContent > TabPane {
         padding: 0 1;
     }
-
-    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel {
+    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel, DownloadPanel, FilesPanel, ToolsPanel, HomePanel, ChatPanel {
         padding: 1 2;
     }
-
     DataTable {
         height: 1fr;
         border: solid $accent;
-        background: $surface;
     }
-
-    DataTable > .datatable--header {
-        background: $primary-background;
-        text-style: bold;
-    }
-
-    DataTable > .datatable--row-cursor {
-        background: $primary-lighten-3;
-    }
-
-    DataTable > .datatable--row-hover {
-        background: $primary-darken-2;
-    }
-
-    DataTable > .datatable--row-selected {
-        background: $primary;
-    }
-
-    #queue-actions, #history-controls, #config-actions, #system-actions {
+    #queue-actions, #history-controls, #config-actions, #files-actions, #form-actions {
         dock: bottom;
         height: auto;
         margin-top: 1;
     }
-
-    Button {
-        margin: 0 1;
-    }
-
-    Button:focus {
-        text-style: bold;
-    }
-
     .config-row {
         margin: 0 1;
         height: auto;
     }
-
     .config-label {
         width: 30;
         text-style: bold;
     }
-
-    .config-section {
-        margin: 1 0;
-        padding: 1 2;
-        border: tall $primary-background;
-    }
-
-    .config-section-title {
-        text-style: bold;
-        color: $accent;
-        padding: 0 1;
-        margin-bottom: 1;
-    }
-
     #config-fields {
         height: 1fr;
     }
-
     #log-scroll {
         height: 12;
         border: solid $border;
-        background: $surface-darken-1;
     }
-
-    #system-info {
-        padding: 1 2;
-        border: tall $primary-background;
-        margin: 1 0;
-    }
-
-    #disk-progress {
-        margin: 1 0;
+    .home-card {
+        width: 1fr;
         height: auto;
-    }
-
-    .status-success {
-        color: $success;
-    }
-
-    .status-warning {
-        color: $warning;
-    }
-
-    .status-error {
-        color: $error;
-    }
-
-    #history-detail {
+        border: solid $accent;
         padding: 1 2;
-        border: tall $accent;
+        margin: 0 1;
+        text-align: center;
+    }
+    .home-card:hover {
+        border: solid $primary;
+    }
+    .home-card Button {
+        width: 100%;
         margin-top: 1;
-        background: $surface-darken-1;
     }
-
-    #history-filter {
-        width: 40;
+    #tools-layout {
+        height: 1fr;
     }
-
-    #config-search {
-        width: 40;
+    #tools-tree-panel {
+        width: 25;
+        border: solid $border;
+    }
+    #tools-form-panel {
+        width: 1fr;
+        padding: 0 1;
+    }
+    #files-nav {
+        height: auto;
         margin-bottom: 1;
     }
-
-    #queue-title, #history-title, #config-title, #system-title {
-        padding: 0 0 1 0;
+    #files-footer {
+        height: auto;
+        margin-top: 1;
     }
-
-    #queue-status, #config-status, #config-source {
-        padding: 1 0 0 0;
+    #download-options {
+        height: auto;
+        margin: 1 0;
+    }
+    #output-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+    #download-actions {
+        height: auto;
+        margin: 1 0;
+    }
+    #recent-scroll {
+        height: 8;
+        border: solid $border;
+    }
+    #chat-scroll {
+        height: 1fr;
+        border: solid $border;
+    }
+    #chat-messages {
+        padding: 1;
+    }
+    .chat-msg {
+        margin: 1 0;
+        padding: 1;
+    }
+    .chat-msg-max {
+        background: $surface;
+    }
+    .chat-msg-user {
+        background: $boost;
+    }
+    #chat-suggestions {
+        height: auto;
+        margin: 1 0;
+    }
+    #chat-suggestions Button {
+        margin: 0 1;
+    }
+    #chat-input-row {
+        height: auto;
+        dock: bottom;
+    }
+    #chat-input {
+        width: 1fr;
     }
     """
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
-        with TabbedContent(initial="queue"):
+        yield Header()
+        with TabbedContent(initial="home"):
+            with TabPane("Home", id="home"):
+                yield HomePanel(id="home-panel")
+            with TabPane("Download", id="download"):
+                yield DownloadPanel(id="download-panel")
             with TabPane("Queue", id="queue"):
                 yield QueuePanel(id="queue-panel")
             with TabPane("History", id="history"):
                 yield HistoryPanel(id="history-panel")
+            with TabPane("Files", id="files"):
+                yield FilesPanel(id="files-panel")
+            with TabPane("Tools", id="tools"):
+                yield ToolsPanel(id="tools-panel")
             with TabPane("Config", id="config"):
                 yield ConfigPanel(id="config-panel")
             with TabPane("System", id="system"):
                 yield SystemPanel(id="system-panel")
+            with TabPane("AI Chat", id="chat"):
+                yield ChatPanel(id="chat-panel")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -208,6 +172,8 @@ class MaxDashboardApp(App):
             "queue": "#queue-panel",
             "history": "#history-panel",
             "system": "#system-panel",
+            "files": "#files-panel",
+            "home": "#home-panel",
         }
         if active in panel_map:
             panel = self.query_one(panel_map[active])
@@ -215,7 +181,13 @@ class MaxDashboardApp(App):
                 panel.refresh_data()
 
     def action_refresh(self) -> None:
-        for panel_id in ["#queue-panel", "#history-panel", "#system-panel"]:
+        for panel_id in [
+            "#queue-panel",
+            "#history-panel",
+            "#system-panel",
+            "#files-panel",
+            "#home-panel",
+        ]:
             panel = self.query_one(panel_id)
             if hasattr(panel, "refresh_data"):
                 panel.refresh_data()

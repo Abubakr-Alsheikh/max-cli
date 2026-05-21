@@ -229,6 +229,30 @@ class TransactionLog:
             files[0].unlink()
             files.pop(0)
 
+    @classmethod
+    def cleanup_all(cls, storage_dir: Optional[Path] = None, days: int = 30) -> int:
+        """Remove transaction logs older than specified days.
+
+        Args:
+            storage_dir: Transaction storage directory
+            days: Retention period in days
+
+        Returns:
+            Number of transaction logs removed
+        """
+        store = storage_dir or Path.home() / ".max_cli" / "transactions"
+        if not store.exists():
+            return 0
+
+        cutoff = datetime.now() - timedelta(days=days)
+        count = 0
+        for f in store.glob("*.json"):
+            mtime = datetime.fromtimestamp(f.stat().st_mtime)
+            if mtime < cutoff:
+                f.unlink()
+                count += 1
+        return count
+
     @staticmethod
     def _generate_id() -> str:
         """Generate a unique transaction group ID."""
