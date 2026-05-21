@@ -89,7 +89,7 @@ class FilesPanel(Vertical):
         display = " > ".join(parts[-3:]) if len(parts) > 3 else str(self._current_path)
         breadcrumb.update(f"[bold]{display}[/bold]")
 
-    def _load_directory(self) -> None:
+    def _load_directory(self, sort_by: str = "name") -> None:
         table = self.query_one("#files-table", DataTable)
         table.clear()
         if not table.columns:
@@ -100,7 +100,16 @@ class FilesPanel(Vertical):
         try:
             entries = sorted(
                 self._current_path.iterdir(),
-                key=lambda p: (not p.is_dir(), p.name.lower()),
+                key=lambda p: (
+                    not p.is_dir(),
+                    p.name.lower()
+                    if sort_by == "name"
+                    else p.stat().st_size
+                    if sort_by == "size"
+                    else self._get_file_type(p)
+                    if sort_by == "type"
+                    else p.stat().st_mtime,
+                ),
             )
         except PermissionError:
             table.add_row("[red]Permission denied[/red]", "", "", "")
@@ -183,7 +192,7 @@ class FilesPanel(Vertical):
 
     @on(Button.Pressed, "#btn-browse")
     def _on_browse(self) -> None:
-        pass
+        self._navigate(Path.home())
 
     @on(DataTable.RowSelected, "#files-table")
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -192,18 +201,58 @@ class FilesPanel(Vertical):
             self._navigate(path)
 
     @on(Input.Changed, "#files-filter")
-    def _on_filter(self) -> None:
-        pass
+    def _on_filter(self, event: Input.Changed) -> None:
+        filter_text = event.value.strip().lower()
+        table = self.query_one("#files-table", DataTable)
+        for row_key in table.rows:
+            row_data = table.get_row(row_key)
+            if row_data:
+                name = row_data[0].lower()
+                table.rows[row_key].visible = not filter_text or filter_text in name
 
     @on(Select.Changed, "#files-sort")
-    def _on_sort(self) -> None:
-        pass
+    def _on_sort(self, event: Select.Changed) -> None:
+        sort_by = event.value
+        if sort_by == Select.BLANK:
+            return
+        self._load_directory(sort_by=sort_by)
 
     @on(Button.Pressed, "#btn-compress")
     def _on_compress(self) -> None:
-        self._execute_quick_action(
-            "images", "compress", {"target": str(self._current_path)}
-        )
+        table = self.query_one("#files-table", DataTable)
+        if table.cursor_coordinate is not None:
+            row_data = table.get_row_at(table.cursor_coordinate.row)
+            file_path = Path(
+                row_data[0]
+                .replace("\U0001f4ce ", "")
+                .replace("\U0001f5bc ", "")
+                .replace("\U0001f3ac ", "")
+                .replace("\U0001f4c4 ", "")
+                .replace("\U0001f3b5 ", "")
+                .replace("\U0001f4dd ", "")
+                .replace("\U0001f4e6 ", "")
+                .replace("\U0001f4c1 ", "")
+                .rstrip("/")
+            )
+            full_path = self._current_path / file_path
+            if full_path.is_file():
+                ext = full_path.suffix.lower()
+                if ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
+                    self._execute_quick_action(
+                        "images", "compress", {"target": str(full_path)}
+                    )
+                elif ext in {".mp4", ".mkv", ".avi", ".mov"}:
+                    self._execute_quick_action(
+                        "video", "compress", {"target": str(full_path)}
+                    )
+                else:
+                    self.notify(
+                        "Unsupported file type for compression", severity="warning"
+                    )
+            else:
+                self.notify("Select a file to compress", severity="warning")
+        else:
+            self.notify("Select a file to compress", severity="warning")
 
     @on(Button.Pressed, "#btn-organize")
     def _on_organize(self) -> None:

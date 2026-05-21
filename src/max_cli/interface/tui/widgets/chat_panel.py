@@ -87,7 +87,7 @@ class ChatPanel(Vertical):
 
             engine = AIEngine()
             response: dict[str, Any] = engine.interpret_intent(
-                message, app_instance=None
+                message, app_instance=self.app
             )
 
             thought = response.get("thought", "I'm not sure how to help with that.")

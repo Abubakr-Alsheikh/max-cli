@@ -4,6 +4,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 from max_cli.core.engines.daemon_manager import DaemonManager
+from max_cli.interface.tui.activity_log import ActivityLog
 
 
 class HistoryPanel(Vertical):
@@ -50,8 +51,6 @@ class HistoryPanel(Vertical):
 
         filter_input = self.query_one("#history-filter", Input)
         filter_text = filter_input.value.strip().lower()
-
-        from max_cli.interface.tui.activity_log import ActivityLog
 
         activity = ActivityLog()
         category_filter = None if category == "all" else category
@@ -116,24 +115,22 @@ class HistoryPanel(Vertical):
 
     @on(DataTable.RowSelected)
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
-        daemon = DaemonManager()
-        task = daemon.get(event.row_key.value)
-        if task:
+        activity = ActivityLog()
+        entry = activity.get_entry(event.row_key.value)
+        if entry:
             detail = self.query_one("#history-detail", Static)
             lines = [
-                f"[bold]ID:[/bold] {task.id}",
-                f"[bold]Type:[/bold] {task.type.value}",
-                f"[bold]Title:[/bold] {task.title or 'N/A'}",
-                f"[bold]Status:[/bold] {task.status.value}",
-                f"[bold]Progress:[/bold] {task.progress:.0f}%",
-                f"[bold]Created:[/bold] {(task.created_at or '')[:19]}",
-                f"[bold]Completed:[/bold] {(task.completed_at or 'N/A')[:19]}",
-                f"[bold]Retries:[/bold] {task.retry_count}/{task.max_retries}",
+                f"[bold]ID:[/bold] {entry.id}",
+                f"[bold]Category:[/bold] {entry.category}",
+                f"[bold]Action:[/bold] {entry.action}",
+                f"[bold]Status:[/bold] {entry.status}",
+                f"[bold]Time:[/bold] {entry.timestamp[:19]}",
+                f"[bold]Duration:[/bold] {entry.duration_ms}ms",
             ]
-            if task.error:
-                lines.append(f"[red][bold]Error:[/bold] {task.error}[/red]")
-            if task.output_path:
-                lines.append(f"[bold]Output:[/bold] {task.output_path}")
+            if entry.details:
+                lines.append("[bold]Details:[/bold]")
+                for k, v in entry.details.items():
+                    lines.append(f"  {k}: {v}")
             detail.update("\n".join(lines))
 
     @on(Button.Pressed, "#btn-clear-history")

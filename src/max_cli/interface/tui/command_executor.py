@@ -46,6 +46,9 @@ PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
     ("files", "order"): {"start": "start_index"},
     ("grab", "download"): {"resolution": "custom_height"},
+    ("images", "compress"): {"target": "input_path", "output": "output_path"},
+    ("images", "resize"): {"target": "input_path", "output": "output_path"},
+    ("images", "convert"): {"target": "input_path", "output": "output_path"},
 }
 
 
@@ -187,6 +190,42 @@ class CommandExecutor:
                     mapped["categories"] = ai_engine.categorize_files(files)
                 continue
 
+            if category == "images" and command == "convert" and key == "to_format":
+                mapped["force_format"] = value
+                continue
+
+            if category == "images" and command == "compress" and key == "force_jpeg":
+                if value:
+                    mapped["force_format"] = "jpg"
+                continue
+
+            if category == "images" and key == "strip":
+                mapped["strip_exif"] = value
+                continue
+
+            if category == "images" and key == "quantize":
+                mapped["quantize_png"] = value
+                continue
+
+            if category == "audio" and command == "organize" and key == "source_paths":
+                if isinstance(value, Path) and value.is_dir():
+                    from max_cli.core.engines.audio_metadata_engine import (
+                        SUPPORTED_EXTENSIONS,
+                    )
+
+                    mapped["source_paths"] = sorted(
+                        p
+                        for p in value.iterdir()
+                        if p.suffix.lower() in SUPPORTED_EXTENSIONS and p.is_file()
+                    )
+                elif isinstance(value, list):
+                    mapped["source_paths"] = [
+                        Path(p) if isinstance(p, str) else p for p in value
+                    ]
+                else:
+                    mapped["source_paths"] = [value] if isinstance(value, Path) else []
+                continue
+
             if key == "queue":
                 continue
 
@@ -239,6 +278,25 @@ class CommandExecutor:
                     input_path.parent / f"{input_path.stem}_compressed.pdf"
                 )
 
+        if category == "images" and command in ("compress", "resize", "convert"):
+            if "input_path" in mapped and "output_path" not in mapped:
+                input_path = mapped["input_path"]
+                if command == "compress":
+                    mapped["output_path"] = (
+                        input_path.parent / f"{input_path.stem}_compressed.jpg"
+                    )
+                elif command == "resize":
+                    mapped["output_path"] = (
+                        input_path.parent
+                        / f"{input_path.stem}_resized{input_path.suffix}"
+                    )
+                elif command == "convert":
+                    fmt = params.get("to_format", "webp")
+                    ext = "jpg" if fmt == "jpg" else fmt
+                    mapped["output_path"] = (
+                        input_path.parent / f"{input_path.stem}.{ext}"
+                    )
+
         if category == "grab" and command == "download":
             if "output_path" not in mapped:
                 mapped["output_path"] = Path.home() / "Max Downloads"
@@ -289,8 +347,8 @@ class CommandExecutor:
 
             result_data = method(**params)
             duration_ms = (time.monotonic() - start) * 1000
-            output_files = self._extract_output_files(result_data)
-            message = self._format_result_message(result_data, command)
+            output_files = self._extract_output_files(result_data, values)
+            message = self._format_result_message(result_data, output_files, values)
             result = ExecutionResult(
                 success=True,
                 message=message,
@@ -447,8 +505,8 @@ class CommandExecutor:
                 progress_callback(1.0, "Complete")
 
             duration_ms = (time.monotonic() - start) * 1000
-            output_files = self._extract_output_files(result_data)
-            message = self._format_result_message(result_data, command)
+            output_files = self._extract_output_files(result_data, values)
+            message = self._format_result_message(result_data, output_files, values)
             result = ExecutionResult(
                 success=True,
                 message=message,
@@ -512,56 +570,41 @@ class CommandExecutor:
                 progress_callback(1.0, f"Failed: {e}")
             return result
 
-    def _extract_output_files(self, result_data: Any) -> list[str]:
-        output_files: list[str] = []
-        if isinstance(result_data, dict):
-            for key in ("output_files",):
-                value = result_data.get(key)
-                if value is not None:
-                    if isinstance(value, list):
-                        output_files.extend(str(p) for p in value)
-                    elif isinstance(value, str):
-                        output_files.append(value)
-            for key in ("out_path", "output_path"):
-                value = result_data.get(key)
-                if value is not None:
-                    path_str = str(value)
-                    if path_str not in output_files:
-                        output_files.append(path_str)
-            if "actions" in result_data:
-                for action in result_data["actions"]:
-                    if "->" in str(action):
-                        parts = str(action).split("->")
-                        if len(parts) == 2:
-                            output_files.append(parts[1].strip().strip("'"))
-        elif isinstance(result_data, list):
-            output_files.extend(
-                str(p) for p in result_data if isinstance(p, (Path, str))
-            )
-        return output_files
+    def _extract_output_files(self, result: Any, values: dict) -> list[str]:
+        if result is None:
+            output = values.get("output") or values.get("output_path")
+            if output:
+                return [str(output)]
+            target = values.get("target") or values.get("url", "")
+            if target and Path(target).suffix:
+                return [str(target)]
+            return []
+        if isinstance(result, int):
+            return []
+        if isinstance(result, Path):
+            return [str(result)]
+        if isinstance(result, dict):
+            files = result.get("output_files", [])
+            if files:
+                return [str(f) for f in files]
+            output = result.get("output_path")
+            if output:
+                return [str(output)]
+        return []
 
-    def _format_result_message(self, result_data: Any, command: str) -> str:
-        if isinstance(result_data, dict):
-            if "message" in result_data:
-                return result_data["message"]
-            if "renamed" in result_data and "skipped" in result_data:
-                return f"Renamed {result_data['renamed']} files, skipped {result_data['skipped']}"
-            if "moved" in result_data and isinstance(result_data["moved"], int):
-                errors = result_data.get("errors", 0)
-                return f"Moved {result_data['moved']} files, errors: {errors}"
-            if "total_pages" in result_data:
-                return f"Merged {result_data['total_pages']} pages"
-            if "file_name" in result_data:
-                reduction = result_data.get("reduction_pct", 0)
-                return f"{result_data['file_name']}: {result_data.get('original_size', '?')} -> {result_data.get('final_size', '?')} ({reduction}% reduction)"
-            if "total_moved" in result_data:
-                return f"Moved {result_data['total_moved']} files"
-            if "removed" in result_data:
-                return f"Found and removed {result_data['removed']} duplicates"
-            if isinstance(result_data.get("moved"), list):
-                return f"Organized {len(result_data['moved'])} files"
-        if isinstance(result_data, int):
-            return f"Processed {result_data} items"
-        if isinstance(result_data, list):
-            return f"Processed {len(result_data)} items"
+    def _format_result_message(
+        self, result: Any, output_files: list[str], values: dict
+    ) -> str:
+        if result is None:
+            if output_files:
+                return f"Output: {', '.join(output_files)}"
+            return "Command completed successfully"
+        if isinstance(result, int):
+            return f"Processed {result} items"
+        if isinstance(result, Path):
+            return f"Output: {result}"
+        if isinstance(result, dict):
+            msg = result.get("message", "")
+            if msg:
+                return msg
         return "Command completed successfully"

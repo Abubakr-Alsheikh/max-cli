@@ -63,9 +63,6 @@ class ToolsPanel(Vertical):
         form_panel = self.query_one("#tools-form-panel", Vertical)
         form_panel.remove_children()
 
-        placeholder = self.query_one("#tools-placeholder", Static)
-        placeholder.remove()
-
         form_panel.mount(
             Static(
                 f"[bold cyan]{schema['icon']} {schema['label']}[/bold cyan]",
@@ -118,14 +115,15 @@ class ToolsPanel(Vertical):
 
             form_panel.mount(widget)
 
-        with Horizontal(id="form-actions"):
-            exec_btn = Button("Execute", id="btn-execute", variant="success")
-            form_panel.mount(exec_btn)
+        actions_container = Horizontal(id="form-actions")
+        exec_btn = Button("Execute", id="btn-execute", variant="success")
+        actions_container.mount(exec_btn)
 
-            if schema.get("has_queue_option"):
-                queue_btn = Button("Add to Queue", id="btn-queue", variant="primary")
-                form_panel.mount(queue_btn)
+        if schema.get("has_queue_option"):
+            queue_btn = Button("Add to Queue", id="btn-queue", variant="primary")
+            actions_container.mount(queue_btn)
 
+        form_panel.mount(actions_container)
         form_panel.mount(Static("Status: Ready", id="form-status"))
         form_panel.mount(Static("", id="form-result"))
 
@@ -241,3 +239,11 @@ class ToolsPanel(Vertical):
                 if cmd_schema.get("label") == title_str:
                     return category, cmd_name
         return "", ""
+
+    def select_command(self, category: str, command: str) -> None:
+        self._build_form(category, command)
+        tree = self.query_one("#tools-tree", Tree)
+        for node in tree.root.walk():
+            if node.data == f"{category}:{command}":
+                tree.select_node(node)
+                break

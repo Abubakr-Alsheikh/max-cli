@@ -114,6 +114,12 @@ class ActivityLog:
         self._save()
         return entry
 
+    def get_entry(self, entry_id: str) -> Optional[ActivityEntry]:
+        for entry in self._entries:
+            if entry.id == entry_id:
+                return entry
+        return None
+
     def get_entries(
         self,
         limit: int = 100,

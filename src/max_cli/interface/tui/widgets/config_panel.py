@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from textual import on
 from textual.app import ComposeResult
@@ -75,6 +76,10 @@ def _build_section(
 class ConfigPanel(Vertical):
     """Editable configuration panel."""
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._original_values: dict[str, str] = {}
+
     def compose(self) -> ComposeResult:
         yield Static("[bold cyan]\u2699 Configuration[/bold cyan]", id="config-title")
         yield Label(
@@ -103,6 +108,7 @@ class ConfigPanel(Vertical):
         container.remove_children()
 
         settings = Settings()
+        self._original_values = {}
 
         for section_name, section_fields in CONFIG_SECTIONS.items():
             container.mount(_build_section(section_name, section_fields, settings))
@@ -115,6 +121,13 @@ class ConfigPanel(Vertical):
         ]
         if remaining_fields:
             container.mount(_build_section("Other", remaining_fields, settings))
+
+        for field_name in Settings.model_fields:
+            if field_name not in Settings.model_fields:
+                continue
+            value = getattr(settings, field_name)
+            if "API_KEY" in field_name and value:
+                self._original_values[field_name] = str(value)
 
     @on(Input.Changed, "#config-search")
     def _on_search(self) -> None:
@@ -145,6 +158,12 @@ class ConfigPanel(Vertical):
             input_widget = self.query_one(f"#cfg-{field_name}", Input)
             if input_widget:
                 value = input_widget.value.strip()
+                if "API_KEY" in field_name and "..." in value:
+                    original = self._original_values.get(field_name, "")
+                    if original:
+                        value = original
+                    else:
+                        continue
                 lines.append(f"{field_name}={value}")
 
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

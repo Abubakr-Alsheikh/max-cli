@@ -1,4 +1,5 @@
 from textual import on
+from textual.events import Message
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Button, Label, Static
 
@@ -115,8 +116,9 @@ class HomePanel(Vertical):
         else:
             widget.update("[dim]No recent activity[/dim]")
 
-    class CommandSelected:
+    class CommandSelected(Message):
         def __init__(self, category: str, command: str) -> None:
+            super().__init__()
             self.category = category
             self.command = command
 

@@ -201,7 +201,7 @@ class DownloadPanel(Vertical):
         from max_cli.interface.tui.activity_log import ActivityLog
 
         activity = ActivityLog()
-        entries = activity.get_entries(limit=10, category_filter="download")
+        entries = activity.get_entries(limit=10, category_filter="grab")
 
         lines = []
         for entry in entries:

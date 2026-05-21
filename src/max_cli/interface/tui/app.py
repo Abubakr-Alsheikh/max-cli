@@ -191,3 +191,24 @@ class MaxDashboardApp(App):
             panel = self.query_one(panel_id)
             if hasattr(panel, "refresh_data"):
                 panel.refresh_data()
+
+    def on_home_panel_command_selected(
+        self, message: HomePanel.CommandSelected
+    ) -> None:
+        tabs = self.query_one(TabbedContent)
+        tab_map = {
+            "grab": "download",
+            "video": "tools",
+            "images": "tools",
+            "files": "files",
+            "pdf": "tools",
+            "audio": "tools",
+            "ai": "chat",
+        }
+        target_tab = tab_map.get(message.category, "tools")
+        tabs.active = target_tab
+
+        if target_tab == "tools":
+            tools_panel = self.query_one("#tools-panel")
+            if hasattr(tools_panel, "select_command"):
+                tools_panel.select_command(message.category, message.command)

@@ -11,9 +11,6 @@ app = typer.Typer(
 @app.callback()
 def dashboard(
     ctx: typer.Context,
-    dev: bool = typer.Option(
-        False, "--dev", help="Enable Textual dev mode with hot-reload."
-    ),
 ) -> None:
     """Launch the interactive Max CLI dashboard."""
     if ctx.invoked_subcommand is not None:
@@ -29,7 +26,4 @@ def dashboard(
         raise typer.Exit(1)
 
     max_app = MaxDashboardApp()
-    try:
-        max_app.run(dev=dev)
-    except TypeError:
-        max_app.run()
+    max_app.run()

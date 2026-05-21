@@ -74,6 +74,7 @@ class SystemPanel(Vertical):
         disk_widget = self.query_one("#system-disk", Static)
         progress_bar = self.query_one("#disk-progress", ProgressBar)
 
+        lines: list[str] = []
         if self.MAX_CLI_DIR.exists():
             total_size = self._get_dir_size(self.MAX_CLI_DIR)
             usage = shutil.disk_usage(self.MAX_CLI_DIR)
@@ -81,35 +82,35 @@ class SystemPanel(Vertical):
 
             progress_bar.update(progress=pct)
 
-            disk_widget.update(
-                f"  Data Size:         {self._format_bytes(total_size)}\n"
+            lines.append(f"  Max CLI Directory: {self.MAX_CLI_DIR}")
+            lines.append(f"  Data Size:         {self._format_bytes(total_size)}")
+            lines.append(
                 f"  Disk Usage:        {usage.used / (1024**3):.1f} GB / "
-                f"{usage.total / (1024**3):.1f} GB ({pct:.0f}%)\n"
-                f"  Free Space:        {usage.free / (1024**3):.1f} GB"
+                f"{usage.total / (1024**3):.1f} GB ({pct:.0f}%)"
             )
+            lines.append(f"  Free Space:        {usage.free / (1024**3):.1f} GB")
         else:
             progress_bar.update(progress=0)
-            disk_widget.update("  Max CLI directory not found.")
+            lines.append("  Max CLI directory not found.")
 
         daemon = DaemonManager()
         stats = daemon.get_stats()
         history = daemon.get_history(limit=1)
         last_task = history[0] if history else None
 
-        summary_lines = [
-            "",
+        lines.append("")
+        lines.append(
             f"  Queue: {stats.get('total', 0)} tasks "
-            f"({stats.get('running', 0)} running, {stats.get('pending', 0)} pending)",
-        ]
+            f"({stats.get('running', 0)} running, {stats.get('pending', 0)} pending)"
+        )
         if last_task:
             status_color = "green" if last_task.status.value == "completed" else "red"
-            summary_lines.append(
+            lines.append(
                 f"  Last task: {last_task.title or last_task.type.value} "
                 f"[{status_color}]{last_task.status.value}[/]"
             )
 
-        current = disk_widget.content or ""
-        disk_widget.update(str(current) + "\n".join(summary_lines))
+        disk_widget.update("\n".join(lines))
 
     def _update_storage_info(self) -> None:
         widget = self.query_one("#storage-details", Static)
