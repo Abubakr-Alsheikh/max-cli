@@ -58,7 +58,11 @@ def process_batch_parallel(
                     results.append({"result": result, "item": item})
 
                 if emitter:
-                    event_result = result if isinstance(result, dict) else {"result": result, "item": item}
+                    event_result = (
+                        result
+                        if isinstance(result, dict)
+                        else {"result": result, "item": item}
+                    )
                     emitter.emit(FileCompleteEvent(file=item_name, result=event_result))
             except Exception as e:
                 error_msg = str(e)
@@ -108,7 +112,11 @@ def process_batch_sequential(
                 results.append({"result": result, "item": item})
 
             if emitter:
-                event_result = result if isinstance(result, dict) else {"result": result, "item": item}
+                event_result = (
+                    result
+                    if isinstance(result, dict)
+                    else {"result": result, "item": item}
+                )
                 emitter.emit(FileCompleteEvent(file=item_name, result=event_result))
         except Exception as e:
             error_msg = str(e)

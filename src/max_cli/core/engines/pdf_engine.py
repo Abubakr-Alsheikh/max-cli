@@ -528,3 +528,45 @@ class PDFEngine:
         doc2.close()
 
         return result
+
+
+def _pdf_merge_executor(task: "TaskItem") -> Dict[str, Any]:
+    from pathlib import Path
+
+    engine = PDFEngine()
+    payload = task.payload
+    inputs = [Path(p) for p in payload.get("input_paths", [])]
+    output = Path(payload["output_path"])
+
+    pages = engine.merge_pdfs(inputs, output)
+    return {
+        "output_path": str(output),
+        "output_files": [str(output)],
+        "total_pages": pages,
+        "message": f"Merged {len(inputs)} files ({pages} pages)",
+    }
+
+
+def _pdf_compress_executor(task: "TaskItem") -> Dict[str, Any]:
+    from pathlib import Path
+
+    engine = PDFEngine()
+    payload = task.payload
+    inp = Path(payload["input_path"])
+    output = Path(payload.get("output_path", inp.parent / f"{inp.stem}_compressed.pdf"))
+    dpi = payload.get("dpi", 150)
+    quality = payload.get("quality", 75)
+
+    pages = engine.compress_pdf(inp, output, dpi, quality)
+    return {
+        "output_path": str(output),
+        "output_files": [str(output)],
+        "page_count": pages,
+        "message": f"Compressed: {inp.name} ({pages} pages)",
+    }
+
+
+from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+
+register_executor(TaskType.PDF_MERGE, _pdf_merge_executor)
+register_executor(TaskType.PDF_COMPRESS, _pdf_compress_executor)

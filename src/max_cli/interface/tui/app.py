@@ -18,6 +18,15 @@ class MaxDashboardApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("1", "switch_home", "Home"),
+        ("2", "switch_download", "Download"),
+        ("3", "switch_queue", "Queue"),
+        ("4", "switch_history", "History"),
+        ("5", "switch_files", "Files"),
+        ("6", "switch_tools", "Tools"),
+        ("7", "switch_config", "Config"),
+        ("8", "switch_system", "System"),
+        ("9", "switch_chat", "AI Chat"),
     ]
 
     CSS = """
@@ -38,9 +47,13 @@ class MaxDashboardApp(App):
         border: solid $accent;
     }
     #queue-actions, #history-controls, #config-actions, #files-actions, #form-actions {
-        dock: bottom;
         height: auto;
         margin-top: 1;
+        dock: bottom;
+    }
+    Footer {
+        dock: bottom;
+        height: auto;
     }
     .config-row {
         margin: 0 1;
@@ -191,6 +204,33 @@ class MaxDashboardApp(App):
             panel = self.query_one(panel_id)
             if hasattr(panel, "refresh_data"):
                 panel.refresh_data()
+
+    def action_switch_home(self) -> None:
+        self.query_one("TabbedContent").active = "home"
+
+    def action_switch_download(self) -> None:
+        self.query_one("TabbedContent").active = "download"
+
+    def action_switch_queue(self) -> None:
+        self.query_one("TabbedContent").active = "queue"
+
+    def action_switch_history(self) -> None:
+        self.query_one("TabbedContent").active = "history"
+
+    def action_switch_files(self) -> None:
+        self.query_one("TabbedContent").active = "files"
+
+    def action_switch_tools(self) -> None:
+        self.query_one("TabbedContent").active = "tools"
+
+    def action_switch_config(self) -> None:
+        self.query_one("TabbedContent").active = "config"
+
+    def action_switch_system(self) -> None:
+        self.query_one("TabbedContent").active = "system"
+
+    def action_switch_chat(self) -> None:
+        self.query_one("TabbedContent").active = "ai-chat"
 
     def on_home_panel_command_selected(
         self, message: HomePanel.CommandSelected

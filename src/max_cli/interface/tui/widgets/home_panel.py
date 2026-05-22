@@ -81,18 +81,26 @@ class HomePanel(Vertical):
         self._load_recent_activity()
 
     def _update_stats(self) -> None:
+        from datetime import datetime
+
         from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.interface.tui.activity_log import ActivityLog
 
         daemon = DaemonManager()
         stats = daemon.get_stats()
 
         activity = ActivityLog()
-        today_count = len(activity.get_entries(limit=1000))
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_entries = [
+            e
+            for e in activity.get_entries(limit=1000)
+            if e.timestamp and e.timestamp.startswith(today) and e.category == "grab"
+        ]
 
         stats_widget = self.query_one("#home-stats", Static)
         stats_widget.update(
             f"  Queue: {stats.get('pending', 0)} pending  |  "
-            f"Downloads today: {today_count}  |  "
+            f"Downloads today: {len(today_entries)}  |  "
             f"Failed: {stats.get('failed', 0)}"
         )
 
@@ -105,9 +113,13 @@ class HomePanel(Vertical):
             icon = "\u2713" if entry.status == "success" else "\u2717"
             color = "green" if entry.status == "success" else "red"
             action = entry.action.replace("_", " ").title()
-            details = str(entry.details.get("url", entry.details.get("target", "")))[
-                :40
-            ]
+            details = str(
+                entry.details.get(
+                    "url", entry.details.get("target", entry.details.get("params", ""))
+                )
+            )
+            if len(details) > 40:
+                details = details[:37] + "..."
             lines.append(f"[{color}]{icon}[/{color}] {action}: {details}")
 
         widget = self.query_one("#home-activity-list", Static)

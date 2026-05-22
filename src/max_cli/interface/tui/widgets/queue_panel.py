@@ -43,6 +43,25 @@ class QueuePanel(Vertical):
         table = self.query_one("#queue-table", DataTable)
 
         table.clear()
+
+        if not tasks:
+            if not table.columns:
+                table.add_column("ID", width=10)
+                table.add_column("Type", width=16)
+                table.add_column("Title", width=30)
+                table.add_column("Status", width=12)
+                table.add_column("Progress", width=10)
+                table.add_column("ETA", width=10)
+            table.add_row(
+                "",
+                "",
+                "[dim]No tasks in queue — use the Download tab to start[/dim]",
+                "",
+                "",
+                "",
+            )
+            return
+
         if not table.columns:
             table.add_column("ID", width=10)
             table.add_column("Type", width=16)
@@ -50,16 +69,6 @@ class QueuePanel(Vertical):
             table.add_column("Status", width=14)
             table.add_column("Progress", width=14)
             table.add_column("ETA", width=10)
-
-        if not tasks:
-            table.add_row(
-                "",
-                "",
-                "[dim]No tasks in queue[/dim]",
-                "",
-                "",
-                "",
-            )
 
         for task in tasks:
             status_style = self._status_style(task.status)

@@ -1,7 +1,5 @@
 """Interactive download panel for the TUI dashboard."""
 
-from pathlib import Path
-
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -16,6 +14,8 @@ from textual.widgets import (
     Static,
 )
 
+from max_cli.config import settings
+
 
 class DownloadPanel(Vertical):
     DEFAULT_CSS = """
@@ -28,29 +28,12 @@ class DownloadPanel(Vertical):
     #download-type-row, #download-quality-row {
         margin: 1 0;
     }
-    #download-options {
-        margin: 1 0;
-    }
-    #output-row {
-        margin: 1 0;
-    }
-    #download-actions {
-        margin: 1 0;
-    }
     #download-status {
         margin: 1 0;
         padding: 0 1;
     }
     #recent-title {
         margin: 1 0 0 0;
-        padding: 0 1;
-    }
-    #recent-scroll {
-        height: 8;
-        border: solid $primary-darken-2;
-        margin: 0 1;
-    }
-    #recent-list {
         padding: 0 1;
     }
     """
@@ -67,10 +50,13 @@ class DownloadPanel(Vertical):
 
             yield Label("Type:", id="type-label")
             with RadioSet(id="download-type"):
-                yield RadioButton("Video", id="type-video", value=True)
-                yield RadioButton("Audio Only", id="type-audio")
+                is_audio_default = settings.GRAB_DEFAULT_TYPE == "audio"
+                yield RadioButton("Video", id="type-video", value=not is_audio_default)
+                yield RadioButton("Audio Only", id="type-audio", value=is_audio_default)
 
             yield Label("Quality:", id="quality-label")
+            quality_map = {"ss": "ss", "s": "s", "m": "m", "h": "h", "x": "x"}
+            default_quality = quality_map.get(settings.GRAB_QUALITY.lower()[0], "h")
             yield Select(
                 [
                     ("360p", "ss"),
@@ -79,7 +65,7 @@ class DownloadPanel(Vertical):
                     ("1080p", "h"),
                     ("4K", "x"),
                 ],
-                value="h",
+                value=default_quality,
                 id="download-quality",
                 allow_blank=False,
             )
@@ -93,13 +79,17 @@ class DownloadPanel(Vertical):
 
             with Horizontal(id="download-options"):
                 yield Checkbox("Subtitles", id="download-subtitles")
-                yield Checkbox("Metadata", id="download-metadata", value=True)
+                yield Checkbox(
+                    "Metadata",
+                    id="download-metadata",
+                    value=settings.GRAB_INCLUDE_METADATA,
+                )
                 yield Checkbox("No Playlist", id="download-no-playlist")
 
             yield Label("Output:", id="output-label")
             with Horizontal(id="output-row"):
                 yield Input(
-                    value=str(Path.home() / "Max Downloads"),
+                    value=str(settings.GRAB_DEFAULT_PATH),
                     id="download-output",
                 )
                 yield Button("Browse", id="btn-browse-output", variant="default")
@@ -139,11 +129,21 @@ class DownloadPanel(Vertical):
         self._set_status("Added to queue", "success")
         self._execute_download(queue=True)
 
+    @on(Button.Pressed, "#btn-browse-output")
+    def _on_browse_output(self) -> None:
+        self.notify("Type or paste the output directory path", severity="information")
+
     def _execute_download(self, queue: bool) -> None:
         from max_cli.interface.tui.command_executor import CommandExecutor
 
         executor = CommandExecutor()
         values = self._collect_form_values()
+
+        download_btn = self.query_one("#btn-download", Button)
+        download_btn.disabled = True
+        download_btn.label = "Downloading..."
+        queue_btn = self.query_one("#btn-queue", Button)
+        queue_btn.disabled = True
 
         try:
             result = executor.execute(
@@ -164,6 +164,10 @@ class DownloadPanel(Vertical):
 
         except Exception as e:
             self._set_status(f"Error: {e}", "error")
+        finally:
+            download_btn.disabled = False
+            download_btn.label = "Download Now"
+            queue_btn.disabled = False
 
     def _collect_form_values(self) -> dict:
         url = self.query_one("#download-url", Input).value.strip()

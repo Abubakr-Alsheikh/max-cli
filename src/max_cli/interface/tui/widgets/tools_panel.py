@@ -153,10 +153,15 @@ class ToolsPanel(Vertical):
 
         valid, errors = CommandRegistry.validate_fields(schema, values)
         if not valid:
-            self._set_form_status(f"Error: {'; '.join(errors)}", "error")
+            self._set_form_status(f"[red]\u2717 {'; '.join(errors)}[/red]", "error")
             return
 
         self._set_form_status("Executing...", "info")
+        exec_btn = self.query_one("#btn-execute", Button)
+        exec_btn.disabled = True
+        exec_btn.label = "Working..."
+        if self.query_one("#btn-queue", Button, default=None):
+            self.query_one("#btn-queue", Button).disabled = True
 
         executor = CommandExecutor()
         try:
@@ -168,8 +173,15 @@ class ToolsPanel(Vertical):
             )
 
             if result.success:
-                status_msg = "Queued" if queue else "Success"
-                self._set_form_status(f"{status_msg}: {result.message}", "success")
+                if queue:
+                    self._set_form_status(
+                        "[yellow]\u23f3 Queued for background execution[/yellow]",
+                        "info",
+                    )
+                else:
+                    self._set_form_status(
+                        f"[green]\u2713 {result.message}[/green]", "success"
+                    )
                 result_widget = self.query_one("#form-result", Static)
                 if result.output_files:
                     output_text = "Output:\n" + "\n".join(
@@ -177,10 +189,15 @@ class ToolsPanel(Vertical):
                     )
                     result_widget.update(output_text)
             else:
-                self._set_form_status(f"Failed: {result.error}", "error")
+                self._set_form_status(f"[red]\u2717 {result.error}[/red]", "error")
 
         except Exception as e:
-            self._set_form_status(f"Error: {e}", "error")
+            self._set_form_status(f"[red]\u2717 Error: {e}[/red]", "error")
+        finally:
+            exec_btn.disabled = False
+            exec_btn.label = "Execute"
+            if self.query_one("#btn-queue", Button, default=None):
+                self.query_one("#btn-queue", Button).disabled = False
 
     def _collect_form_values(self) -> dict[str, Any]:
         from max_cli.interface.tui.command_registry import CommandRegistry

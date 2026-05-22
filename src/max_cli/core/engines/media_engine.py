@@ -40,7 +40,7 @@ class MediaEngine:
 
     def compress_video(
         self, input_path: Path, output_path: Path, crf: int = 28, preset: str = "medium"
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Compress video using H.264 (safe compatibility).
         CRF: 0-51 (Lower is better quality). 23 is default, 28 is compressed.
@@ -70,8 +70,13 @@ class MediaEngine:
             str(output_path),
         ]
         self._run(cmd)
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Compressed: {input_path.name}",
+        }
 
-    def convert_format(self, input_path: Path, output_path: Path) -> None:
+    def convert_format(self, input_path: Path, output_path: Path) -> Dict[str, Any]:
         """
         Smart convert (e.g., MKV -> MP4).
         Tries to 'copy' streams if possible (instant), otherwise re-encodes.
@@ -107,10 +112,15 @@ class MediaEngine:
                 str(output_path),
             ]
             self._run(cmd_reencode)
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Converted: {input_path.name} -> {output_path.name}",
+        }
 
     def extract_audio(
         self, input_path: Path, output_path: Path, bitrate: str = "192k"
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Extracts audio from video and converts it to the desired format.
         Supported extensions: .mp3, .wav, .aac, .flac
@@ -143,10 +153,15 @@ class MediaEngine:
         cmd.extend(["-loglevel", "error", str(output_path)])
 
         self._run(cmd)
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Extracted audio: {output_path.name}",
+        }
 
     def video_to_gif(
         self, input_path: Path, output_path: Path, fps: int = 15, scale: int = 480
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Creates a high-quality GIF using a palette generator (prevents graininess).
         """
@@ -165,6 +180,11 @@ class MediaEngine:
             str(output_path),
         ]
         self._run(cmd)
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Created GIF: {output_path.name}",
+        }
 
     def trim_video(
         self,
@@ -173,7 +193,7 @@ class MediaEngine:
         start: str,
         end: Optional[str] = None,
         duration: Optional[str] = None,
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Cuts a video clip.
         start: Timestamp (e.g., "00:01:30" or "90")
@@ -207,6 +227,11 @@ class MediaEngine:
             )
 
         self._run(cmd)
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Trimmed: {input_path.name}",
+        }
 
     def get_thumbnail(
         self, input_path: Path, output_path: Path, time: str = "00:00:01"

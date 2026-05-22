@@ -3,7 +3,6 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
-from max_cli.core.engines.daemon_manager import DaemonManager
 from max_cli.interface.tui.activity_log import ActivityLog
 
 
@@ -135,8 +134,25 @@ class HistoryPanel(Vertical):
 
     @on(Button.Pressed, "#btn-clear-history")
     def _on_clear_history(self) -> None:
-        daemon = DaemonManager()
-        daemon.clear_history()
-        self.refresh_data()
-        detail = self.query_one("#history-detail", Static)
-        detail.update("")
+        btn = self.query_one("#btn-clear-history", Button)
+        if btn.label == "Confirm?":
+            from max_cli.interface.tui.activity_log import ActivityLog
+
+            activity = ActivityLog()
+            activity.clear()
+            btn.label = "Clear History"
+            self.refresh_data()
+            detail = self.query_one("#history-detail", Static)
+            detail.update("")
+            self.notify("History cleared", severity="information")
+        else:
+            btn.label = "Confirm?"
+            self.set_timer(5.0, lambda: self._reset_confirm())
+
+    def _reset_confirm(self) -> None:
+        try:
+            btn = self.query_one("#btn-clear-history", Button)
+            if btn.label == "Confirm?":
+                btn.label = "Clear History"
+        except Exception:
+            pass

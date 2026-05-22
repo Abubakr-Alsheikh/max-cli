@@ -42,6 +42,7 @@ class FilesPanel(Vertical):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._current_path: Path = Path.home()
+        self._selected_files: set[str] = set()
 
     def compose(self) -> ComposeResult:
         yield Static("[bold cyan]File Browser[/bold cyan]", id="files-title")
@@ -58,6 +59,7 @@ class FilesPanel(Vertical):
             yield Button("Duplicates", id="btn-duplicates", variant="default")
             yield Button("Backup", id="btn-backup", variant="default")
             yield Button("Preview", id="btn-preview", variant="default")
+            yield Button("Undo", id="btn-undo", variant="warning")
         with Horizontal(id="files-footer"):
             yield Label("Filter:", id="filter-label")
             yield Input(placeholder="Filter files...", id="files-filter")
@@ -196,9 +198,15 @@ class FilesPanel(Vertical):
 
     @on(DataTable.RowSelected, "#files-table")
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
-        path = Path(event.row_key.value)
-        if path.is_dir():
-            self._navigate(path)
+        row_key = event.row_key.value
+        if row_key in self._selected_files:
+            self._selected_files.discard(row_key)
+        else:
+            self._selected_files.add(row_key)
+        self.notify(
+            f"{len(self._selected_files)} file(s) selected",
+            severity="information",
+        )
 
     @on(Input.Changed, "#files-filter")
     def _on_filter(self, event: Input.Changed) -> None:
@@ -256,28 +264,116 @@ class FilesPanel(Vertical):
 
     @on(Button.Pressed, "#btn-organize")
     def _on_organize(self) -> None:
+        self.notify("This action will modify files. Proceeding...", severity="warning")
         self._execute_quick_action(
             "files", "smart-sort", {"path": str(self._current_path)}
         )
 
     @on(Button.Pressed, "#btn-duplicates")
     def _on_duplicates(self) -> None:
+        self.notify("This action will modify files. Proceeding...", severity="warning")
         self._execute_quick_action(
             "files", "duplicates", {"folder": str(self._current_path)}
         )
 
     @on(Button.Pressed, "#btn-backup")
     def _on_backup(self) -> None:
-        pass
+        table = self.query_one("#files-table", DataTable)
+        if table.cursor_coordinate is None:
+            self.notify("Select a file to backup", severity="warning")
+            return
+
+        row_data = table.get_row_at(table.cursor_coordinate.row)
+        if not row_data:
+            return
+
+        file_name = row_data[0]
+        clean_name = file_name.split(" ", 1)[-1].rstrip("/")
+        file_path = self._current_path / clean_name
+
+        if file_path.is_dir():
+            self.notify("Cannot backup directories", severity="warning")
+            return
+
+        self._execute_quick_action("files", "backup", {"target": str(file_path)})
 
     @on(Button.Pressed, "#btn-preview")
     def _on_preview(self) -> None:
-        pass
+        table = self.query_one("#files-table", DataTable)
+        if table.cursor_coordinate is None:
+            self.notify("Select a file to preview", severity="warning")
+            return
+
+        row_data = table.get_row_at(table.cursor_coordinate.row)
+        if not row_data:
+            return
+
+        file_name = row_data[0]
+        clean_name = file_name.split(" ", 1)[-1].rstrip("/")
+        file_path = self._current_path / clean_name
+
+        if file_path.is_dir():
+            self.notify("Cannot preview directories", severity="warning")
+            return
+
+        if file_path.suffix.lower() in {
+            ".txt",
+            ".md",
+            ".csv",
+            ".json",
+            ".log",
+            ".py",
+            ".js",
+            ".html",
+        }:
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                self.notify(
+                    f"Preview of {clean_name}:\n{content[:500]}",
+                    severity="information",
+                )
+            except Exception as e:
+                self.notify(f"Cannot read file: {e}", severity="error")
+        else:
+            try:
+                self.notify(
+                    f"{clean_name}\nSize: {self._format_size(file_path)}\nModified: {self._format_mtime(file_path)}",
+                    severity="information",
+                )
+            except Exception as e:
+                self.notify(f"Cannot stat file: {e}", severity="error")
+
+    @on(Button.Pressed, "#btn-undo")
+    def _on_undo(self) -> None:
+        from max_cli.common.transaction_log import TransactionLog
+
+        latest = TransactionLog.get_latest_group()
+        if not latest:
+            self.notify("No transactions to undo", severity="information")
+            return
+
+        if latest.get("undo_status") == "undone":
+            self.notify("Last transaction is already undone", severity="information")
+            return
+
+        try:
+            txn = TransactionLog.load(latest["group_id"])
+            results = txn.undo()
+            self.notify(
+                f"Undo complete: {len(results)} operations reversed",
+                severity="information",
+            )
+        except Exception as e:
+            self.notify(f"Undo failed: {e}", severity="error")
 
     def _execute_quick_action(
         self, category: str, command: str, values: dict[str, str]
     ) -> None:
         from max_cli.interface.tui.command_executor import CommandExecutor
+
+        if self._selected_files:
+            files = list(self._selected_files)
+            values["target"] = files[0] if len(files) == 1 else str(self._current_path)
 
         executor = CommandExecutor()
         try:
@@ -286,5 +382,7 @@ class FilesPanel(Vertical):
                 f"{'Success' if result.success else 'Failed'}: {result.message}",
                 severity="information" if result.success else "error",
             )
+            self._selected_files.clear()
+            self._load_directory()
         except Exception as e:
             self.notify(f"Error: {e}", severity="error")

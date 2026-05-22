@@ -379,3 +379,48 @@ class FileOrganizer:
                 removed += 1
 
         return removed
+
+
+def _file_organize_executor(task: "TaskItem") -> Dict[str, Any]:
+    from pathlib import Path
+
+    engine = FileOrganizer()
+    payload = task.payload
+    path = Path(payload["path"])
+    categories = payload.get("categories", {})
+    dry_run = payload.get("dry_run", False)
+
+    result = engine.smart_sort(path, categories, dry_run=dry_run)
+    moved = result.get("moved", 0)
+    errors = result.get("errors", 0)
+    return {
+        "moved": moved,
+        "errors": errors,
+        "output_files": [],
+        "message": f"Moved {moved} files ({errors} errors)",
+    }
+
+
+def _file_duplicates_executor(task: "TaskItem") -> Dict[str, Any]:
+    from pathlib import Path
+
+    engine = FileOrganizer()
+    payload = task.payload
+    folder = Path(payload["folder"])
+    recursive = payload.get("recursive", False)
+
+    dupes = engine.find_duplicates(folder, recursive)
+    groups = len(dupes)
+    total_dupes = sum(len(v) - 1 for v in dupes.values() if isinstance(v, list))
+    return {
+        "duplicate_groups": groups,
+        "total_duplicates": total_dupes,
+        "output_files": [],
+        "message": f"Found {groups} groups of duplicates ({total_dupes} duplicate files)",
+    }
+
+
+from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+
+register_executor(TaskType.FILE_ORGANIZE, _file_organize_executor)
+register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)

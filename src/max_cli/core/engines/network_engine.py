@@ -59,7 +59,7 @@ class NetworkEngine:
         progress_hook: Optional[Callable] = None,
         subtitles: bool = False,
         custom_height: Optional[int] = None,
-    ):
+    ) -> Dict[str, Any]:
         import yt_dlp  # type: ignore[import-untyped]
 
         from max_cli.common.events import (
@@ -177,3 +177,39 @@ class NetworkEngine:
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e).replace("ERROR: ", "")
                 raise RuntimeError(f"Download failed: {msg}")
+        return {
+            "output_path": str(output_path),
+            "message": f"Downloaded: {url[:50]}",
+        }
+
+
+def _download_executor(task: "TaskItem") -> Dict[str, Any]:
+    engine = NetworkEngine()
+    payload = task.payload
+    url = payload["url"]
+    out = Path(payload.get("output_path", Path.home() / "Max Downloads"))
+    quality = payload.get("quality", "h")
+    audio_only = payload.get("audio_only", False)
+    subs = payload.get("subtitles", False)
+    meta = payload.get("include_metadata", True)
+    custom_h = payload.get("custom_height")
+
+    engine.download_media(
+        url=url,
+        output_path=out,
+        quality=quality,
+        audio_only=audio_only,
+        subtitles=subs,
+        include_metadata=meta,
+        custom_height=custom_h,
+    )
+    return {
+        "output_path": str(out),
+        "output_files": [str(out)],
+        "message": f"Downloaded: {url[:50]}",
+    }
+
+
+from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+
+register_executor(TaskType.DOWNLOAD, _download_executor)

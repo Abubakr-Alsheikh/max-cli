@@ -159,42 +159,57 @@ class SystemPanel(Vertical):
 
     @on(Button.Pressed, "#btn-clear-cache")
     def _on_clear_cache(self) -> None:
-        from max_cli.common.cache import get_default_cache
+        btn = self.query_one("#btn-clear-cache", Button)
+        if btn.label == "Confirm?":
+            from max_cli.common.cache import get_default_cache
 
-        cache = get_default_cache()
-        count = cache.clear()
-        self._update_storage_info()
-        self.notify(f"Cleared {count} cached items", severity="information")
-
-    @on(Button.Pressed, "#btn-cleanup-backups")
-    def _on_cleanup_backups(self) -> None:
-        from max_cli.core.engines.file_organizer import FileOrganizer
-
-        organizer = FileOrganizer()
-        count = organizer.cleanup_old_backups(days=30)
-        self._update_storage_info()
-        self.notify(f"Removed {count} old backups", severity="information")
-
-    @on(Button.Pressed, "#btn-clean-txn")
-    def _on_clean_txn(self) -> None:
-        from max_cli.common.transaction_log import TransactionLog
-
-        count = TransactionLog.cleanup_all()
-        self._update_storage_info()
-        self.notify(f"Cleaned {count} old transactions", severity="information")
+            cache = get_default_cache()
+            cache.clear()
+            btn.label = "Clear Cache"
+            self.notify("Cache cleared", severity="information")
+            self._update_disk_usage()
+        else:
+            btn.label = "Confirm?"
+            self.set_timer(
+                5.0, lambda: self._reset_confirm("#btn-clear-cache", "Clear Cache")
+            )
 
     @on(Button.Pressed, "#btn-clear-queues")
     def _on_clear_queues(self) -> None:
-        daemon = DaemonManager()
-        daemon.clear()
-        self.notify("All queues cleared", severity="information")
+        btn = self.query_one("#btn-clear-queues", Button)
+        if btn.label == "Confirm?":
+            daemon = DaemonManager()
+            daemon.clear()
+            btn.label = "Clear Queues"
+            self.notify("All queues cleared", severity="information")
+        else:
+            btn.label = "Confirm?"
+            self.set_timer(
+                5.0, lambda: self._reset_confirm("#btn-clear-queues", "Clear Queues")
+            )
 
     @on(Button.Pressed, "#btn-reset-config")
     def _on_reset_config(self) -> None:
-        env_path = Path.home() / ".max_config.env"
-        if env_path.exists():
-            env_path.unlink()
-        self.notify("Config reset to defaults", severity="warning")
+        btn = self.query_one("#btn-reset-config", Button)
+        if btn.label == "Confirm?":
+            env_path = Path.home() / ".max_config.env"
+            if env_path.exists():
+                env_path.unlink()
+            btn.label = "Reset Config"
+            self.notify("Config reset to defaults", severity="warning")
+        else:
+            btn.label = "Confirm?"
+            self.set_timer(
+                5.0, lambda: self._reset_confirm("#btn-reset-config", "Reset Config")
+            )
+
+    def _reset_confirm(self, btn_id: str, original_label: str) -> None:
+        try:
+            btn = self.query_one(f"#{btn_id}", Button)
+            if btn.label == "Confirm?":
+                btn.label = original_label
+        except Exception:
+            pass
 
     @on(Button.Pressed, "#btn-refresh")
     def _on_refresh(self) -> None:

@@ -343,7 +343,9 @@ class CommandExecutor:
             method = getattr(engine, schema["method"])
 
             if category == "ai" and command == "ask":
+                explain = values.get("explain", False)
                 params["app_instance"] = None
+                params["explain"] = bool(explain)
 
             result_data = method(**params)
             duration_ms = (time.monotonic() - start) * 1000
@@ -494,7 +496,9 @@ class CommandExecutor:
             method = getattr(engine, schema["method"])
 
             if category == "ai" and command == "ask":
+                explain = values.get("explain", False)
                 params["app_instance"] = None
+                params["explain"] = bool(explain)
 
             if progress_callback:
                 progress_callback(0.0, "Starting...")
@@ -604,6 +608,14 @@ class CommandExecutor:
         if isinstance(result, Path):
             return f"Output: {result}"
         if isinstance(result, dict):
+            if any(isinstance(v, list) and len(v) > 1 for v in result.values()):
+                total_dupes = sum(
+                    len(v) - 1 for v in result.values() if isinstance(v, list)
+                )
+                return (
+                    f"Found {len(result)} groups of duplicates "
+                    f"({total_dupes} duplicate files)"
+                )
             msg = result.get("message", "")
             if msg:
                 return msg
