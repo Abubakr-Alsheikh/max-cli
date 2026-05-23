@@ -244,7 +244,7 @@ class AudioMetadataEngine:
         Args:
             source_paths: List of audio files to organize
             target_dir: Root directory to organize into
-            pattern: Folder structure - 'artist', 'album', 'artist-album', 'genre'
+            pattern: Folder structure - 'artist', 'album', 'artist-album', 'genre', 'contributing-artists'
 
         Returns:
             Dict with 'moved', 'skipped', 'errors' counts and details
@@ -264,12 +264,14 @@ class AudioMetadataEngine:
                 artist = metadata.get("artist", "Unknown Artist")
                 album = metadata.get("album", "Unknown Album")
                 genre = metadata.get("genre", "Unknown Genre")
+                albumartist = metadata.get("albumartist", "")
                 title = metadata.get("title", file_path.stem)
                 track = metadata.get("tracknumber", "")
 
                 artist = self._sanitize_filename(artist)
                 album = self._sanitize_filename(album)
                 genre = self._sanitize_filename(genre)
+                albumartist = self._sanitize_filename(albumartist)
                 title = self._sanitize_filename(title)
 
                 if pattern == "artist":
@@ -278,6 +280,9 @@ class AudioMetadataEngine:
                     dest_dir = target_dir / album
                 elif pattern == "genre":
                     dest_dir = target_dir / genre
+                elif pattern == "contributing-artists":
+                    folder = albumartist if albumartist else artist
+                    dest_dir = target_dir / folder
                 else:
                     dest_dir = target_dir / artist / album
 

@@ -285,7 +285,7 @@ def organize_files(
         "artist",
         "--pattern",
         "-p",
-        help="Folder structure: artist, album, genre, artist-album.",
+        help="Folder structure: artist, album, genre, artist-album, contributing-artists.",
     ),
 ):
     """
@@ -293,16 +293,23 @@ def organize_files(
 
     Default: Files are moved to folders named by artist.
     Example patterns:
-      - artist:     Music/Artist Name/Song.mp3
-      - album:      Music/Album Name/Song.mp3
-      - genre:      Music/Rock/Song.mp3
-      - artist-album: Music/Artist Name/Album Name/Song.mp3
+      - artist:              Music/Artist Name/Song.mp3
+      - album:               Music/Album Name/Song.mp3
+      - genre:               Music/Rock/Song.mp3
+      - artist-album:        Music/Artist Name/Album Name/Song.mp3
+      - contributing-artists: Music/Contributing Artist/Song.mp3 (uses albumartist, falls back to artist)
     """
     if not targets:
         log_error("No files provided.")
         return
 
-    valid_patterns = ["artist", "album", "genre", "artist-album"]
+    valid_patterns = [
+        "artist",
+        "album",
+        "genre",
+        "artist-album",
+        "contributing-artists",
+    ]
     if pattern not in valid_patterns:
         log_error(f"Invalid pattern. Use: {', '.join(valid_patterns)}")
         return
