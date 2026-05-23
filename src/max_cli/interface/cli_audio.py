@@ -318,9 +318,15 @@ def organize_files(
 
     console.print(f"[cyan]Organizing {len(targets)} files into {target_dir}...[/cyan]")
 
+    from max_cli.common.transaction_log import TransactionLog
+
+    txn = TransactionLog(command="audio organize")
+
     with console.status("[bold green]Organizing files...[/bold green]"):
         eng = _get_engine()
-        result = eng.organize(targets, target_dir, pattern)
+        result = eng.organize(targets, target_dir, pattern, transaction_log=txn)
+
+    txn.save()
 
     if result["total_moved"]:
         console.print(f"[green]Moved {result['total_moved']} files:[/green]")
@@ -337,3 +343,4 @@ def organize_files(
     log_success(
         f"Done! Moved: {result['total_moved']}, Errors: {result['total_errors']}"
     )
+    console.print("[dim]Undo with: max files undo[/dim]")
