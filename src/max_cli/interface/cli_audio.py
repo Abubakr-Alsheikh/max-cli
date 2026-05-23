@@ -289,6 +289,12 @@ def organize_files(
         "-p",
         help="Folder structure: artist, album, genre, artist-album, contributing-artists.",
     ),
+    filter_value: str = typer.Option(
+        "",
+        "--filter",
+        "-f",
+        help="Only organize files matching this folder name (e.g. --filter 'Electronic Gems').",
+    ),
 ):
     """
     Organize audio files into folders by metadata.
@@ -300,6 +306,7 @@ def organize_files(
       - genre:               Music/Rock/Song.mp3
       - artist-album:        Music/Artist Name/Album Name/Song.mp3
       - contributing-artists: Music/Contributing Artist/Song.mp3 (uses albumartist, falls back to artist)
+    Use --filter to only process files matching a specific folder name (e.g. --filter 'Electronic Gems').
     """
     if not targets:
         log_error("No files provided.")
@@ -326,7 +333,10 @@ def organize_files(
 
     with console.status("[bold green]Organizing files...[/bold green]"):
         eng = _get_engine()
-        result = eng.organize(targets, target_dir, pattern, transaction_log=txn)
+        eng_filter = filter_value if filter_value else None
+        result = eng.organize(
+            targets, target_dir, pattern, transaction_log=txn, filter_value=eng_filter
+        )
 
     txn.save()
 

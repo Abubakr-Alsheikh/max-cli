@@ -251,6 +251,7 @@ class AudioMetadataEngine:
         target_dir: Path,
         pattern: str = "artist",
         transaction_log: Optional["TransactionLog"] = None,
+        filter_value: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Organize audio files into folders by metadata.
@@ -259,6 +260,7 @@ class AudioMetadataEngine:
             source_paths: List of audio files to organize
             target_dir: Root directory to organize into
             pattern: Folder structure - 'artist', 'album', 'artist-album', 'genre', 'contributing-artists'
+            filter_value: If set, only move files whose destination folder name matches this value
 
         Returns:
             Dict with 'moved', 'skipped', 'errors' counts and details
@@ -310,6 +312,10 @@ class AudioMetadataEngine:
                     dest_dir = target_dir / folder
                 else:
                     dest_dir = target_dir / artist / album
+
+                if filter_value is not None and dest_dir.name != filter_value:
+                    skipped.append(f"{file_path.name} (filter: {filter_value})")
+                    continue
 
                 dest_dir.mkdir(parents=True, exist_ok=True)
 
