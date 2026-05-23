@@ -97,6 +97,8 @@ def get_metadata(
     Display all metadata from an audio file (title, artist, album, genre, etc.).
     """
     try:
+        from rich.text import Text
+
         eng = _get_engine()
         metadata = eng.get_metadata(target)
 
@@ -105,7 +107,7 @@ def get_metadata(
         table.add_column("Value", style="white")
 
         for key, value in metadata.items():
-            table.add_row(key, str(value))
+            table.add_row(key, Text(str(value)))
 
         console.print(table)
 

@@ -17,6 +17,7 @@ class AudioMetadataEngine:
     def get_metadata(self, file_path: Path) -> Dict[str, Any]:
         """
         Retrieve all metadata from an audio file.
+        Returns all raw frame keys plus convenience names for known fields.
         """
         from mutagen._file import File as MutagenFile
 
@@ -36,26 +37,39 @@ class AudioMetadataEngine:
 
         metadata: Dict[str, Any] = {}
 
-        metadata["title"] = audio.get("title", [None])[0]
-        metadata["artist"] = audio.get("artist", [None])[0]
-        metadata["album"] = audio.get("album", [None])[0]
-        metadata["albumartist"] = audio.get("albumartist", [None])[0]
-        metadata["genre"] = audio.get("genre", [None])[0]
-        metadata["date"] = audio.get("date", [None])[0]
-        metadata["tracknumber"] = audio.get("tracknumber", [None])[0]
-        metadata["discnumber"] = audio.get("discnumber", [None])[0]
-        metadata["composer"] = audio.get("composer", [None])[0]
-        metadata["comment"] = audio.get("comment", [None])[0]
+        ID3_CONVENIENCE = {
+            "TIT2": "title",
+            "TPE1": "artist",
+            "TALB": "album",
+            "TPE2": "albumartist",
+            "TCON": "genre",
+            "TDRC": "date",
+            "TRCK": "tracknumber",
+            "TPOS": "discnumber",
+            "TCOM": "composer",
+            "COMM": "comment",
+        }
+
+        for frame_id in sorted(audio.keys()):
+            if frame_id.startswith("APIC"):
+                continue
+            try:
+                value = audio.get(frame_id)
+            except Exception:
+                value = None
+            if value is not None:
+                val_str = str(value)
+                short = frame_id.split(":")[0]
+                if short in ID3_CONVENIENCE:
+                    metadata[ID3_CONVENIENCE[short]] = val_str
+                else:
+                    metadata[frame_id] = val_str
 
         if hasattr(audio, "info"):
             metadata["duration"] = round(audio.info.length, 2)
             metadata["bitrate"] = getattr(audio.info, "bitrate", None)
             metadata["sample_rate"] = getattr(audio.info, "sample_rate", None)
             metadata["channels"] = getattr(audio.info, "channels", None)
-
-        for key in list(metadata.keys()):
-            if metadata[key] is None:
-                del metadata[key]
 
         return metadata
 
@@ -261,12 +275,11 @@ class AudioMetadataEngine:
 
                 metadata = self.get_metadata(file_path)
 
-                artist = metadata.get("artist", "Unknown Artist")
-                album = metadata.get("album", "Unknown Album")
-                genre = metadata.get("genre", "Unknown Genre")
-                albumartist = metadata.get("albumartist", "")
-                title = metadata.get("title", file_path.stem)
-                track = metadata.get("tracknumber", "")
+                artist = metadata.get("artist") or "Unknown Artist"
+                album = metadata.get("album") or "Unknown Album"
+                genre = metadata.get("genre") or "Unknown Genre"
+                albumartist = metadata.get("albumartist") or ""
+                title = metadata.get("title") or file_path.stem
 
                 artist = self._sanitize_filename(artist)
                 album = self._sanitize_filename(album)
@@ -281,25 +294,30 @@ class AudioMetadataEngine:
                 elif pattern == "genre":
                     dest_dir = target_dir / genre
                 elif pattern == "contributing-artists":
-                    folder = albumartist if albumartist else artist
+                    contrib = metadata.get("albumartist") or ""
+                    if not contrib:
+                        contrib = metadata.get("artist") or ""
+                    if not contrib:
+                        title_val = metadata.get("title") or ""
+                        if " - " in title_val:
+                            contrib = title_val.split(" - ")[0].strip()
+                    if not contrib:
+                        if " - " in file_path.stem:
+                            contrib = file_path.stem.split(" - ")[0].strip()
+                    if not contrib:
+                        contrib = "Unknown Artist"
+                    folder = self._sanitize_filename(contrib)
                     dest_dir = target_dir / folder
                 else:
                     dest_dir = target_dir / artist / album
 
                 dest_dir.mkdir(parents=True, exist_ok=True)
 
-                if track:
-                    new_name = f"{track} - {title}{file_path.suffix}"
-                else:
-                    new_name = f"{title}{file_path.suffix}"
-
+                new_name = f"{title}{file_path.suffix}"
                 dest_path = dest_dir / new_name
                 counter = 1
                 while dest_path.exists():
-                    if track:
-                        new_name = f"{track} - {title} ({counter}){file_path.suffix}"
-                    else:
-                        new_name = f"{title} ({counter}){file_path.suffix}"
+                    new_name = f"{title} ({counter}){file_path.suffix}"
                     dest_path = dest_dir / new_name
                     counter += 1
 
