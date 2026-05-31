@@ -13,6 +13,12 @@ class HistoryPanel(Vertical):
         yield Static(
             "[bold cyan]\U0001f4cb Task History[/bold cyan]", id="history-title"
         )
+        yield DataTable(id="history-table")
+        yield Static("", id="history-detail")
+        with Horizontal(id="history-actions"):
+            yield Button(
+                "\U0001f9f9 Clear History", id="btn-clear-history", variant="error"
+            )
         with Horizontal(id="history-controls"):
             yield Select(
                 [
@@ -32,12 +38,6 @@ class HistoryPanel(Vertical):
                 id="history-filter",
             )
             yield Label("", id="history-count")
-        yield DataTable(id="history-table")
-        yield Static("", id="history-detail")
-        with Horizontal(id="history-actions"):
-            yield Button(
-                "\U0001f9f9 Clear History", id="btn-clear-history", variant="error"
-            )
 
     def on_mount(self) -> None:
         self.refresh_data()

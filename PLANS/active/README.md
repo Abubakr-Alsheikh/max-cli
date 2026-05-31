@@ -17,6 +17,8 @@ Place new plan files here.
 | [ffmpeg-auto-resolution.md](./ffmpeg-auto-resolution.md) | Completed | P0 |
 | [file-undo-transaction-log.md](./file-undo-transaction-log.md) | Completed | P1 |
 | [interactive-dashboard-tui.md](./interactive-dashboard-tui.md) | Completed | P2 |
+| [interactive-tui-expansion.md](./interactive-tui-expansion.md) | Completed | P1 |
+| [tui-bugfix-and-ux-improvements.md](./tui-bugfix-and-ux-improvements.md) | Completed | P0 |
 | [user-workflows-aliases.md](./user-workflows-aliases.md) | Draft | P1 |
 
 ### Other Plans

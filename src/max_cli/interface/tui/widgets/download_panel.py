@@ -25,6 +25,10 @@ class DownloadPanel(Vertical):
     #download-form {
         padding: 0 1;
     }
+    #download-form-scroll {
+        height: 1fr;
+        overflow-y: auto;
+    }
     #download-type-row, #download-quality-row {
         margin: 1 0;
     }
@@ -41,62 +45,67 @@ class DownloadPanel(Vertical):
     def compose(self) -> ComposeResult:
         yield Static("[bold cyan]Download Media[/bold cyan]", id="download-title")
 
-        with Vertical(id="download-form"):
-            yield Label("URL:", id="url-label")
-            yield Input(
-                placeholder="https://youtube.com/watch?v=...",
-                id="download-url",
-            )
-
-            yield Label("Type:", id="type-label")
-            with RadioSet(id="download-type"):
-                is_audio_default = settings.GRAB_DEFAULT_TYPE == "audio"
-                yield RadioButton("Video", id="type-video", value=not is_audio_default)
-                yield RadioButton("Audio Only", id="type-audio", value=is_audio_default)
-
-            yield Label("Quality:", id="quality-label")
-            quality_map = {"ss": "ss", "s": "s", "m": "m", "h": "h", "x": "x"}
-            default_quality = quality_map.get(settings.GRAB_QUALITY.lower()[0], "h")
-            yield Select(
-                [
-                    ("360p", "ss"),
-                    ("480p", "s"),
-                    ("720p", "m"),
-                    ("1080p", "h"),
-                    ("4K", "x"),
-                ],
-                value=default_quality,
-                id="download-quality",
-                allow_blank=False,
-            )
-
-            yield Label("Resolution (px, optional):", id="resolution-label")
-            yield Input(
-                placeholder="e.g. 1080",
-                id="download-resolution",
-                type="integer",
-            )
-
-            with Horizontal(id="download-options"):
-                yield Checkbox("Subtitles", id="download-subtitles")
-                yield Checkbox(
-                    "Metadata",
-                    id="download-metadata",
-                    value=settings.GRAB_INCLUDE_METADATA,
-                )
-                yield Checkbox("No Playlist", id="download-no-playlist")
-
-            yield Label("Output:", id="output-label")
-            with Horizontal(id="output-row"):
+        with ScrollableContainer(id="download-form-scroll"):
+            with Vertical(id="download-form"):
+                yield Label("URL:", id="url-label")
                 yield Input(
-                    value=str(settings.GRAB_DEFAULT_PATH),
-                    id="download-output",
+                    placeholder="https://youtube.com/watch?v=...",
+                    id="download-url",
                 )
-                yield Button("Browse", id="btn-browse-output", variant="default")
 
-            with Horizontal(id="download-actions"):
-                yield Button("Download Now", id="btn-download", variant="success")
-                yield Button("Add to Queue", id="btn-queue", variant="primary")
+                yield Label("Type:", id="type-label")
+                with RadioSet(id="download-type"):
+                    is_audio_default = settings.GRAB_DEFAULT_TYPE == "audio"
+                    yield RadioButton(
+                        "Video", id="type-video", value=not is_audio_default
+                    )
+                    yield RadioButton(
+                        "Audio Only", id="type-audio", value=is_audio_default
+                    )
+
+                yield Label("Quality:", id="quality-label")
+                quality_map = {"ss": "ss", "s": "s", "m": "m", "h": "h", "x": "x"}
+                default_quality = quality_map.get(settings.GRAB_QUALITY.lower()[0], "h")
+                yield Select(
+                    [
+                        ("360p", "ss"),
+                        ("480p", "s"),
+                        ("720p", "m"),
+                        ("1080p", "h"),
+                        ("4K", "x"),
+                    ],
+                    value=default_quality,
+                    id="download-quality",
+                    allow_blank=False,
+                )
+
+                yield Label("Resolution (px, optional):", id="resolution-label")
+                yield Input(
+                    placeholder="e.g. 1080",
+                    id="download-resolution",
+                    type="integer",
+                )
+
+                with Horizontal(id="download-options"):
+                    yield Checkbox("Subtitles", id="download-subtitles")
+                    yield Checkbox(
+                        "Metadata",
+                        id="download-metadata",
+                        value=settings.GRAB_INCLUDE_METADATA,
+                    )
+                    yield Checkbox("No Playlist", id="download-no-playlist")
+
+                yield Label("Output:", id="output-label")
+                with Horizontal(id="output-row"):
+                    yield Input(
+                        value=str(settings.GRAB_DEFAULT_PATH),
+                        id="download-output",
+                    )
+                    yield Button("Browse", id="btn-browse-output", variant="default")
+
+                with Horizontal(id="download-actions"):
+                    yield Button("Download Now", id="btn-download", variant="success")
+                    yield Button("Add to Queue", id="btn-queue", variant="primary")
 
         yield Static("Status: Ready", id="download-status")
 

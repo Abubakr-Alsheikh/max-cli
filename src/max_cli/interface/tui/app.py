@@ -38,6 +38,7 @@ class MaxDashboardApp(App):
     }
     TabbedContent > TabPane {
         padding: 0 1;
+        overflow-y: auto;
     }
     QueuePanel, HistoryPanel, ConfigPanel, SystemPanel, DownloadPanel, FilesPanel, ToolsPanel, HomePanel, ChatPanel {
         padding: 1 2;
@@ -46,7 +47,7 @@ class MaxDashboardApp(App):
         height: 1fr;
         border: solid $accent;
     }
-    #queue-actions, #history-controls, #config-actions, #files-actions, #form-actions {
+    #queue-actions, #history-controls, #config-actions, #files-actions, #form-actions, #history-actions {
         height: auto;
         margin-top: 1;
         dock: bottom;
@@ -67,7 +68,7 @@ class MaxDashboardApp(App):
         height: 1fr;
     }
     #log-scroll {
-        height: 12;
+        height: 8;
         border: solid $border;
     }
     .home-card {
@@ -100,9 +101,17 @@ class MaxDashboardApp(App):
         height: auto;
         margin-bottom: 1;
     }
-    #files-footer {
-        height: auto;
-        margin-top: 1;
+    #filter-label, #sort-label {
+        margin: 0 0 0 1;
+    }
+    #files-filter {
+        width: 20;
+    }
+    #files-sort {
+        width: 16;
+    }
+    #files-count {
+        margin: 0 0 0 1;
     }
     #download-options {
         height: auto;
@@ -150,6 +159,10 @@ class MaxDashboardApp(App):
     }
     #chat-input {
         width: 1fr;
+    }
+    #home-activity-scroll {
+        height: 1fr;
+        border: solid $border;
     }
     """
 

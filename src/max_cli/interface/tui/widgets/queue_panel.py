@@ -27,12 +27,12 @@ class QueuePanel(Vertical):
             "[dim]Press [bold]Enter[/bold] to select a task[/dim]",
             id="queue-hint",
         )
+        yield Label("", id="queue-status")
         with Horizontal(id="queue-actions"):
             yield Button("\u274c Cancel", id="btn-cancel", variant="error")
             yield Button("\u267b Retry", id="btn-retry", variant="warning")
             yield Button("\u23f8 Pause", id="btn-pause", variant="primary")
             yield Button("\U0001f9f9 Clear Done", id="btn-clear", variant="default")
-        yield Label("", id="queue-status")
 
     def on_mount(self) -> None:
         self.refresh_data()

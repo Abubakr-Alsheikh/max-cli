@@ -60,7 +60,6 @@ class FilesPanel(Vertical):
             yield Button("Backup", id="btn-backup", variant="default")
             yield Button("Preview", id="btn-preview", variant="default")
             yield Button("Undo", id="btn-undo", variant="warning")
-        with Horizontal(id="files-footer"):
             yield Label("Filter:", id="filter-label")
             yield Input(placeholder="Filter files...", id="files-filter")
             yield Label("Sort:", id="sort-label")

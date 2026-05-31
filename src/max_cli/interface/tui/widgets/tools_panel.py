@@ -1,15 +1,20 @@
 """Command launcher panel with dynamic forms."""
 
-from typing import Any
+from typing import Any, Optional
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.widgets import Button, Checkbox, Input, Label, Select, Static, Tree
+from textual.widget import Widget
+from textual.widgets import Button, Checkbox, Input, Select, Static, Tree
 
 
 class ToolsPanel(Vertical):
     """Command launcher with category tree and dynamic form."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._form_panel: Optional[Vertical] = None
 
     def compose(self) -> ComposeResult:
         yield Static("[bold cyan]Tools & Commands[/bold cyan]", id="tools-title")
@@ -21,10 +26,8 @@ class ToolsPanel(Vertical):
                 yield tree
 
             with ScrollableContainer(id="tools-form-scroll"):
-                with Vertical(id="tools-form-panel"):
-                    yield Static(
-                        "[dim]Select a command to begin[/dim]", id="tools-placeholder"
-                    )
+                self._form_panel = Vertical(id="tools-form-panel")
+                yield self._form_panel
 
     def on_mount(self) -> None:
         self._build_tree()
@@ -60,74 +63,82 @@ class ToolsPanel(Vertical):
         if not schema:
             return
 
-        form_panel = self.query_one("#tools-form-panel", Vertical)
-        form_panel.remove_children()
+        self._form_panel.remove_children(*list(self._form_panel.children))
 
-        form_panel.mount(
-            Static(
-                f"[bold cyan]{schema['icon']} {schema['label']}[/bold cyan]",
-                id="form-title",
-            ),
+        title = Static(
+            f"[bold cyan]{schema['icon']} {schema['label']}[/bold cyan]",
+            id="form-title",
         )
-        form_panel.mount(
-            Static("[dim]" + schema.get("description", "") + "[/dim]", id="form-desc"),
+        desc = Static(
+            "[dim]" + schema.get("description", "") + "[/dim]", id="form-desc"
         )
-        form_panel.mount(Static("\u2500" * 50, id="form-divider"))
+        divider = Static("\u2500" * 50, id="form-divider")
+        self._form_panel.mount(title, desc, divider)
 
         for field in schema["fields"]:
-            field_id = f"field-{field['name']}"
-            required_marker = " *" if field.get("required") else ""
-            label_text = f"{field['label']}{required_marker}:"
-            form_panel.mount(Label(label_text, id=f"label-{field_id}"))
+            field_name = field["name"]
+            field_id = f"field-{field_name}"
+            required_marker = " [bold red]*[/bold red]" if field.get("required") else ""
+            label_text = f"{field['label']}:{required_marker}"
+            self._form_panel.mount(
+                Static(label_text, id=f"label-{field_name}")
+            )
 
             field_type = field.get("type", "str")
 
             if field_type == "bool":
-                widget: Any = Checkbox(
-                    label=field["label"],
-                    value=bool(field.get("default", False)),
-                    id=field_id,
+                self._form_panel.mount(
+                    Checkbox(
+                        label=field["label"],
+                        value=bool(field.get("default", False)),
+                        id=field_id,
+                    )
                 )
             elif field_type == "select":
                 options = [(opt, opt) for opt in field.get("options") or []]
                 default_val = field.get("default")
-                widget = Select(
-                    options=options,
-                    value=default_val if default_val else Select.BLANK,
-                    id=field_id,
-                    allow_blank=False,
+                self._form_panel.mount(
+                    Select(
+                        options=options,
+                        value=default_val if default_val else Select.BLANK,
+                        id=field_id,
+                        allow_blank=False,
+                    )
                 )
             elif field_type in ("int", "float"):
                 input_type = "integer" if field_type == "int" else "number"
-                widget = Input(
-                    value=str(field.get("default", "")),
-                    type=input_type,  # type: ignore[arg-type]
-                    placeholder=field.get("help", ""),
-                    id=field_id,
+                self._form_panel.mount(
+                    Input(
+                        value=str(field.get("default", "")),
+                        type=input_type,  # type: ignore[arg-type]
+                        placeholder=field.get("help", ""),
+                        id=field_id,
+                    )
                 )
             else:
                 default = str(field.get("default", ""))
-                widget = Input(
-                    value=default,
-                    placeholder=field.get("help", ""),
-                    id=field_id,
+                self._form_panel.mount(
+                    Input(
+                        value=default,
+                        placeholder=field.get("help", ""),
+                        id=field_id,
+                    )
                 )
 
-            form_panel.mount(widget)
-
-        actions_container = Horizontal(id="form-actions")
-        exec_btn = Button("Execute", id="btn-execute", variant="success")
-        actions_container.mount(exec_btn)
-
+        action_children: list[Widget] = [
+            Button("Execute", id="btn-execute", variant="success")
+        ]
         if schema.get("has_queue_option"):
-            queue_btn = Button("Add to Queue", id="btn-queue", variant="primary")
-            actions_container.mount(queue_btn)
+            action_children.append(
+                Button("Add to Queue", id="btn-queue", variant="primary")
+            )
 
-        form_panel.mount(actions_container)
-        form_panel.mount(Static("Status: Ready", id="form-status"))
-        form_panel.mount(Static("", id="form-result"))
+        self._form_panel.mount(Horizontal(*action_children, id="form-actions"))
+        self._form_panel.mount(Static("Status: Ready", id="form-status"))
+        self._form_panel.mount(Static("", id="form-result"))
 
-        self.query_one("#tools-form-scroll", ScrollableContainer).scroll_home()
+        scroll = self.query_one("#tools-form-scroll", ScrollableContainer)
+        scroll.scroll_home()
 
     @on(Button.Pressed, "#btn-execute")
     def _on_execute(self) -> None:
@@ -141,7 +152,10 @@ class ToolsPanel(Vertical):
         from max_cli.interface.tui.command_executor import CommandExecutor
         from max_cli.interface.tui.command_registry import CommandRegistry
 
-        title_widget = self.query_one("#form-title", Static)
+        form_panel = self._form_panel
+        if form_panel is None:
+            return
+        title_widget = form_panel.query_one("#form-title", Static)
         category, command = self._parse_title(title_widget.renderable)  # type: ignore[attr-defined]
 
         values = self._collect_form_values()
@@ -157,11 +171,12 @@ class ToolsPanel(Vertical):
             return
 
         self._set_form_status("Executing...", "info")
-        exec_btn = self.query_one("#btn-execute", Button)
+        exec_btn = form_panel.query_one("#btn-execute", Button)
         exec_btn.disabled = True
         exec_btn.label = "Working..."
-        if self.query_one("#btn-queue", Button, default=None):
-            self.query_one("#btn-queue", Button).disabled = True
+        queue_btn = form_panel.query_one("#btn-queue", Button, default=None)
+        if queue_btn:
+            queue_btn.disabled = True
 
         executor = CommandExecutor()
         try:
@@ -182,7 +197,7 @@ class ToolsPanel(Vertical):
                     self._set_form_status(
                         f"[green]\u2713 {result.message}[/green]", "success"
                     )
-                result_widget = self.query_one("#form-result", Static)
+                result_widget = form_panel.query_one("#form-result", Static)
                 if result.output_files:
                     output_text = "Output:\n" + "\n".join(
                         f"  {f}" for f in result.output_files
@@ -196,13 +211,14 @@ class ToolsPanel(Vertical):
         finally:
             exec_btn.disabled = False
             exec_btn.label = "Execute"
-            if self.query_one("#btn-queue", Button, default=None):
-                self.query_one("#btn-queue", Button).disabled = False
+            if queue_btn:
+                queue_btn.disabled = False
 
     def _collect_form_values(self) -> dict[str, Any]:
         from max_cli.interface.tui.command_registry import CommandRegistry
 
-        title_widget = self.query_one("#form-title", Static)
+        form_panel = self.query_one("#tools-form-panel", Vertical)
+        title_widget = form_panel.query_one("#form-title", Static)
         category, command = self._parse_title(title_widget.renderable)  # type: ignore[attr-defined]
 
         schema = CommandRegistry.get_command(category, command)
@@ -213,7 +229,7 @@ class ToolsPanel(Vertical):
         for field in schema["fields"]:
             field_id = f"field-{field['name']}"
             try:
-                widget = self.query_one(f"#{field_id}")
+                widget = form_panel.query_one(f"#{field_id}")
                 if isinstance(widget, Checkbox):
                     values[field["name"]] = widget.value
                 elif isinstance(widget, Select):
@@ -234,7 +250,8 @@ class ToolsPanel(Vertical):
         return values
 
     def _set_form_status(self, message: str, level: str) -> None:
-        status = self.query_one("#form-status", Static)
+        form_panel = self.query_one("#tools-form-panel", Vertical)
+        status = form_panel.query_one("#form-status", Static)
         colors = {
             "success": "green",
             "error": "red",
