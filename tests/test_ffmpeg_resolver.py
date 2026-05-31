@@ -109,6 +109,12 @@ class TestFFmpegResolverTier3:
         tmp_path: Path,
     ) -> None:
         mock_console.is_terminal = True
+
+        def _fake_download(**kwargs: object) -> None:
+            (tmp_path / "ffmpeg").touch()
+
+        mock_download.side_effect = _fake_download
+
         with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
             resolver = FFmpegResolver()
             resolver.bin_dir = tmp_path
