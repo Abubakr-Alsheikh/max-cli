@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from max_cli.common.exceptions import MaxError
 from max_cli.interface.tui.activity_log import ActivityLog
@@ -57,9 +57,9 @@ class ExecutionResult:
         self,
         success: bool,
         message: str = "",
-        output_files: list[str] | None = None,
+        output_files: Optional[list[str]] = None,
         duration_ms: float = 0.0,
-        error: str | None = None,
+        error: Optional[str] = None,
     ):
         self.success = success
         self.message = message

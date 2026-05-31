@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, Union
 from collections.abc import Generator
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -106,18 +106,18 @@ class DownloadCompleteEvent(BaseEvent):
     total_bytes: int = 0
 
 
-MaxEvent = (
-    ProgressEvent
-    | BatchProgressEvent
-    | FileStartEvent
-    | FileCompleteEvent
-    | FileErrorEvent
-    | StatusEvent
-    | LogEvent
-    | CompleteEvent
-    | DownloadProgressEvent
-    | DownloadCompleteEvent
-)
+MaxEvent = Union[
+    ProgressEvent,
+    BatchProgressEvent,
+    FileStartEvent,
+    FileCompleteEvent,
+    FileErrorEvent,
+    StatusEvent,
+    LogEvent,
+    CompleteEvent,
+    DownloadProgressEvent,
+    DownloadCompleteEvent,
+]
 
 
 class EventEmitter:

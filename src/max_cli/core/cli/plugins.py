@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from typer import Typer
@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 from max_cli.plugins.base import PluginContext
 from max_cli.plugins.manager import PluginManager
 
-_plugin_manager: PluginManager | None = None
+_plugin_manager: Optional[PluginManager] = None
 
 
 def init_plugins(app: "Typer") -> None:
