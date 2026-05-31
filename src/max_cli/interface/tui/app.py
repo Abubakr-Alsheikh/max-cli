@@ -9,7 +9,7 @@ from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
-from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
+
 
 
 class MaxDashboardApp(App):
@@ -18,15 +18,6 @@ class MaxDashboardApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
-        ("1", "switch_home", "Home"),
-        ("2", "switch_download", "Download"),
-        ("3", "switch_queue", "Queue"),
-        ("4", "switch_history", "History"),
-        ("5", "switch_files", "Files"),
-        ("6", "switch_tools", "Tools"),
-        ("7", "switch_config", "Config"),
-        ("8", "switch_system", "System"),
-        ("9", "switch_chat", "AI Chat"),
     ]
 
     CSS = """
@@ -40,7 +31,7 @@ class MaxDashboardApp(App):
         padding: 0 1;
         overflow-y: auto;
     }
-    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel, DownloadPanel, FilesPanel, ToolsPanel, HomePanel, ChatPanel {
+    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel, DownloadPanel, FilesPanel, HomePanel, ChatPanel {
         padding: 1 2;
     }
     DataTable {
@@ -85,17 +76,6 @@ class MaxDashboardApp(App):
     .home-card Button {
         width: 100%;
         margin-top: 1;
-    }
-    #tools-layout {
-        height: 1fr;
-    }
-    #tools-tree-panel {
-        width: 25;
-        border: solid $border;
-    }
-    #tools-form-panel {
-        width: 1fr;
-        padding: 0 1;
     }
     #files-nav {
         height: auto;
@@ -179,8 +159,6 @@ class MaxDashboardApp(App):
                 yield HistoryPanel(id="history-panel")
             with TabPane("Files", id="files"):
                 yield FilesPanel(id="files-panel")
-            with TabPane("Tools", id="tools"):
-                yield ToolsPanel(id="tools-panel")
             with TabPane("Config", id="config"):
                 yield ConfigPanel(id="config-panel")
             with TabPane("System", id="system"):
@@ -233,9 +211,6 @@ class MaxDashboardApp(App):
     def action_switch_files(self) -> None:
         self.query_one("TabbedContent").active = "files"
 
-    def action_switch_tools(self) -> None:
-        self.query_one("TabbedContent").active = "tools"
-
     def action_switch_config(self) -> None:
         self.query_one("TabbedContent").active = "config"
 
@@ -251,17 +226,9 @@ class MaxDashboardApp(App):
         tabs = self.query_one(TabbedContent)
         tab_map = {
             "grab": "download",
-            "video": "tools",
-            "images": "tools",
             "files": "files",
-            "pdf": "tools",
-            "audio": "tools",
             "ai": "chat",
         }
-        target_tab = tab_map.get(message.category, "tools")
-        tabs.active = target_tab
-
-        if target_tab == "tools":
-            tools_panel = self.query_one("#tools-panel")
-            if hasattr(tools_panel, "select_command"):
-                tools_panel.select_command(message.category, message.command)
+        target_tab = tab_map.get(message.category)
+        if target_tab:
+            tabs.active = target_tab
