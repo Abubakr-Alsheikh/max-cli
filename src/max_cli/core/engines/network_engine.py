@@ -92,14 +92,16 @@ class NetworkEngine:
                 total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
                 downloaded = d.get("downloaded_bytes", 0)
                 pct = (downloaded / total * 100) if total > 0 else 0.0
+                raw_speed = d.get("speed")
+                raw_eta = d.get("eta")
                 emitter.emit(
                     DownloadProgressEvent(
                         url=url,
                         filename=d.get("filename", ""),
                         downloaded_bytes=downloaded,
                         total_bytes=total,
-                        speed=d.get("speed", 0),
-                        eta=d.get("eta", 0),
+                        speed=float(raw_speed) if raw_speed is not None else 0.0,
+                        eta=int(raw_eta) if raw_eta is not None else 0,
                         percentage=pct,
                     )
                 )

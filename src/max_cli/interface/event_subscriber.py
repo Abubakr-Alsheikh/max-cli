@@ -139,6 +139,10 @@ class EventSubscriber:
             event.filename.split("/")[-1].split("\\")[-1] if event.filename else ""
         )
         detail_parts = []
+        if event.total_bytes > 0:
+            downloaded_str = format_size(event.downloaded_bytes)
+            total_str = format_size(event.total_bytes)
+            detail_parts.append(f"[dim]{downloaded_str} / {total_str}[/dim]")
         if speed_str:
             detail_parts.append(f"[dim]{speed_str}/s[/dim]")
         if eta_str:

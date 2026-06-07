@@ -444,7 +444,7 @@ def show_queue(
     table.add_column("ID", style="cyan", width=8)
     table.add_column("Status", width=12)
     table.add_column("URL", width=50)
-    table.add_column("Progress", justify="right", width=10)
+    table.add_column("Progress", justify="right", width=25)
     table.add_column("Type", width=8)
 
     for item in items:
@@ -456,7 +456,17 @@ def show_queue(
         }.get(item.status, "white")
 
         url = item.url
-        progress = f"{item.progress:.0f}%" if item.status == "downloading" else "-"
+        if item.status == "downloading":
+            from max_cli.common.utils import format_size
+
+            if item.total_bytes > 0:
+                dl = format_size(item.downloaded_bytes)
+                total = format_size(item.total_bytes)
+                progress = f"{dl} / {total}"
+            else:
+                progress = f"{item.progress:.0f}%"
+        else:
+            progress = "-"
 
         table.add_row(
             item.id,

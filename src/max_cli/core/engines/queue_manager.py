@@ -46,6 +46,8 @@ class QueueItem:
         self.status = "pending"  # pending, downloading, completed, failed
         self.title = ""
         self.progress = 0.0
+        self.downloaded_bytes: int = 0
+        self.total_bytes: int = 0
         self.speed = ""
         self.error = ""
         self.added_at = datetime.now().isoformat()
@@ -71,6 +73,8 @@ class QueueItem:
             "status": self.status,
             "title": self.title,
             "progress": self.progress,
+            "downloaded_bytes": self.downloaded_bytes,
+            "total_bytes": self.total_bytes,
             "speed": self.speed,
             "error": self.error,
             "added_at": self.added_at,
@@ -98,6 +102,8 @@ class QueueItem:
         item.status = data.get("status", "pending")
         item.title = data.get("title", "")
         item.progress = data.get("progress", 0.0)
+        item.downloaded_bytes = data.get("downloaded_bytes", 0)
+        item.total_bytes = data.get("total_bytes", 0)
         item.speed = data.get("speed", "")
         item.error = data.get("error", "")
         item.added_at = data.get("added_at", item.added_at)
@@ -350,9 +356,11 @@ class QueueManager:
         def progress_hook(d: Dict[str, Any]) -> None:
             nonlocal final_filename
             if d["status"] == "downloading":
+                item.downloaded_bytes = d.get("downloaded_bytes", 0)
+                item.total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
                 item.progress = (
-                    d.get("downloaded_bytes", 0)
-                    / (d.get("total_bytes") or d.get("total_bytes_estimate", 1))
+                    item.downloaded_bytes
+                    / (item.total_bytes if item.total_bytes > 0 else 1)
                 ) * 100
                 item.speed = d.get("speed", "")
                 # Get title from info dict if available
