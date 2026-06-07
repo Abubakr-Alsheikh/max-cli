@@ -13,7 +13,7 @@ Customize this template for your specific card game rules.
 """
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Vertical
 from textual.widgets import Header, Footer, Label, Static
 from textual.widget import Widget
 from textual.reactive import reactive
