@@ -9,12 +9,12 @@ from textual.app import App, ComposeResult
 
 class TestSystemPanel:
     def test_format_bytes(self):
-        from max_cli.interface.tui.widgets.system_panel import SystemPanel
+        from max_cli.common.utils import format_size
 
-        assert SystemPanel._format_bytes(512) == "512.0 B"
-        assert SystemPanel._format_bytes(1536) == "1.5 KB"
-        assert SystemPanel._format_bytes(1048576) == "1.0 MB"
-        assert SystemPanel._format_bytes(1073741824) == "1.0 GB"
+        assert format_size(512) == "512.00 B"
+        assert format_size(1536) == "1.50 KB"
+        assert format_size(1048576) == "1.00 MB"
+        assert format_size(1073741824) == "1.00 GB"
 
     @pytest.mark.asyncio
     async def test_disk_usage_renders(self):

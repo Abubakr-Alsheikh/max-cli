@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Button, ProgressBar, Static
 
+from max_cli.common.utils import format_size
 from max_cli.core.engines.daemon_manager import DaemonManager
 
 
@@ -83,7 +84,7 @@ class SystemPanel(Vertical):
             progress_bar.update(progress=pct)
 
             lines.append(f"  Max CLI Directory: {self.MAX_CLI_DIR}")
-            lines.append(f"  Data Size:         {self._format_bytes(total_size)}")
+            lines.append(f"  Data Size:         {format_size(total_size)}")
             lines.append(
                 f"  Disk Usage:        {usage.used / (1024**3):.1f} GB / "
                 f"{usage.total / (1024**3):.1f} GB ({pct:.0f}%)"
@@ -130,8 +131,8 @@ class SystemPanel(Vertical):
         txn_count = len(list(txn_dir.glob("*.json"))) if txn_dir.exists() else 0
 
         widget.update(
-            f"  Cache: {self._format_bytes(cache_size)} ({cache.count()} items)\n"
-            f"  Backups: {backup_count} files ({self._format_bytes(backup_size)})\n"
+            f"  Cache: {format_size(cache_size)} ({cache.count()} items)\n"
+            f"  Backups: {backup_count} files ({format_size(backup_size)})\n"
             f"  Transactions: {txn_count} groups"
         )
 
@@ -223,11 +224,3 @@ class SystemPanel(Vertical):
                 if p.is_file():
                     total += p.stat().st_size
         return total
-
-    @staticmethod
-    def _format_bytes(size: float) -> str:
-        for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"

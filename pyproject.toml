@@ -38,6 +38,7 @@ ocr = [
 ]
 tui = [
     "textual>=0.48.0",
+    "psutil>=5.9.0",
 ]
 
 [project.scripts]

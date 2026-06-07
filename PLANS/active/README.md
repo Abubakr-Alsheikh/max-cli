@@ -4,6 +4,11 @@ Place new plan files here.
 
 ## Current Active Plans
 
+### Phase 3: Dashboard UX (In Progress)
+| Plan | Status |
+|------|--------|
+| [dashboard-home-analytics-redesign.md](./dashboard-home-analytics-redesign.md) | Draft |
+
 ### Phase 1: Architecture (Completed)
 | Plan | Status |
 |------|--------|
