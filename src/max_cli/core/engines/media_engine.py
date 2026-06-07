@@ -1,8 +1,10 @@
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
 
@@ -804,6 +806,166 @@ class MediaEngine:
 
         self._run(cmd)
 
+    def _get_duration(self, input_path: Path) -> float:
+        ffprobe_path = Path(
+            str(self.ffmpeg_path).rsplit(".", 1)[0] + "_probe" + self.ffmpeg_path.suffix
+        )
+        if not ffprobe_path.is_file():
+            ffprobe_path = self.ffmpeg_path.parent / (
+                "ffprobe" + self.ffmpeg_path.suffix
+            )
+        cmd = [
+            str(ffprobe_path),
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(input_path),
+        ]
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return float(result.stdout.strip())
+        except Exception:
+            pass
+        return 0.0
+
+    def denoise_audio(
+        self,
+        input_path: Path,
+        output_path: Path,
+        mode: str = "auto",
+        strength: str = "medium",
+        profile: Optional[str] = None,
+        hum_cutoff: int = 80,
+    ) -> Dict[str, Any]:
+        """
+        Denoise audio using FFmpeg audio filters.
+        Emits ProgressEvent via the global event bus for CLI progress bars.
+
+        Args:
+            input_path: Path to input audio/video file
+            output_path: Path for the denoised output file
+            mode: Denoise mode - "auto", "hiss", or "hum"
+            strength: Denoise strength (only for "auto" mode) - "mild", "medium", or "aggressive"
+            profile: Optional denoising profile (reserved for future use)
+            hum_cutoff: Cutoff frequency in Hz for hum removal mode (default: 80)
+        """
+        if not input_path.is_file():
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+
+        valid_modes = {"auto", "hiss", "hum"}
+        if mode not in valid_modes:
+            raise ValueError(
+                f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(valid_modes))}"
+            )
+
+        if mode == "auto":
+            strength_map = {
+                "mild": "0.0001:0.016:0.016",
+                "medium": "0.0005:0.016:0.016",
+                "aggressive": "0.003:0.016:0.016",
+            }
+            if strength not in strength_map:
+                raise ValueError(
+                    f"Invalid strength '{strength}'. Must be one of: {', '.join(sorted(strength_map))}"
+                )
+            params = strength_map[strength]
+            af_filter = f"anlmdn=s={params}"
+        elif mode == "hiss":
+            af_filter = "afftdn=nr=12:nf=-40"
+        elif mode == "hum":
+            af_filter = f"highpass=f={hum_cutoff}"
+        else:
+            raise ValueError(f"Unhandled mode: {mode}")
+
+        duration = self._get_duration(input_path)
+        emitter = get_emitter()
+
+        cmd = [
+            str(self.ffmpeg_path),
+            "-y",
+            "-i",
+            str(input_path),
+            "-af",
+            af_filter,
+            "-c:v",
+            "copy",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            str(output_path),
+        ]
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+        stderr_collected: List[str] = []
+        stderr_lock = threading.Lock()
+
+        def _collect_stderr():
+            if process.stderr:
+                for line in process.stderr:
+                    with stderr_lock:
+                        stderr_collected.append(line)
+
+        stderr_thread = threading.Thread(target=_collect_stderr, daemon=True)
+        stderr_thread.start()
+
+        if process.stdout:
+            for line in process.stdout:
+                line = line.strip()
+                if line.startswith("out_time_us="):
+                    try:
+                        time_us = int(line.split("=", 1)[1])
+                        time_sec = time_us / 1_000_000
+                        if duration > 0:
+                            pct = min((time_sec / duration) * 100, 99.9)
+                            emitter.emit(
+                                ProgressEvent(
+                                    file=input_path.name,
+                                    percentage=pct,
+                                    current=int(time_sec),
+                                    total=int(duration),
+                                    extra={"mode": mode},
+                                )
+                            )
+                    except (ValueError, IndexError):
+                        pass
+
+        process.wait()
+        stderr_thread.join(timeout=2)
+
+        if process.returncode != 0:
+            with stderr_lock:
+                error_msg = "".join(stderr_collected).strip()
+            raise RuntimeError(f"FFmpeg Error: {error_msg}")
+
+        emitter.emit(
+            ProgressEvent(
+                file=input_path.name,
+                percentage=100.0,
+                current=int(duration) if duration > 0 else 0,
+                total=int(duration) if duration > 0 else 0,
+            )
+        )
+
+        return {
+            "output_path": str(output_path),
+            "output_files": [str(output_path)],
+            "message": f"Denoised: {input_path.name} (mode={mode})",
+        }
+
 
 def _video_compress_executor(task: TaskItem) -> Dict[str, Any]:
     engine = MediaEngine()
@@ -862,3 +1024,30 @@ def _video_to_audio_executor(task: TaskItem) -> Dict[str, Any]:
 register_executor(TaskType.VIDEO_COMPRESS, _video_compress_executor)
 register_executor(TaskType.VIDEO_CONVERT, _video_convert_executor)
 register_executor(TaskType.VIDEO_TO_AUDIO, _video_to_audio_executor)
+
+
+def _video_denoise_executor(task: TaskItem) -> Dict[str, Any]:
+    engine = MediaEngine()
+    payload = task.payload
+    input_path = Path(payload["input_path"])
+    output_path = Path(
+        payload.get(
+            "output_path",
+            input_path.parent / f"{input_path.stem}_denoised{input_path.suffix}",
+        )
+    )
+    engine.denoise_audio(
+        input_path=input_path,
+        output_path=output_path,
+        mode=payload.get("mode", "auto"),
+        strength=payload.get("strength", "medium"),
+        hum_cutoff=payload.get("hum_cutoff", 80),
+    )
+    return {
+        "output_path": str(output_path),
+        "output_files": [str(output_path)],
+    }
+
+
+register_executor(TaskType.VIDEO_DENOISE, _video_denoise_executor)
+register_executor(TaskType.AUDIO_DENOISE, _video_denoise_executor)

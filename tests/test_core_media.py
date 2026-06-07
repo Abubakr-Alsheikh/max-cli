@@ -209,3 +209,220 @@ class TestMediaEngineResolvedPath:
         ):
             engine = MediaEngine()
             assert engine.ffmpeg_path == mock_path
+
+
+class TestMediaEngineDenoise:
+    """Tests for audio denoising operations."""
+
+    def _make_mock_process(self, returncode=0, stderr_lines=None):
+        process = MagicMock()
+        process.stdout = iter([])
+        process.stderr = iter(stderr_lines or [])
+        process.returncode = returncode
+        process.wait.return_value = returncode
+        return process
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_auto_default(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path)
+
+        call_args = mock_popen.call_args[0][0]
+        assert call_args[0] == str(Path("/usr/bin/ffmpeg"))
+        af_idx = call_args.index("-af")
+        assert "anlmdn" in call_args[af_idx + 1]
+        assert "0.0005:0.016:0.016" in call_args[af_idx + 1]
+        cv_idx = call_args.index("-c:v")
+        assert call_args[cv_idx + 1] == "copy"
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_auto_strength_mild(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path, strength="mild")
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "0.0001:0.016:0.016" in call_args[af_idx + 1]
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_auto_strength_aggressive(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path, strength="aggressive")
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "0.003:0.016:0.016" in call_args[af_idx + 1]
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_hiss_mode(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path, mode="hiss")
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "afftdn" in call_args[af_idx + 1]
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_hum_mode(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path, mode="hum")
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "highpass" in call_args[af_idx + 1]
+        cv_idx = call_args.index("-c:v")
+        assert call_args[cv_idx + 1] == "copy"
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_hum_custom_cutoff(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(
+            input_path, output_path, mode="hum", hum_cutoff=120
+        )
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "highpass=f=120" in call_args[af_idx + 1]
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_ffmpeg_error(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process(
+            returncode=1, stderr_lines=["Error message"]
+        )
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+
+        with pytest.raises(RuntimeError, match="FFmpeg Error"):
+            engine.denoise_audio(input_path, output_path)
+
+    def test_denoise_invalid_mode(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            engine = MediaEngine()
+            input_path = tmp_path / "input.mp4"
+            output_path = tmp_path / "output.mp4"
+            input_path.write_text("video content")
+
+            with pytest.raises(ValueError):
+                engine.denoise_audio(input_path, output_path, mode="invalid")
+
+    def test_denoise_invalid_strength(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            engine = MediaEngine()
+            input_path = tmp_path / "input.mp4"
+            output_path = tmp_path / "output.mp4"
+            input_path.write_text("video content")
+
+            with pytest.raises(ValueError):
+                engine.denoise_audio(input_path, output_path, strength="invalid")
+
+    def test_denoise_input_not_found(self, tmp_path):
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            engine = MediaEngine()
+            input_path = tmp_path / "nonexistent.mp4"
+            output_path = tmp_path / "output.mp4"
+
+            with pytest.raises(FileNotFoundError):
+                engine.denoise_audio(input_path, output_path)
+
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_uses_resolved_path(
+        self, mock_which, mock_run, mock_popen, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path)
+
+        call_args = mock_popen.call_args[0][0]
+        assert call_args[0] == str(Path("/usr/bin/ffmpeg"))
+        assert call_args[0] != "ffmpeg"

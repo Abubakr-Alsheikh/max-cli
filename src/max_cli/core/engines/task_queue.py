@@ -21,6 +21,8 @@ class TaskType(str, Enum):
     VIDEO_COMPRESS = "video_compress"
     VIDEO_CONVERT = "video_convert"
     VIDEO_TO_AUDIO = "video_to_audio"
+    VIDEO_DENOISE = "video_denoise"
+    AUDIO_DENOISE = "audio_denoise"
     AUDIO_CONVERT = "audio_convert"
     AI_BATCH = "ai_batch"
     PDF_MERGE = "pdf_merge"

@@ -27,6 +27,34 @@ max audio compress recording.wav -q s --mono
 max audio compress recording.wav -o recording_compressed.mp3 -q m
 ```
 
+## denoise
+
+Remove background noise from audio files (hiss, hum, fan, ambient noise).
+
+```bash
+max audio denoise <file> [OPTIONS]
+```
+
+**Options:**
+- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble) (default: `auto`)
+- `--strength`, `-s` - Denoising strength: `mild`, `medium`, `aggressive` (auto mode only, default: `medium`)
+- `--output`, `-o` - Output file (default: `{stem}_denoised{ext}`)
+
+**Examples:**
+```bash
+# Auto-denoise a podcast recording
+max audio denoise podcast.mp3
+
+# Remove background hiss from a recording
+max audio denoise interview.wav --mode hiss
+
+# Apply heavy denoising
+max audio denoise noisy_recording.mp3 --strength aggressive
+
+# Specify output file
+max audio denoise lecture.mp3 -o cleaned_lecture.mp3
+```
+
 ## get
 
 Display all metadata from an audio file.

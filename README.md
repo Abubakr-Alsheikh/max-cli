@@ -30,6 +30,8 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 | Task | Max Command | Example |
 |------|-------------|---------|
 | **Compress videos** | `max video compress` | `max video compress movie.mp4` |
+| **Remove background noise** | `max video denoise` | `max video denoise recording.mp4` |
+| **Audio noise removal** | `max audio denoise` | `max audio denoise podcast.mp3` |
 | **Convert video to audio** | `max video to-audio` | `max video to-audio podcast.mp4` |
 | **Compress audio** | `max audio compress` | `max audio compress recording.wav` |
 | **Get audio metadata** | `max audio get` | `max audio get song.mp3` |
@@ -192,10 +194,11 @@ max video cut movie.mp4 --duration 30
 #### Other Video Commands
 
 ```bash
-max video gif clip.mp4              # Convert to GIF
-max video louder audio.mp4 --db 10  # Boost volume by 10dB
+max video denoise recording.mp4      # Remove background noise
+max video gif clip.mp4               # Convert to GIF
+max video louder audio.mp4 --db 10   # Boost volume by 10dB
 max video snap video.mp4 --time 1:30 # Take screenshot at 1:30
-max video mute video.mp4             # Remove audio track
+max video mute video.mp4              # Remove audio track
 ```
 
 ---

@@ -29,6 +29,7 @@ Place new plan files here.
 ### Other Plans
 | Plan | Status |
 |------|--------|
+| [audio-noise-removal.md](./audio-noise-removal.md) | Draft |
 | [grab-media-improvements.md](./grab-media-improvements.md) | Draft |
 | [plugin_commands_migration.md](./plugin_commands_migration.md) | Draft |
 

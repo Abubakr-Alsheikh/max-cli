@@ -2,6 +2,9 @@ import typer
 from pathlib import Path
 from typing import Optional, List
 
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+
+from max_cli.common.events import EventType, get_emitter
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 
@@ -468,6 +471,103 @@ def normalize_audio_cmd(
             log_success(f"Normalized audio saved: {output}")
         except Exception as e:
             log_error(f"Normalization failed: {e}")
+
+
+@app.command("denoise")
+@app.command("dn", hidden=True)
+def denoise_audio_cmd(
+    target: Path = typer.Argument(..., help="Video or audio file with background noise."),
+    mode: str = typer.Option(
+        "auto",
+        "--mode",
+        "-m",
+        help="Denoise mode: auto (general), hiss (constant hiss), hum (low rumble).",
+    ),
+    strength: str = typer.Option(
+        "medium",
+        "--strength",
+        "-s",
+        help="Denoising strength: mild, medium, aggressive (auto mode only).",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file."),
+    queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue."),
+):
+    """
+    Remove background noise from audio/video.
+
+    Uses AI-powered filtering to clean up hiss, hum, fan noise, and ambient sounds.
+    The --strength parameter only applies to 'auto' mode.
+
+    Examples:
+      max video denoise recording.mp4
+      max video denoise podcast.mp4 --mode hiss --strength aggressive
+      max video denoise lecture.mp4 --mode hum --output clean_lecture.mp4
+    """
+    _get_engine()
+
+    if not output:
+        ext = target.suffix
+        output = target.parent / f"{target.stem}_denoised{ext}"
+
+    if mode != "auto":
+        valid_strength_modes = {"mild", "medium", "aggressive"}
+        if strength in valid_strength_modes:
+            strength = "medium"
+
+    if queue:
+        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_queue import TaskItem, TaskType
+
+        dm = DaemonManager()
+        task = TaskItem(
+            type=TaskType.VIDEO_DENOISE,
+            title=f"Denoise {target.name}",
+            description=f"mode={mode}, strength={strength}",
+            payload={
+                "input_path": str(target),
+                "output_path": str(output),
+                "mode": mode,
+                "strength": strength,
+            },
+        )
+        dm.add(task)
+        console.print(f"[green]Queued:[/green] {target.name} (ID: {task.id})")
+        console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+        return
+
+    console.print(f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]")
+
+    emitter = get_emitter()
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),
+        TextColumn("{task.percentage:>3.0f}%"),
+        TimeRemainingColumn(compact=True),
+        transient=True,
+    )
+
+    task_id = progress.add_task("Removing background noise...", total=100)
+
+    def _on_progress(event):
+        if event.type == EventType.PROGRESS and event.file == target.name:
+            progress.update(task_id, completed=event.percentage)
+
+    emitter.subscribe(_on_progress)
+
+    with progress:
+        try:
+            eng = _get_engine()
+            eng.denoise_audio(target, output, mode=mode, strength=strength)
+            progress.update(task_id, completed=100, description="[green]Complete[/green]")
+
+            final_size = output.stat().st_size
+            log_success(f"Denoised audio saved: {output.name}")
+            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
+
+        except Exception as e:
+            log_error(f"Denoising failed: {e}")
+        finally:
+            emitter.unsubscribe(_on_progress)
 
 
 @app.command("audio-convert")

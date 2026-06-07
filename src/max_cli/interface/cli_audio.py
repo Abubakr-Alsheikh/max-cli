@@ -1,8 +1,10 @@
 import typer
 from pathlib import Path
 from typing import Optional, List
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
+from max_cli.common.events import EventType, get_emitter
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 
@@ -86,6 +88,81 @@ def compress_audio(
 
         except Exception as e:
             log_error(f"Compression failed: {e}")
+
+
+@app.command("denoise")
+@app.command("dn", hidden=True)
+def denoise_audio_cmd(
+    target: Path = typer.Argument(..., help="Audio file with background noise."),
+    mode: str = typer.Option(
+        "auto",
+        "--mode",
+        "-m",
+        help="Denoise mode: auto (general), hiss (constant hiss), hum (low rumble).",
+    ),
+    strength: str = typer.Option(
+        "medium",
+        "--strength",
+        "-s",
+        help="Denoising strength: mild, medium, aggressive (auto mode only).",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file."),
+):
+    """
+    Remove background noise from audio.
+
+    Uses AI-powered filtering to clean up hiss, hum, fan noise, and ambient sounds.
+    The --strength parameter only applies to 'auto' mode.
+
+    Examples:
+      max audio denoise recording.mp3
+      max audio denoise podcast.mp3 --mode hiss --strength aggressive
+      max audio denoise lecture.mp3 --mode hum --output clean_lecture.mp3
+    """
+    _get_media_engine()
+
+    if not output:
+        ext = target.suffix
+        output = target.parent / f"{target.stem}_denoised{ext}"
+
+    if mode != "auto":
+        valid_strength_modes = {"mild", "medium", "aggressive"}
+        if strength in valid_strength_modes:
+            strength = "medium"
+
+    console.print(f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]")
+
+    emitter = get_emitter()
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),
+        TextColumn("{task.percentage:>3.0f}%"),
+        TimeRemainingColumn(compact=True),
+        transient=True,
+    )
+
+    task_id = progress.add_task("Removing background noise...", total=100)
+
+    def _on_progress(event):
+        if event.type == EventType.PROGRESS and event.file == target.name:
+            progress.update(task_id, completed=event.percentage)
+
+    emitter.subscribe(_on_progress)
+
+    with progress:
+        try:
+            eng = _get_media_engine()
+            eng.denoise_audio(target, output, mode=mode, strength=strength)
+            progress.update(task_id, completed=100, description="[green]Complete[/green]")
+
+            final_size = output.stat().st_size
+            log_success(f"Denoised audio saved: {output.name}")
+            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
+
+        except Exception as e:
+            log_error(f"Denoising failed: {e}")
+        finally:
+            emitter.unsubscribe(_on_progress)
 
 
 @app.command("get")

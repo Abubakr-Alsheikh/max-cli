@@ -61,6 +61,40 @@ Convert video to animated GIF.
 max media video-to-gif <input> [-o OUTPUT]
 ```
 
+## denoise
+
+Remove background noise from video/audio (hiss, hum, fan, ambient room noise).
+
+```bash
+max video denoise <input> [OPTIONS]
+```
+
+**Options:**
+- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble) (default: `auto`)
+- `--strength`, `-s` - Denoising strength: `mild`, `medium`, `aggressive` (auto mode only, default: `medium`)
+- `--output`, `-o` - Output file (default: `{stem}_denoised{ext}`)
+- `--queue`, `-q` - Add to background queue
+
+**Examples:**
+```bash
+# Auto-denoise (anlmdn filter, medium strength)
+max video denoise recording.mp4
+
+# Remove constant microphone hiss
+max video denoise podcast.mp4 --mode hiss
+
+# Cut low-frequency rumble (AC, traffic)
+max video denoise lecture.mp4 --mode hum
+
+# Aggressive denoising for very noisy audio
+max video denoise noisy.mp4 --strength aggressive
+
+# Process in background queue
+max video denoise long_clip.mp4 --queue
+```
+
+> **Note**: `auto` mode uses FFmpeg's `anlmdn` filter (CPU-heavy). For faster results, try `--mode hiss` or `--mode hum`. Video stream is copied (`-c:v copy`), only audio is re-encoded.
+
 ## brightness
 
 Adjust video brightness.
