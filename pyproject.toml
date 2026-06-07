@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "max-cli"
-version = "0.3.3"
+version = "0.4.0"
 description = "The Local, Fast, & Lazy Terminal Assistant for high-performance tasks."
 authors = [{name = "Abubakr Alsheikh", email = "abubakralsheikh@outlook.com"}]
 readme = "README.md"
