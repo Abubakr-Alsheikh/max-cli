@@ -8,9 +8,9 @@ from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
 RNNOISE_MODEL_DIR = Path.home() / ".max_cli" / "rnnoise"
-RNNOISE_MODEL_FILENAME = "salamander.rnn"
+RNNOISE_MODEL_FILENAME = "std.rnnn"
 RNNOISE_MODEL_URL = (
-    "https://github.com/xiph/rnnoise/raw/master/models/salamander.rnn"
+    "https://raw.githubusercontent.com/richardpl/arnndn-models/master/std.rnnn"
 )
 
 
@@ -913,7 +913,10 @@ class MediaEngine:
             af_filter = f"highpass=f={hum_cutoff}"
         elif mode == "speech":
             model_path = self._resolve_rnn_model()
-            af_filter = f"arnndn=m={model_path}"
+            win_path = model_path.as_posix()
+            if win_path[1] == ":":
+                win_path = win_path[2:]
+            af_filter = f"arnndn=m={win_path}"
         else:
             raise ValueError(f"Unhandled mode: {mode}")
 
