@@ -7,6 +7,12 @@ from typing import Any, Dict, List, Optional
 from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
+RNNOISE_MODEL_DIR = Path.home() / ".max_cli" / "rnnoise"
+RNNOISE_MODEL_FILENAME = "salamander.rnn"
+RNNOISE_MODEL_URL = (
+    "https://github.com/xiph/rnnoise/raw/master/models/salamander.rnn"
+)
+
 
 class MediaEngine:
     """
@@ -834,6 +840,31 @@ class MediaEngine:
             pass
         return 0.0
 
+    def _resolve_rnn_model(self) -> Path:
+        model_path = RNNOISE_MODEL_DIR / RNNOISE_MODEL_FILENAME
+        if model_path.is_file():
+            return model_path
+
+        RNNOISE_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        from max_cli.common.logger import console
+
+        console.print(
+            "[yellow]Downloading speech denoising model (RNNoise)...[/yellow]"
+        )
+
+        import requests
+
+        response = requests.get(RNNOISE_MODEL_URL, stream=True, timeout=30)
+        response.raise_for_status()
+
+        with open(model_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        return model_path
+
     def denoise_audio(
         self,
         input_path: Path,
@@ -858,7 +889,7 @@ class MediaEngine:
         if not input_path.is_file():
             raise FileNotFoundError(f"Input file not found: {input_path}")
 
-        valid_modes = {"auto", "hiss", "hum"}
+        valid_modes = {"auto", "hiss", "hum", "speech"}
         if mode not in valid_modes:
             raise ValueError(
                 f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(valid_modes))}"
@@ -880,6 +911,9 @@ class MediaEngine:
             af_filter = "afftdn=nr=12:nf=-40"
         elif mode == "hum":
             af_filter = f"highpass=f={hum_cutoff}"
+        elif mode == "speech":
+            model_path = self._resolve_rnn_model()
+            af_filter = f"arnndn=m={model_path}"
         else:
             raise ValueError(f"Unhandled mode: {mode}")
 

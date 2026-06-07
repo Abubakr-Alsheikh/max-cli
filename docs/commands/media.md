@@ -70,7 +70,7 @@ max video denoise <input> [OPTIONS]
 ```
 
 **Options:**
-- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble) (default: `auto`)
+- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble), `speech` (RNNoise, best for voice) (default: `auto`)
 - `--strength`, `-s` - Denoising strength: `mild`, `medium`, `aggressive` (auto mode only, default: `medium`)
 - `--output`, `-o` - Output file (default: `{stem}_denoised{ext}`)
 - `--queue`, `-q` - Add to background queue
@@ -85,6 +85,9 @@ max video denoise podcast.mp4 --mode hiss
 
 # Cut low-frequency rumble (AC, traffic)
 max video denoise lecture.mp4 --mode hum
+
+# BEST for speech/podcasts (RNNoise neural network)
+max video denoise recording.mp4 --mode speech
 
 # Aggressive denoising for very noisy audio
 max video denoise noisy.mp4 --strength aggressive

@@ -36,7 +36,7 @@ max audio denoise <file> [OPTIONS]
 ```
 
 **Options:**
-- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble) (default: `auto`)
+- `--mode`, `-m` - Denoise mode: `auto` (general), `hiss` (constant hiss), `hum` (low rumble), `speech` (RNNoise, best for voice) (default: `auto`)
 - `--strength`, `-s` - Denoising strength: `mild`, `medium`, `aggressive` (auto mode only, default: `medium`)
 - `--output`, `-o` - Output file (default: `{stem}_denoised{ext}`)
 
@@ -47,6 +47,9 @@ max audio denoise podcast.mp3
 
 # Remove background hiss from a recording
 max audio denoise interview.wav --mode hiss
+
+# BEST for speech/podcasts (RNNoise neural network)
+max audio denoise interview.wav --mode speech
 
 # Apply heavy denoising
 max audio denoise noisy_recording.mp3 --strength aggressive

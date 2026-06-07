@@ -356,6 +356,32 @@ class TestMediaEngineDenoise:
         af_idx = call_args.index("-af")
         assert "highpass=f=120" in call_args[af_idx + 1]
 
+    @patch.object(MediaEngine, "_resolve_rnn_model", return_value=Path("/fake/model.rnn"))
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    def test_denoise_speech_mode(
+        self, mock_which, mock_run, mock_popen, mock_resolve, tmp_path
+    ):
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        mock_run.return_value = MagicMock()
+        mock_popen.return_value = self._make_mock_process()
+
+        input_path = tmp_path / "input.mp4"
+        output_path = tmp_path / "output.mp4"
+        input_path.write_text("video content")
+
+        engine = MediaEngine()
+        engine.denoise_audio(input_path, output_path, mode="speech")
+
+        call_args = mock_popen.call_args[0][0]
+        af_idx = call_args.index("-af")
+        assert "arnndn" in call_args[af_idx + 1]
+        assert "model.rnn" in call_args[af_idx + 1]
+        cv_idx = call_args.index("-c:v")
+        assert call_args[cv_idx + 1] == "copy"
+        assert mock_resolve.called
+
     @patch("subprocess.Popen")
     @patch("subprocess.run")
     @patch("shutil.which")

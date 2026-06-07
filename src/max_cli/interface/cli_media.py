@@ -481,7 +481,7 @@ def denoise_audio_cmd(
         "auto",
         "--mode",
         "-m",
-        help="Denoise mode: auto (general), hiss (constant hiss), hum (low rumble).",
+        help="Denoise mode: auto (general), hiss (constant hiss), hum (low rumble), speech (RNNoise, best for voice).",
     ),
     strength: str = typer.Option(
         "medium",
