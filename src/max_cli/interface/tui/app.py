@@ -21,29 +21,68 @@ class MaxDashboardApp(App):
     ]
 
     CSS = """
+    /* ═══════════════════════════════════════════════════════════════
+       Max CLI Dashboard — Design System
+       Dark slate palette with sky blue (primary) & violet (accent)
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* ── Design Tokens ──────────────────────────────────── */
+    $primary: #0ea5e9;
+    $accent: #8b5cf6;
+    $surface: #1e293b;
+    $boost: #334155;
+    $panel: #0f172a;
+    $border: #334155;
+    $success: #22c55e;
+    $warning: #eab308;
+    $error: #ef4446;
+    $text-muted: #64748b;
+
+
+    /* ── Root Layout ────────────────────────────────────── */
+
     MaxDashboardApp {
         layout: vertical;
+        background: $panel;
     }
+
     TabbedContent {
         height: 1fr;
     }
+
     TabbedContent > TabPane {
         padding: 0 1;
         overflow-y: auto;
     }
-    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel, DownloadPanel, FilesPanel, HomePanel, ChatPanel, AnalyticsPanel {
+
+
+    /* ── Panel Containers (all tabs) ─────────────────── */
+
+    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel,
+    DownloadPanel, FilesPanel, HomePanel, ChatPanel, AnalyticsPanel {
         padding: 1 2;
+        height: 1fr;
     }
 
-    /* ── General Widgets ───────────────────────────── */
+
+    /* ── Data Table ─────────────────────────────────────── */
+
     DataTable {
         height: 1fr;
-        border: solid $accent;
+        border: solid $border;
     }
+
+
+    /* ── Footer ─────────────────────────────────────────── */
+
     Footer {
         dock: bottom;
         height: auto;
     }
+
+
+    /* ── Buttons ────────────────────────────────────────── */
+
     Button {
         min-width: 12;
     }
@@ -51,12 +90,23 @@ class MaxDashboardApp(App):
         text-style: bold;
     }
 
-    /* ── Queue / History / Config shared ───────────── */
-    #queue-actions, #history-controls, #config-actions, #files-actions, #form-actions, #history-actions {
+
+    /* ── Shared Action Bars (docked bottom) ────────────── */
+
+    #queue-actions, #history-controls, #config-actions,
+    #files-actions, #history-actions,
+    #storage-actions, #quick-actions, #system-actions {
         height: auto;
         margin-top: 1;
         dock: bottom;
     }
+    #storage-actions, #quick-actions, #system-actions {
+        dock: none;
+    }
+
+
+    /* ── Config Panel ───────────────────────────────────── */
+
     .config-row {
         margin: 0 1;
         height: auto;
@@ -71,44 +121,66 @@ class MaxDashboardApp(App):
     #log-scroll {
         height: 8;
         border: solid $border;
+        background: $surface;
+        padding: 0 1;
     }
 
-    /* ── Home Panel — Status Bar ───────────────────── */
+
+    /* ══════════════════════════════════════════════════════
+       HOME PANEL
+       ══════════════════════════════════════════════════════ */
+
+    #home-title {
+        text-style: bold;
+        padding: 0 1;
+        margin-bottom: 0;
+    }
+
+    #home-subtitle {
+        margin: 1 0 1 0;
+        padding: 0 1;
+        text-style: bold;
+    }
+
     #home-status-bar {
         height: auto;
         margin: 1 0;
     }
+
     .status-metric {
         width: 1fr;
         height: auto;
         margin: 0 1;
         padding: 1;
-        border: round $surface;
+        border: round $border;
         background: $surface;
     }
     .status-metric:hover {
-        border: round $accent;
+        border: round $primary;
+        background: $boost;
     }
+
     .metric-label {
         text-style: bold;
         margin-bottom: 0;
         padding: 0 0;
     }
+
     .metric-value {
         text-align: right;
         margin-top: 0;
         padding: 0 0;
     }
 
-    /* ── Home Panel — Stat Cards ───────────────────── */
     #home-stats-row {
         height: auto;
         margin: 1 0;
     }
+
     .stat-card {
         width: 1fr;
         height: auto;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 1;
         text-align: center;
@@ -118,30 +190,32 @@ class MaxDashboardApp(App):
         border: round $primary;
         background: $boost;
     }
+
     .stat-number {
         text-style: bold;
         text-align: center;
     }
+
     .stat-label {
         text-align: center;
         color: $text-muted;
     }
 
-    /* ── Home Panel — Quick Action Cards ───────────── */
     #home-cards {
         height: auto;
     }
+
     .home-card {
         width: 1fr;
         height: auto;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 1;
         text-align: center;
         margin: 0 1;
     }
     .home-card:hover {
-        border: heavy $primary;
+        border: round $primary;
         background: $boost;
     }
     .home-card Button {
@@ -151,35 +225,36 @@ class MaxDashboardApp(App):
     .home-card Button:hover {
         text-style: bold;
     }
-    .home-card-grab { border: round $success; }
-    .home-card-files { border: round $warning; }
-    .home-card-ai { border: round $accent; }
-    .home-card-grab:hover, .home-card-files:hover, .home-card-ai:hover {
+
+    .home-card-green  { border-left: heavy $success; }
+    .home-card-yellow { border-left: heavy $warning; }
+    .home-card-purple { border-left: heavy $accent;  }
+    .home-card-green:hover,
+    .home-card-yellow:hover,
+    .home-card-purple:hover {
         background: $boost;
     }
+
     #home-activity-scroll {
         height: 1fr;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 0 1;
     }
-    #home-title {
-        text-style: bold;
-        padding: 0 1;
-        margin-bottom: 0;
-    }
-    #home-subtitle {
-        margin: 0 0 1 0;
-        padding: 0 1;
-    }
+
     #home-activity-title {
         margin-top: 1;
     }
+
     #home-panel {
         overflow-y: auto;
     }
 
-    /* ── Files Panel ───────────────────────────────── */
+
+    /* ══════════════════════════════════════════════════════
+       FILES PANEL
+       ══════════════════════════════════════════════════════ */
+
     #files-nav {
         height: auto;
         margin-bottom: 1;
@@ -197,7 +272,11 @@ class MaxDashboardApp(App):
         margin: 0 0 0 1;
     }
 
-    /* ── Download Panel ────────────────────────────── */
+
+    /* ══════════════════════════════════════════════════════
+       DOWNLOAD PANEL
+       ══════════════════════════════════════════════════════ */
+
     #download-options {
         height: auto;
         margin: 1 0;
@@ -213,26 +292,39 @@ class MaxDashboardApp(App):
     #recent-scroll {
         height: 8;
         border: solid $border;
+        background: $surface;
+        padding: 0 1;
     }
 
-    /* ── Chat Panel ────────────────────────────────── */
+
+    /* ══════════════════════════════════════════════════════
+       CHAT PANEL
+       ══════════════════════════════════════════════════════ */
+
     #chat-scroll {
         height: 1fr;
         border: solid $border;
+        background: $surface;
     }
     #chat-messages {
         padding: 1;
     }
+
     .chat-msg {
         margin: 1 0;
         padding: 1;
+        border: round $border;
     }
     .chat-msg-max {
         background: $surface;
+        border: round $border;
     }
     .chat-msg-user {
         background: $boost;
+        border: round $border;
+        margin-left: 4;
     }
+
     #chat-suggestions {
         height: auto;
         margin: 1 0;
@@ -248,36 +340,123 @@ class MaxDashboardApp(App):
         width: 1fr;
     }
 
-    /* ── Analytics Panel ───────────────────────────── */
+
+    /* ══════════════════════════════════════════════════════
+       ANALYTICS PANEL
+       ══════════════════════════════════════════════════════ */
+
+    #analytics-sys-title {
+        text-style: bold;
+        margin-top: 0;
+    }
     #analytics-sys-info {
         height: auto;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 1;
         margin: 1 0;
     }
+
     #analytics-stats-row {
         height: auto;
         grid-size: 2;
         grid-gutter: 1;
     }
+
     .analytics-section {
         height: auto;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 1;
     }
+
     .analytics-section-title {
         text-style: bold;
         margin-bottom: 1;
         border-bottom: solid $accent;
     }
+
+    #analytics-cat-title {
+        text-style: bold;
+        margin-top: 1;
+    }
     #analytics-category-bars {
         height: auto;
-        border: round $surface;
+        border: round $border;
         background: $surface;
         padding: 1;
         margin: 1 0;
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       SYSTEM PANEL
+       ══════════════════════════════════════════════════════ */
+
+    #system-info {
+        height: auto;
+        border: round $border;
+        background: $surface;
+        padding: 1;
+        margin: 1 0;
+    }
+    #disk-title, #storage-title, #quick-actions-title, #system-log-title {
+        text-style: bold;
+        margin-top: 1;
+    }
+    #disk-progress {
+        margin: 0 1;
+    }
+    #system-disk {
+        height: auto;
+        border: round $border;
+        background: $surface;
+        padding: 1;
+        margin: 1 0;
+    }
+    #storage-details {
+        height: auto;
+        border: round $border;
+        background: $surface;
+        padding: 1;
+        margin: 1 0;
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       QUEUE PANEL
+       ══════════════════════════════════════════════════════ */
+
+    #queue-title {
+        text-style: bold;
+    }
+    #queue-hint {
+        color: $text-muted;
+        margin: 0 1;
+    }
+    #queue-status {
+        margin: 0 1;
+        color: $text-muted;
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       HISTORY PANEL
+       ══════════════════════════════════════════════════════ */
+
+    #history-title {
+        text-style: bold;
+    }
+    #history-detail {
+        height: auto;
+        border: round $border;
+        background: $surface;
+        padding: 1;
+        margin: 1 0;
+    }
+    #history-count {
+        color: $text-muted;
+        margin: 0 0 0 1;
     }
     """
 
