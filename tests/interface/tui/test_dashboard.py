@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from textual.widgets import DataTable
 
+from max_cli.interface.tui.widgets.sidebar import Sidebar
+
 from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
 
 
@@ -47,7 +49,7 @@ class TestMaxDashboardApp:
         from max_cli.interface.tui.app import MaxDashboardApp
 
         async with MaxDashboardApp().run_test() as pilot:
-            assert pilot.app.query_one("TabbedContent") is not None
+            assert pilot.app.query_one(Sidebar) is not None
 
     @pytest.mark.asyncio
     async def test_queue_panel_renders_empty(self, mock_daemon, mock_activity_log):
@@ -128,8 +130,7 @@ class TestMaxDashboardApp:
         mock_activity_log.get_entries.return_value = entries
 
         async with MaxDashboardApp().run_test() as pilot:
-            tabs = pilot.app.query_one("TabbedContent")
-            tabs.active = "history"
+            pilot.app._show_panel("history")
             await pilot.pause()
 
             panel = pilot.app.query_one("#history-panel")
@@ -191,4 +192,5 @@ class TestDashboardCommand:
                 sys.modules[key] = module
             import importlib
             import max_cli.interface.tui.app
+
             importlib.reload(max_cli.interface.tui.app)

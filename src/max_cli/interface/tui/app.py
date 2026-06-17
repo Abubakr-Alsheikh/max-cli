@@ -1,14 +1,16 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.containers import Container, Horizontal
+from textual.widgets import Footer
 
+from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.config_panel import ConfigPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
-from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
+from max_cli.interface.tui.widgets.sidebar import Sidebar
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
 
 
@@ -18,15 +20,10 @@ class MaxDashboardApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("ctrl+b", "toggle_sidebar", "Sidebar"),
     ]
 
     CSS = """
-    /* ═══════════════════════════════════════════════════════════════
-       Max CLI Dashboard — Design System
-       Dark slate palette with sky blue (primary) & violet (accent)
-       ═══════════════════════════════════════════════════════════════ */
-
-    /* ── Design Tokens ──────────────────────────────────── */
     $primary: #0ea5e9;
     $accent: #8b5cf6;
     $surface: #1e293b;
@@ -38,61 +35,49 @@ class MaxDashboardApp(App):
     $error: #ef4446;
     $text-muted: #64748b;
 
-
-    /* ── Root Layout ────────────────────────────────────── */
-
     MaxDashboardApp {
         layout: vertical;
         background: $panel;
     }
 
-    TabbedContent {
+    #main-horizontal {
         height: 1fr;
     }
 
-    TabbedContent > TabPane {
-        padding: 0 1;
-        overflow-y: auto;
+    #content {
+        width: 1fr;
+        height: 1fr;
     }
 
-
-    /* ── Panel Containers (all tabs) ─────────────────── */
-
-    QueuePanel, HistoryPanel, ConfigPanel, SystemPanel,
-    DownloadPanel, FilesPanel, HomePanel, ChatPanel, AnalyticsPanel {
+    #content > * {
         padding: 1 2;
         height: 1fr;
     }
-
-
-    /* ── Data Table ─────────────────────────────────────── */
-
-    DataTable {
-        height: 1fr;
-        border: solid $border;
-    }
-
-
-    /* ── Footer ─────────────────────────────────────────── */
 
     Footer {
         dock: bottom;
         height: auto;
     }
 
-
-    /* ── Buttons ────────────────────────────────────────── */
+    DataTable {
+        height: 1fr;
+        border: solid $border;
+    }
 
     Button {
         min-width: 12;
     }
+    #sidebar .sidebar-btn {
+        min-width: 0;
+    }
     Button:hover {
         text-style: bold;
     }
+    #sidebar .sidebar-btn {
+        min-width: 0;
+    }
 
-
-    /* ── Shared Action Bars (docked bottom) ────────────── */
-
+    /* ── Shared bottom action bars ──────────────────────── */
     #queue-actions, #history-controls, #config-actions,
     #files-actions, #history-actions,
     #storage-actions, #quick-actions, #system-actions {
@@ -104,9 +89,7 @@ class MaxDashboardApp(App):
         dock: none;
     }
 
-
     /* ── Config Panel ───────────────────────────────────── */
-
     .config-row {
         margin: 0 1;
         height: auto;
@@ -124,7 +107,6 @@ class MaxDashboardApp(App):
         background: $surface;
         padding: 0 1;
     }
-
 
     /* ══════════════════════════════════════════════════════
        HOME PANEL
@@ -250,7 +232,6 @@ class MaxDashboardApp(App):
         overflow-y: auto;
     }
 
-
     /* ══════════════════════════════════════════════════════
        FILES PANEL
        ══════════════════════════════════════════════════════ */
@@ -271,7 +252,6 @@ class MaxDashboardApp(App):
     #files-count {
         margin: 0 0 0 1;
     }
-
 
     /* ══════════════════════════════════════════════════════
        DOWNLOAD PANEL
@@ -295,7 +275,6 @@ class MaxDashboardApp(App):
         background: $surface;
         padding: 0 1;
     }
-
 
     /* ══════════════════════════════════════════════════════
        CHAT PANEL
@@ -339,7 +318,6 @@ class MaxDashboardApp(App):
     #chat-input {
         width: 1fr;
     }
-
 
     /* ══════════════════════════════════════════════════════
        ANALYTICS PANEL
@@ -388,7 +366,6 @@ class MaxDashboardApp(App):
         margin: 1 0;
     }
 
-
     /* ══════════════════════════════════════════════════════
        SYSTEM PANEL
        ══════════════════════════════════════════════════════ */
@@ -422,7 +399,6 @@ class MaxDashboardApp(App):
         margin: 1 0;
     }
 
-
     /* ══════════════════════════════════════════════════════
        QUEUE PANEL
        ══════════════════════════════════════════════════════ */
@@ -438,7 +414,6 @@ class MaxDashboardApp(App):
         margin: 0 1;
         color: $text-muted;
     }
-
 
     /* ══════════════════════════════════════════════════════
        HISTORY PANEL
@@ -461,45 +436,64 @@ class MaxDashboardApp(App):
     """
 
     def compose(self) -> ComposeResult:
-        yield Header()
-        with TabbedContent(initial="home"):
-            with TabPane("Home", id="home"):
+        with Horizontal(id="main-horizontal"):
+            yield Sidebar(id="sidebar")
+            with Container(id="content"):
                 yield HomePanel(id="home-panel")
-            with TabPane("Download", id="download"):
                 yield DownloadPanel(id="download-panel")
-            with TabPane("Queue", id="queue"):
                 yield QueuePanel(id="queue-panel")
-            with TabPane("History", id="history"):
                 yield HistoryPanel(id="history-panel")
-            with TabPane("Files", id="files"):
                 yield FilesPanel(id="files-panel")
-            with TabPane("Analytics", id="analytics"):
                 yield AnalyticsPanel(id="analytics-panel")
-            with TabPane("Config", id="config"):
                 yield ConfigPanel(id="config-panel")
-            with TabPane("System", id="system"):
                 yield SystemPanel(id="system-panel")
-            with TabPane("AI Chat", id="chat"):
                 yield ChatPanel(id="chat-panel")
         yield Footer()
 
     def on_mount(self) -> None:
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("home")
+        self._show_panel("home")
         self.set_interval(2.0, self._refresh_active_panel)
 
+    def _show_panel(self, section_id: str) -> None:
+        for panel_id in [
+            "home-panel",
+            "download-panel",
+            "queue-panel",
+            "history-panel",
+            "files-panel",
+            "analytics-panel",
+            "config-panel",
+            "system-panel",
+            "chat-panel",
+        ]:
+            widget = self.query_one(f"#{panel_id}")
+            widget.display = False
+        target_id = f"{section_id}-panel"
+        try:
+            target = self.query_one(f"#{target_id}")
+            target.display = True
+        except Exception:
+            self.query_one("#home-panel").display = True
+
     def _refresh_active_panel(self) -> None:
-        active = self.query_one(TabbedContent).active
-        panel_map = {
-            "queue": "#queue-panel",
-            "history": "#history-panel",
-            "system": "#system-panel",
-            "files": "#files-panel",
-            "home": "#home-panel",
-            "analytics": "#analytics-panel",
-        }
-        if active in panel_map:
-            panel = self.query_one(panel_map[active])
-            if hasattr(panel, "refresh_data"):
-                panel.refresh_data()
+        for panel_id, section in [
+            ("#queue-panel", "queue"),
+            ("#history-panel", "history"),
+            ("#system-panel", "system"),
+            ("#files-panel", "files"),
+            ("#home-panel", "home"),
+            ("#analytics-panel", "analytics"),
+        ]:
+            panel = self.query_one(panel_id)
+            if panel.display:
+                if hasattr(panel, "refresh_data"):
+                    panel.refresh_data()
+                break
+
+    def action_toggle_sidebar(self) -> None:
+        self.query_one(Sidebar).toggle_mode()
 
     def action_refresh(self) -> None:
         for panel_id in [
@@ -514,38 +508,66 @@ class MaxDashboardApp(App):
             if hasattr(panel, "refresh_data"):
                 panel.refresh_data()
 
+    def on_sidebar_section_selected(self, message: Sidebar.SectionSelected) -> None:
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active(message.section_id)
+        self._show_panel(message.section_id)
+
     def action_switch_home(self) -> None:
-        self.query_one("TabbedContent").active = "home"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("home")
+        self._show_panel("home")
 
     def action_switch_download(self) -> None:
-        self.query_one("TabbedContent").active = "download"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("download")
+        self._show_panel("download")
 
     def action_switch_queue(self) -> None:
-        self.query_one("TabbedContent").active = "queue"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("queue")
+        self._show_panel("queue")
 
     def action_switch_history(self) -> None:
-        self.query_one("TabbedContent").active = "history"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("history")
+        self._show_panel("history")
 
     def action_switch_files(self) -> None:
-        self.query_one("TabbedContent").active = "files"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("files")
+        self._show_panel("files")
+
+    def action_switch_analytics(self) -> None:
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("analytics")
+        self._show_panel("analytics")
 
     def action_switch_config(self) -> None:
-        self.query_one("TabbedContent").active = "config"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("config")
+        self._show_panel("config")
 
     def action_switch_system(self) -> None:
-        self.query_one("TabbedContent").active = "system"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("system")
+        self._show_panel("system")
 
     def action_switch_chat(self) -> None:
-        self.query_one("TabbedContent").active = "ai-chat"
+        sidebar = self.query_one(Sidebar)
+        sidebar.set_active("chat")
+        self._show_panel("chat")
 
     def on_home_panel_command_selected(
         self, message: HomePanel.CommandSelected
     ) -> None:
-        tabs = self.query_one(TabbedContent)
         tab_map = {
             "grab": "download",
             "files": "files",
             "ai": "chat",
         }
-        if message.category in tab_map:
-            tabs.active = tab_map[message.category]
+        target = tab_map.get(message.category)
+        if target:
+            sidebar = self.query_one(Sidebar)
+            sidebar.set_active(target)
+            self._show_panel(target)
