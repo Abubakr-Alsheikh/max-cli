@@ -32,6 +32,7 @@ class QueueItem:
         no_playlist: bool = False,
         subtitles: bool = False,
         custom_height: Optional[int] = None,
+        player_client: Optional[str] = None,
     ):
         self.id = str(uuid4())[:8]
         self.url = url
@@ -43,6 +44,7 @@ class QueueItem:
         self.no_playlist = no_playlist
         self.subtitles = subtitles
         self.custom_height = custom_height
+        self.player_client = player_client
         self.status = "pending"  # pending, downloading, completed, failed
         self.title = ""
         self.progress = 0.0
@@ -70,6 +72,7 @@ class QueueItem:
             "no_playlist": self.no_playlist,
             "subtitles": self.subtitles,
             "custom_height": self.custom_height,
+            "player_client": self.player_client,
             "status": self.status,
             "title": self.title,
             "progress": self.progress,
@@ -97,6 +100,7 @@ class QueueItem:
             no_playlist=data.get("no_playlist", False),
             subtitles=data.get("subtitles", False),
             custom_height=data.get("custom_height"),
+            player_client=data.get("player_client"),
         )
         item.id = data.get("id", item.id)
         item.status = data.get("status", "pending")
@@ -214,6 +218,7 @@ class QueueManager:
         no_playlist: bool = False,
         subtitles: bool = False,
         custom_height: Optional[int] = None,
+        player_client: Optional[str] = None,
     ) -> Optional[QueueItem]:
         """Add a new item to the queue. Returns None if already in queue."""
         # Check if URL already exists in queue (prevent duplicates only if downloading)
@@ -235,6 +240,7 @@ class QueueManager:
             no_playlist=no_playlist,
             subtitles=subtitles,
             custom_height=custom_height,
+            player_client=player_client,
         )
         with self._lock:
             self._queue.append(item)
@@ -419,6 +425,7 @@ class QueueManager:
                 progress_hook=progress_hook,
                 subtitles=item.subtitles,
                 custom_height=item.custom_height,
+                player_client=item.player_client,
             )
             item.status = "completed"
             item.completed_at = datetime.now().isoformat()
