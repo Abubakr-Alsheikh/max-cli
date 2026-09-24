@@ -453,9 +453,11 @@ class MediaEngine:
         list_file = output_path.parent / f"{output_path.stem}_concat_list.txt"
 
         try:
-            with open(list_file, "w") as f:
+            with open(list_file, "w", encoding="utf-8") as f:
                 for path in input_paths:
-                    f.write(f"file '{path.absolute()}'\\n")
+                    # Concat demuxer syntax: a literal ' is written as '\'' inside quotes.
+                    quoted = str(path.absolute()).replace("'", "'\\''")
+                    f.write(f"file '{quoted}'\n")
 
             cmd = [
                 str(self.ffmpeg_path),
