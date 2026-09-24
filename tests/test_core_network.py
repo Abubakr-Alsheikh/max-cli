@@ -260,3 +260,56 @@ class TestNetworkEngine:
             result = engine.setup_pot_server()
         assert result["ok"] is True
         assert mock_run.call_count == 1
+
+
+class TestCanvasMirrorExtraction:
+    """The canvas mirror tarball must not write outside the package (hardening 1.12)."""
+
+    @staticmethod
+    def _canvas_pkg(tmp_path):
+        pkg = (
+            tmp_path
+            / "server"
+            / "node_modules"
+            / ".deno"
+            / "canvas@3.2.1"
+            / "node_modules"
+            / "canvas"
+        )
+        pkg.mkdir(parents=True)
+        return pkg
+
+    @staticmethod
+    def _serve_tar(entries):
+        import io
+        import tarfile
+
+        def fake_urlretrieve(url, destination):
+            with tarfile.open(destination, "w:gz") as archive:
+                for name, payload in entries.items():
+                    info = tarfile.TarInfo(name=name)
+                    info.size = len(payload)
+                    archive.addfile(info, io.BytesIO(payload))
+
+        return fake_urlretrieve
+
+    def test_valid_tarball_installs_binary(self, tmp_path):
+        pkg = self._canvas_pkg(tmp_path)
+        tarball = {"build/Release/canvas.node": b"native"}
+
+        with patch("urllib.request.urlretrieve", self._serve_tar(tarball)):
+            fixed = NetworkEngine()._ensure_canvas_binary(tmp_path / "server")
+
+        assert fixed is True
+        assert (pkg / "build" / "Release" / "canvas.node").read_bytes() == b"native"
+
+    def test_traversing_tarball_is_rejected(self, tmp_path):
+        self._canvas_pkg(tmp_path)
+        escape = tmp_path / "escaped.txt"
+        tarball = {"../../../../../../escaped.txt": b"evil"}
+
+        with patch("urllib.request.urlretrieve", self._serve_tar(tarball)):
+            fixed = NetworkEngine()._ensure_canvas_binary(tmp_path / "server")
+
+        assert fixed is False
+        assert not escape.exists()
