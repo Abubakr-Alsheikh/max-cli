@@ -108,3 +108,35 @@ class TestFileOrganizer:
 
         assert result["renamed"] == 1
         assert len(result["actions"]) == 1
+
+
+class TestSecureDelete:
+    """Regression tests for secure_delete (hardening 1.1)."""
+
+    SECRET = b"TOP-SECRET-PAYLOAD-" * 512
+
+    def test_overwrites_original_bytes_in_place(self, tmp_path, monkeypatch):
+        target = tmp_path / "secret.bin"
+        target.write_bytes(self.SECRET)
+        # Keep the file after the overwrite so we can inspect what remains on disk.
+        monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=False: None)
+
+        FileOrganizer().secure_delete(target, passes=2, auto_backup=False)
+
+        remaining = target.read_bytes()
+        assert b"TOP-SECRET-PAYLOAD-" not in remaining
+        assert len(remaining) == len(self.SECRET)
+
+    def test_file_is_removed(self, tmp_path):
+        target = tmp_path / "secret.bin"
+        target.write_bytes(self.SECRET)
+
+        assert FileOrganizer().secure_delete(target, auto_backup=False) is True
+        assert not target.exists()
+
+    def test_empty_file_is_removed(self, tmp_path):
+        target = tmp_path / "empty.bin"
+        target.write_bytes(b"")
+
+        assert FileOrganizer().secure_delete(target, auto_backup=False) is True
+        assert not target.exists()

@@ -6,6 +6,8 @@ if TYPE_CHECKING:
 
 from max_cli.common.exceptions import ResourceNotFoundError
 
+SHRED_CHUNK_BYTES = 1024 * 1024
+
 
 class FileOrganizer:
     """
@@ -256,10 +258,15 @@ class FileOrganizer:
         file_size = path.stat().st_size
 
         try:
-            with open(path, "ba+") as f:
+            # "r+b" writes over existing bytes; append modes ignore seek() for writes.
+            with open(path, "r+b") as f:
                 for _ in range(passes):
                     f.seek(0)
-                    f.write(os.urandom(file_size))
+                    remaining = file_size
+                    while remaining > 0:
+                        chunk_size = min(SHRED_CHUNK_BYTES, remaining)
+                        f.write(os.urandom(chunk_size))
+                        remaining -= chunk_size
                     f.flush()
                     os.fsync(f.fileno())
 
