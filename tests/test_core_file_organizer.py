@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from max_cli.core.engines import file_organizer as file_organizer_module
 from max_cli.core.engines.file_organizer import FileOrganizer
-from max_cli.common.exceptions import ResourceNotFoundError
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 
 class TestFileOrganizer:
@@ -238,6 +238,84 @@ class TestSmartSortValidation:
         assert result["skipped"] == 1
         assert existing.read_text(encoding="utf-8") == "older copy"
         assert (folder / "report.pdf").exists()
+
+
+class TestBackupRestore:
+    """Restore goes back to the original location (hardening 1.13)."""
+
+    @pytest.fixture
+    def organizer(self, tmp_path, monkeypatch):
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        monkeypatch.setattr(FileOrganizer, "get_backup_dir", lambda self: backup_dir)
+        return FileOrganizer()
+
+    @pytest.fixture
+    def original(self, tmp_path):
+        folder = tmp_path / "work"
+        folder.mkdir()
+        path = folder / "report.txt"
+        path.write_text("v1", encoding="utf-8")
+        return path
+
+    def test_restore_without_target_returns_file_to_original_path(
+        self, organizer, original
+    ):
+        backup = organizer.create_backup(original)
+        original.unlink()
+
+        restored = organizer.restore_backup(backup)
+
+        assert restored == original.resolve()
+        assert original.read_text(encoding="utf-8") == "v1"
+
+    def test_restore_refuses_to_overwrite_existing_original(self, organizer, original):
+        backup = organizer.create_backup(original)
+        original.write_text("v2 edited later", encoding="utf-8")
+
+        with pytest.raises(ValidationError):
+            organizer.restore_backup(backup)
+
+        assert original.read_text(encoding="utf-8") == "v2 edited later"
+
+    def test_restore_to_target_dir_uses_original_name(
+        self, organizer, original, tmp_path
+    ):
+        backup = organizer.create_backup(original)
+        target = tmp_path / "restored"
+
+        restored = organizer.restore_backup(backup, target)
+
+        assert restored == target / "report.txt"
+        assert restored.read_text(encoding="utf-8") == "v1"
+
+    def test_legacy_backup_without_metadata_requires_target(self, organizer, tmp_path):
+        legacy = organizer.get_backup_dir() / "old_manual_20250101_000000.txt"
+        legacy.write_text("old", encoding="utf-8")
+
+        with pytest.raises(ValidationError):
+            organizer.restore_backup(legacy)
+
+        restored = organizer.restore_backup(legacy, tmp_path / "out")
+        assert restored.read_text(encoding="utf-8") == "old"
+
+    def test_metadata_files_are_not_listed_as_backups(self, organizer, original):
+        organizer.create_backup(original)
+
+        names = [info["name"] for info in organizer.list_backups()]
+
+        assert len(names) == 1
+        assert not names[0].endswith(".meta.json")
+
+    def test_cleanup_counts_backups_and_removes_their_metadata(
+        self, organizer, original
+    ):
+        organizer.create_backup(original)
+
+        removed = organizer.cleanup_old_backups(days=-1)
+
+        assert removed == 1
+        assert list(organizer.get_backup_dir().iterdir()) == []
 
 
 class TestSecureDelete:

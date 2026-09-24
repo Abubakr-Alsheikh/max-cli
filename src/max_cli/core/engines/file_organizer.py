@@ -4,11 +4,31 @@ from typing import TYPE_CHECKING, List, Dict, Any, Optional
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
 
-from max_cli.common.exceptions import ResourceNotFoundError
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 SHRED_CHUNK_BYTES = 1024 * 1024
 HASH_CHUNK_BYTES = 1024 * 1024
 RESERVED_NAMES = {".", ".."}
+
+
+BACKUP_METADATA_SUFFIX = ".meta.json"
+
+
+def _backup_metadata_path(backup_path: Path) -> Path:
+    return backup_path.with_name(backup_path.name + BACKUP_METADATA_SUFFIX)
+
+
+def _read_original_path(backup_path: Path) -> Optional[Path]:
+    """Original location recorded by create_backup, or None if unknown."""
+    import json
+
+    metadata_path = _backup_metadata_path(backup_path)
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    original = metadata.get("original_path") if isinstance(metadata, dict) else None
+    return Path(original) if isinstance(original, str) and original else None
 
 
 def _file_digest(path: Path) -> str:
@@ -344,14 +364,18 @@ class FileOrganizer:
 
         from datetime import datetime
 
+        import json
+        import shutil
+
         backup_dir = self.get_backup_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"{path.stem}_{label}_{timestamp}{path.suffix}"
         backup_path = backup_dir / backup_name
 
-        import shutil
-
         shutil.copy2(path, backup_path)
+        _backup_metadata_path(backup_path).write_text(
+            json.dumps({"original_path": str(path.resolve())}), encoding="utf-8"
+        )
 
         return backup_path
 
@@ -371,6 +395,8 @@ class FileOrganizer:
         for f in sorted(
             backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
         ):
+            if f.name.endswith(BACKUP_METADATA_SUFFIX):
+                continue
             if filename and filename not in f.stem:
                 continue
 
@@ -396,17 +422,35 @@ class FileOrganizer:
 
         Returns:
             Path to the restored file
+
+        Raises:
+            ValidationError: no target_dir and the original location is unknown
+                (backups made before locations were recorded), or a file
+                already exists there.
         """
         if not backup_path.exists():
             raise FileNotFoundError(f"Backup not found: {backup_path}")
 
         import shutil
 
+        original_path = _read_original_path(backup_path)
         if target_dir:
             target_dir.mkdir(parents=True, exist_ok=True)
-            restore_path = target_dir / backup_path.name
+            restore_name = original_path.name if original_path else backup_path.name
+            restore_path = target_dir / restore_name
+        elif original_path is None:
+            raise ValidationError(
+                f"No original location recorded for {backup_path.name}. "
+                "Choose a folder to restore into."
+            )
+        elif original_path.exists():
+            raise ValidationError(
+                f"{original_path} already exists. Restore into another folder "
+                "or move the current file first."
+            )
         else:
-            restore_path = backup_path.parent.parent / backup_path.name
+            original_path.parent.mkdir(parents=True, exist_ok=True)
+            restore_path = original_path
 
         shutil.copy2(backup_path, restore_path)
         return restore_path
@@ -428,8 +472,11 @@ class FileOrganizer:
         removed = 0
 
         for f in backup_dir.iterdir():
+            if f.name.endswith(BACKUP_METADATA_SUFFIX):
+                continue  # removed together with its backup below
             if f.stat().st_ctime < cutoff:
                 f.unlink()
+                _backup_metadata_path(f).unlink(missing_ok=True)
                 removed += 1
 
         return removed
