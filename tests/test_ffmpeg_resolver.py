@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from max_cli.common.archives import UnsafeArchiveError
 from max_cli.common.exceptions import ResourceNotFoundError
 from max_cli.common.ffmpeg_resolver import (
     FFmpegResolver,
@@ -340,6 +341,116 @@ class TestDownloadTarXzExtraction:
 
         assert resolver.local_path.exists()
         assert resolver.local_path.read_bytes() == b"fake_binary"
+
+
+def _mock_download(mock_urlopen: MagicMock, payload: bytes) -> None:
+    mock_response = MagicMock()
+    mock_response.read.side_effect = [payload, b""]
+    mock_response.getheader.return_value = str(len(payload))
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+    mock_urlopen.return_value = mock_response
+
+
+def _zip_bytes(entries: dict) -> bytes:
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, data in entries.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+def _tar_xz_bytes(entries: dict) -> bytes:
+    import io
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:xz") as archive:
+        for name, data in entries.items():
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+class TestExtractionRegressions:
+    """Hardening 1.9: None extract_path, existing targets, tar traversal."""
+
+    @staticmethod
+    def _resolver(tmp_path: Path, binary_name: str) -> FFmpegResolver:
+        resolver = FFmpegResolver()
+        resolver.bin_dir = tmp_path
+        resolver.local_path = tmp_path / binary_name
+        return resolver
+
+    @patch("urllib.request.urlopen")
+    def test_zip_without_extract_path_matches_binary_name(
+        self, mock_urlopen: MagicMock, tmp_path: Path
+    ) -> None:
+        _mock_download(mock_urlopen, _zip_bytes({"dist/bin/ffmpeg.exe": b"exe"}))
+        resolver = self._resolver(tmp_path, "ffmpeg.exe")
+
+        resolver._download_binary(
+            url="https://example.com/ffmpeg.zip",
+            binary_name="ffmpeg.exe",
+            extract_path=None,
+        )
+
+        assert resolver.local_path.read_bytes() == b"exe"
+
+    @patch("urllib.request.urlopen")
+    def test_zip_replaces_existing_binary(
+        self, mock_urlopen: MagicMock, tmp_path: Path
+    ) -> None:
+        _mock_download(mock_urlopen, _zip_bytes({"dist/bin/ffmpeg.exe": b"new"}))
+        resolver = self._resolver(tmp_path, "ffmpeg.exe")
+        resolver.local_path.write_bytes(b"corrupt old binary")
+
+        resolver._download_binary(
+            url="https://example.com/ffmpeg.zip",
+            binary_name="ffmpeg.exe",
+            extract_path="bin/ffmpeg.exe",
+        )
+
+        assert resolver.local_path.read_bytes() == b"new"
+
+    @patch("urllib.request.urlopen")
+    def test_tar_replaces_existing_binary(
+        self, mock_urlopen: MagicMock, tmp_path: Path
+    ) -> None:
+        _mock_download(mock_urlopen, _tar_xz_bytes({"release/ffmpeg": b"new"}))
+        resolver = self._resolver(tmp_path, "ffmpeg")
+        resolver.local_path.write_bytes(b"corrupt old binary")
+
+        resolver._download_binary(
+            url="https://example.com/ffmpeg.tar.xz",
+            binary_name="ffmpeg",
+            extract_path=None,
+        )
+
+        assert resolver.local_path.read_bytes() == b"new"
+
+    @patch("urllib.request.urlopen")
+    def test_tar_member_escaping_bin_dir_is_rejected(
+        self, mock_urlopen: MagicMock, tmp_path: Path
+    ) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _mock_download(mock_urlopen, _tar_xz_bytes({"../../ffmpeg": b"evil"}))
+        resolver = self._resolver(bin_dir, "ffmpeg")
+
+        with pytest.raises(UnsafeArchiveError):
+            resolver._download_binary(
+                url="https://example.com/ffmpeg.tar.xz",
+                binary_name="ffmpeg",
+                extract_path=None,
+            )
+
+        assert not (tmp_path.parent / "ffmpeg").exists()
+        assert not (tmp_path / "ffmpeg").exists()
 
 
 class TestCacheResolution:

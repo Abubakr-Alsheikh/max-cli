@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from max_cli.common.archives import safe_extract_tar
 from max_cli.common.exceptions import ResourceNotFoundError
 from max_cli.common.logger import console, log_error, log_success
 
@@ -180,26 +181,29 @@ class FFmpegResolver:
                 console.print()
                 tmp_path = Path(tmp_file.name)
 
+        # Path.replace (not rename) so an existing, possibly corrupt binary is
+        # overwritten; rename raises FileExistsError on Windows.
+        suffixes = tuple(s for s in (extract_path, binary_name) if s)
         if url.endswith(".zip"):
             with zipfile.ZipFile(tmp_path, "r") as zf:
-                for member in zf.namelist():
-                    if member.endswith(extract_path) or member.endswith(binary_name):
-                        zf.extract(member, self.bin_dir)
-                        extracted = self.bin_dir / member
+                for member_name in zf.namelist():
+                    if member_name.endswith(suffixes):
+                        # ZipFile.extract strips absolute paths and ".." itself.
+                        extracted = Path(zf.extract(member_name, self.bin_dir))
                         if extracted != self.local_path:
-                            extracted.rename(self.local_path)
+                            extracted.replace(self.local_path)
                         break
         elif url.endswith(".tar.xz") or url.endswith(".tar.bz2"):
             with tarfile.open(tmp_path, "r:*") as tf:
-                for member in tf.getmembers():
-                    if member.name.endswith(binary_name):
-                        tf.extract(member, self.bin_dir)
-                        extracted = self.bin_dir / member.name
+                for tar_member in tf.getmembers():
+                    if tar_member.name.endswith(binary_name):
+                        safe_extract_tar(tf, self.bin_dir, members=[tar_member])
+                        extracted = self.bin_dir / tar_member.name
                         if extracted != self.local_path:
-                            extracted.rename(self.local_path)
+                            extracted.replace(self.local_path)
                         break
         else:
-            tmp_path.rename(self.local_path)
+            tmp_path.replace(self.local_path)
 
         if tmp_path.exists():
             tmp_path.unlink()
