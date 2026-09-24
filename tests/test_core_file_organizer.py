@@ -110,6 +110,80 @@ class TestFileOrganizer:
         assert len(result["actions"]) == 1
 
 
+class TestSmartSortValidation:
+    """AI-supplied names must never move files outside the target (hardening 1.6)."""
+
+    @pytest.fixture
+    def folder(self, tmp_path):
+        target = tmp_path / "inbox"
+        target.mkdir()
+        (target / "report.pdf").write_text("pdf", encoding="utf-8")
+        return target
+
+    def test_valid_category_moves_file(self, folder):
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": "Documents"})
+
+        assert result["moved"] == 1
+        assert (folder / "Documents" / "report.pdf").exists()
+
+    @pytest.mark.parametrize(
+        "category",
+        ["../escaped", "..", ".", "a/b", "a\\b", "", "   "],
+    )
+    def test_path_like_category_is_rejected(self, folder, category):
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": category})
+
+        assert result["moved"] == 0
+        assert result["errors"] == 1
+        assert (folder / "report.pdf").exists()
+        assert not (folder.parent / "escaped").exists()
+
+    def test_absolute_category_is_rejected(self, folder, tmp_path):
+        outside = tmp_path / "outside"
+
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": str(outside)})
+
+        assert result["moved"] == 0
+        assert not outside.exists()
+        assert (folder / "report.pdf").exists()
+
+    def test_path_like_filename_is_rejected(self, folder, tmp_path):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("keep me here", encoding="utf-8")
+
+        result = FileOrganizer().smart_sort(folder, {"../secret.txt": "Loot"})
+
+        assert result["moved"] == 0
+        assert secret.exists()
+        assert not (folder / "Loot").exists()
+
+    @pytest.mark.parametrize("bad_value", [None, 123, ["Docs"], {"x": "y"}])
+    def test_non_string_values_are_rejected(self, folder, bad_value):
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": bad_value})
+
+        assert result["moved"] == 0
+        assert result["errors"] == 1
+
+    def test_category_differing_only_in_case_is_accepted(self, folder):
+        (folder / "Documents").mkdir()
+
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": "documents"})
+
+        assert result["moved"] == 1
+        assert result["errors"] == 0
+
+    def test_existing_destination_is_not_overwritten(self, folder):
+        (folder / "Documents").mkdir()
+        existing = folder / "Documents" / "report.pdf"
+        existing.write_text("older copy", encoding="utf-8")
+
+        result = FileOrganizer().smart_sort(folder, {"report.pdf": "Documents"})
+
+        assert result["skipped"] == 1
+        assert existing.read_text(encoding="utf-8") == "older copy"
+        assert (folder / "report.pdf").exists()
+
+
 class TestSecureDelete:
     """Regression tests for secure_delete (hardening 1.1)."""
 

@@ -7,6 +7,19 @@ if TYPE_CHECKING:
 from max_cli.common.exceptions import ResourceNotFoundError
 
 SHRED_CHUNK_BYTES = 1024 * 1024
+RESERVED_NAMES = {".", ".."}
+
+
+def _is_plain_name(value: object) -> bool:
+    """True for a single, non-empty path component with no separators or drive."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    if value in RESERVED_NAMES or "/" in value or "\\" in value:
+        return False
+    candidate = Path(value)
+    return (
+        candidate.name == value and not candidate.is_absolute() and not candidate.drive
+    )
 
 
 class FileOrganizer:
@@ -176,13 +189,33 @@ class FileOrganizer:
         errors = 0
         actions = []
 
+        base = path.resolve()
         for filename, category in categories.items():
+            # Names usually come from an AI response: treat them as untrusted.
+            if not (_is_plain_name(filename) and _is_plain_name(category)):
+                errors += 1
+                actions.append(f"[Rejected] {filename!r} -> {category!r}: unsafe name")
+                continue
+
             src = path / filename
             dest_dir = path / category
             dest = dest_dir / filename
+            # Compare resolved paths on both sides: catches symlinked category
+            # folders and stays correct on case-insensitive filesystems.
+            if dest.resolve().parent.parent != base:
+                errors += 1
+                actions.append(
+                    f"[Rejected] {filename!r} -> {category!r}: outside target"
+                )
+                continue
 
             if not src.exists():
                 errors += 1
+                continue
+
+            if dest.exists():
+                skipped += 1
+                actions.append(f"[Skipped] {filename}: {category}/{filename} exists")
                 continue
 
             if dry_run:
