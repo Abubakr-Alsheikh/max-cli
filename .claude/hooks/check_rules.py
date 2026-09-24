@@ -380,7 +380,17 @@ def run_ruff(
     """
     try:
         subprocess.run(
-            ["ruff", "check", "--fix", "--quiet", str(file_path)],
+            # F401 stays unfixable: an import added before the code that uses it
+            # (multi-step edits) must not be deleted as "unused" in between.
+            [
+                "ruff",
+                "check",
+                "--fix",
+                "--unfixable",
+                "F401",
+                "--quiet",
+                str(file_path),
+            ],
             cwd=repo_root,
             capture_output=True,
         )
