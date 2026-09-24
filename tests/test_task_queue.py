@@ -1,3 +1,6 @@
+import pytest
+
+from max_cli.core.engines import daemon_manager as daemon_module
 from max_cli.core.engines.task_queue import (
     TaskStatus,
     TaskType,
@@ -7,6 +10,16 @@ from max_cli.core.engines.task_queue import (
     list_registered_executors,
 )
 from max_cli.core.engines.daemon_manager import DaemonManager
+
+
+@pytest.fixture
+def isolated_daemon(tmp_path, monkeypatch) -> DaemonManager:
+    """DaemonManager whose queue/history live in tmp_path, not ~/.max_cli."""
+    queue_dir = tmp_path / "tasks"
+    monkeypatch.setattr(DaemonManager, "QUEUE_DIR", queue_dir)
+    monkeypatch.setattr(DaemonManager, "QUEUE_FILE", queue_dir / "queue.json")
+    monkeypatch.setattr(DaemonManager, "HISTORY_FILE", queue_dir / "history.json")
+    return DaemonManager()
 
 
 class TestTaskItem:
@@ -59,14 +72,15 @@ class TestExecutorRegistry:
 
 
 class TestDaemonManager:
-    def setup_method(self):
-        self.dm = DaemonManager()
+    @pytest.fixture(autouse=True)
+    def _daemon(self, isolated_daemon):
+        self.dm = isolated_daemon
 
     def test_add_and_get_all(self):
         task = TaskItem(type=TaskType.CUSTOM, title="Test")
         self.dm.add(task)
         tasks = self.dm.get_all()
-        assert len(tasks) >= 1
+        assert tasks == [task]
 
     def test_add_and_remove(self):
         task = TaskItem(type=TaskType.CUSTOM, title="Test")
@@ -94,7 +108,7 @@ class TestDaemonManager:
         task = TaskItem(type=TaskType.CUSTOM, title="Test")
         self.dm.add(task)
         stats = self.dm.get_stats()
-        assert stats["total"] >= 1
+        assert stats["total"] == 1
         assert "pending" in stats
         assert "by_type" in stats
 
@@ -110,8 +124,100 @@ class TestDaemonManager:
         task = TaskItem(type=TaskType.CUSTOM, title="Test")
         self.dm.add(task)
         count = self.dm.clear(status=TaskStatus.PENDING)
-        assert count >= 1
+        assert count == 1
 
     def test_get_history_empty(self):
-        history = self.dm.get_history()
-        assert isinstance(history, list)
+        assert self.dm.get_history() == []
+
+
+class TestDaemonCancelAndExecution:
+    """Regression tests for hardening 1.3 (cancel) and 1.4 (locking, loop errors)."""
+
+    @pytest.fixture(autouse=True)
+    def _daemon(self, isolated_daemon):
+        self.dm = isolated_daemon
+
+    def _use_executor(self, monkeypatch, executor) -> None:
+        monkeypatch.setattr(daemon_module, "get_executor", lambda task_type: executor)
+
+    def test_cancel_pending_removes_task_from_queue(self):
+        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="pending"))
+
+        assert self.dm.cancel(task.id) is True
+
+        assert task.status == TaskStatus.CANCELLED
+        assert self.dm.get_all() == []
+
+    def test_cancel_paused_removes_task_from_queue(self):
+        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="paused"))
+        self.dm.pause(task.id)
+
+        assert self.dm.cancel(task.id) is True
+        assert self.dm.get_all() == []
+
+    def test_cancel_unknown_task_returns_false(self):
+        assert self.dm.cancel("missing") is False
+
+    def test_cancelled_running_task_is_not_marked_completed(self, monkeypatch):
+        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="running"))
+
+        def executor_cancelled_midway(running_task):
+            self.dm.cancel(running_task.id)
+            return {"output_files": []}
+
+        self._use_executor(monkeypatch, executor_cancelled_midway)
+        self.dm.process_now()
+
+        assert task.status == TaskStatus.CANCELLED
+        assert self.dm.get_all() == []
+        assert self.dm.get_history() == [task]
+
+    def test_cancelled_task_is_not_rerun(self, monkeypatch):
+        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="skip me"))
+        calls = []
+        self._use_executor(monkeypatch, lambda t: calls.append(t) or {})
+        task.status = TaskStatus.CANCELLED  # cancelled after being picked up
+
+        self.dm._execute_task(task)
+
+        assert calls == []
+        assert task.status == TaskStatus.CANCELLED
+
+    def test_queue_saves_happen_under_lock(self, monkeypatch):
+        self.dm.add(TaskItem(type=TaskType.CUSTOM, title="locked"))
+        self._use_executor(monkeypatch, lambda t: {"output_files": []})
+        unlocked_saves = []
+        original_save_queue = self.dm._save_queue
+        original_save_history = self.dm._save_history
+
+        def checked(original):
+            def wrapper():
+                if not self.dm._lock.locked():
+                    unlocked_saves.append(original.__name__)
+                original()
+
+            return wrapper
+
+        monkeypatch.setattr(self.dm, "_save_queue", checked(original_save_queue))
+        monkeypatch.setattr(self.dm, "_save_history", checked(original_save_history))
+
+        self.dm.process_now()
+
+        assert unlocked_saves == []
+
+    def test_unexpected_error_marks_task_failed_instead_of_vanishing(self, monkeypatch):
+        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="boom"))
+
+        def broken_execute(_task):
+            raise RuntimeError("disk on fire")
+
+        monkeypatch.setattr(self.dm, "_execute_task", broken_execute)
+
+        assert self.dm._process_next() is True
+
+        assert task.status == TaskStatus.FAILED
+        assert "disk on fire" in task.error
+        assert self.dm.get_history() == [task]
+
+    def test_process_next_returns_false_when_idle(self):
+        assert self.dm._process_next() is False

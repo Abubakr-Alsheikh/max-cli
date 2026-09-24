@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 from datetime import datetime
@@ -13,6 +14,13 @@ from max_cli.core.engines.task_queue import (
     TaskType,
     get_executor,
 )
+
+
+logger = logging.getLogger(__name__)
+
+HISTORY_LIMIT = 200
+IDLE_POLL_SECONDS = 2
+BETWEEN_TASKS_SECONDS = 1
 
 
 class DaemonError(MaxError):
@@ -97,15 +105,24 @@ class DaemonManager:
         return False
 
     def cancel(self, task_id: str) -> bool:
+        """Cancel a queued task.
+
+        Pending/paused tasks leave the queue immediately. A running task is
+        marked CANCELLED; _execute_task archives it when its executor returns.
+        """
         with self._lock:
             for item in self._queue:
-                if item.id == task_id:
-                    if item.status in (TaskStatus.RUNNING, TaskStatus.PENDING):
-                        item.status = TaskStatus.CANCELLED
-                    if item.status == TaskStatus.PENDING:
-                        self._queue.remove(item)
-                    self._save_queue()
-                    return True
+                if item.id != task_id:
+                    continue
+                if item.status == TaskStatus.RUNNING:
+                    item.status = TaskStatus.CANCELLED
+                elif item.status in (TaskStatus.PENDING, TaskStatus.PAUSED):
+                    item.status = TaskStatus.CANCELLED
+                    self._queue.remove(item)
+                else:
+                    return False
+                self._save_queue()
+                return True
         return False
 
     def pause(self, task_id: str) -> bool:
@@ -244,83 +261,89 @@ class DaemonManager:
 
     def process_now(self, max_tasks: int = 0) -> int:
         processed = 0
-        while True:
-            pending = self.get_pending()
-            if not pending:
+        while max_tasks <= 0 or processed < max_tasks:
+            if not self._process_next():
                 break
-            if max_tasks > 0 and processed >= max_tasks:
-                break
-
-            item = pending[0]
-            try:
-                self._execute_task(item)
-                processed += 1
-            except Exception as e:
-                console.print(f"[red]Error processing task {item.id}: {e}[/red]")
-                break
-
+            processed += 1
         return processed
 
     def _process_loop(self) -> None:
         while self._running:
-            pending = self.get_pending()
-            if not pending:
-                time.sleep(2)
-                continue
+            if self._process_next():
+                time.sleep(BETWEEN_TASKS_SECONDS)
+            else:
+                time.sleep(IDLE_POLL_SECONDS)
 
-            item = pending[0]
-            try:
-                self._execute_task(item)
-            except Exception:
-                pass
+    def _process_next(self) -> bool:
+        """Run the oldest pending task. Returns False when nothing is pending."""
+        pending = self.get_pending()
+        if not pending:
+            return False
+        task = pending[0]
+        try:
+            self._execute_task(task)
+        except Exception as exc:  # noqa: BLE001 - worker must survive and record it
+            logger.exception("Task %s failed outside its executor", task.id)
+            with self._lock:
+                task.status = TaskStatus.FAILED
+                task.error = f"Internal error: {exc}"
+                task.completed_at = datetime.now().isoformat()
+                self._archive(task)
+                self._save_queue()
+                self._save_history()
+        return True
 
-            time.sleep(1)
+    def _archive(self, task: TaskItem) -> None:
+        """Move a finished task from the queue to history. Caller holds _lock."""
+        if task in self._queue:
+            self._queue.remove(task)
+        self._history.insert(0, task)
+        del self._history[HISTORY_LIMIT:]
 
     def _execute_task(self, task: TaskItem) -> None:
-        task.status = TaskStatus.RUNNING
-        task.started_at = datetime.now().isoformat()
-        task.retry_count += 1
-        self._save_queue()
+        with self._lock:
+            if task.status != TaskStatus.PENDING:
+                return  # cancelled or paused after it was picked
+            task.status = TaskStatus.RUNNING
+            task.started_at = datetime.now().isoformat()
+            task.retry_count += 1
+            self._save_queue()
 
         executor = get_executor(task.type)
         if executor is None:
-            task.status = TaskStatus.FAILED
-            task.error = f"No executor registered for task type: {task.type.value}"
-            self._save_queue()
+            with self._lock:
+                task.status = TaskStatus.FAILED
+                task.error = f"No executor registered for task type: {task.type.value}"
+                self._save_queue()
             return
 
         try:
-            result = executor(task)
-            task.status = TaskStatus.COMPLETED
-            task.progress = 100.0
-            task.completed_at = datetime.now().isoformat()
-            task.result = result
-            task.output_files = result.get("output_files", [])
-            task.output_path = result.get("output_path")
-
+            result = executor(task)  # long-running: never hold _lock here
+        except Exception as e:  # noqa: BLE001 - executor errors become task state
             with self._lock:
-                if task in self._queue:
-                    self._queue.remove(task)
-                    self._history.insert(0, task)
-                    if len(self._history) > 200:
-                        self._history = self._history[:200]
-            self._save_queue()
-            self._save_history()
+                if task.status == TaskStatus.CANCELLED:
+                    task.completed_at = datetime.now().isoformat()
+                    self._archive(task)
+                elif task.retry_count < task.max_retries:
+                    task.status = TaskStatus.PENDING
+                    task.error = f"Retry {task.retry_count}/{task.max_retries}: {e}"
+                else:
+                    task.status = TaskStatus.FAILED
+                    task.error = str(e)
+                    task.completed_at = datetime.now().isoformat()
+                    self._archive(task)
+                self._save_queue()
+                self._save_history()
+            return
 
-        except Exception as e:
-            if task.retry_count < task.max_retries:
-                task.status = TaskStatus.PENDING
-                task.error = f"Retry {task.retry_count}/{task.max_retries}: {e}"
-            else:
-                task.status = TaskStatus.FAILED
-                task.error = str(e)
-                task.completed_at = datetime.now().isoformat()
-
-                with self._lock:
-                    if task in self._queue:
-                        self._queue.remove(task)
-                        self._history.insert(0, task)
-                        if len(self._history) > 200:
-                            self._history = self._history[:200]
+        with self._lock:
+            task.completed_at = datetime.now().isoformat()
+            if task.status != TaskStatus.CANCELLED:
+                task.status = TaskStatus.COMPLETED
+                task.progress = 100.0
+                task.result = result
+                task.output_files = result.get("output_files", [])
+                task.output_path = result.get("output_path")
+            self._archive(task)
             self._save_queue()
             self._save_history()

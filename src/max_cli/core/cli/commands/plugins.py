@@ -29,7 +29,7 @@ def register(app: "Typer") -> None:
         if not loaded_plugins:
             console.print("[yellow]No plugins found.[/yellow]")
             console.print(
-                "[dim]Place plugins in ~/.max_cli/plugins/ or ./plugins/[/dim]"
+                "[dim]Place plugins in ~/.max_cli/plugins/ or list extra folders under plugin_dirs in ~/.max_cli/plugins.json[/dim]"
             )
             return
 

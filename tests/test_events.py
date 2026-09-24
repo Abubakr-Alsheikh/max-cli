@@ -1,4 +1,8 @@
+import logging
+import threading
+
 from max_cli.common.events import (
+    EVENT_QUEUE_LIMIT,
     EventEmitter,
     EventType,
     EventLevel,
@@ -189,3 +193,68 @@ class TestProcessBatchWithEvents:
         assert complete.summary["total"] == 3
         assert complete.summary["successful"] == 2
         assert complete.summary["failed"] == 1
+
+
+class TestEmitterRobustness:
+    """Regression tests for hardening 1.8."""
+
+    DEADLOCK_TIMEOUT_SECONDS = 2
+
+    def _emit_in_thread(self, emitter: EventEmitter, event) -> bool:
+        """Emit from a worker thread; return True when emit() finished in time."""
+        worker = threading.Thread(target=emitter.emit, args=(event,), daemon=True)
+        worker.start()
+        worker.join(self.DEADLOCK_TIMEOUT_SECONDS)
+        return not worker.is_alive()
+
+    def test_subscriber_may_emit_without_deadlock(self):
+        emitter = EventEmitter()
+        received = []
+
+        def re_emitting_subscriber(event):
+            received.append(event)
+            if event.message == "first":
+                emitter.emit(StatusEvent(message="second"))
+
+        emitter.subscribe(re_emitting_subscriber)
+
+        assert self._emit_in_thread(emitter, StatusEvent(message="first"))
+        assert [e.message for e in received] == ["first", "second"]
+
+    def test_subscriber_may_subscribe_without_deadlock(self):
+        emitter = EventEmitter()
+        emitter.subscribe(lambda event: emitter.subscribe(lambda e: None))
+
+        assert self._emit_in_thread(emitter, StatusEvent(message="hi"))
+
+    def test_failing_subscriber_is_logged_and_others_still_run(self, caplog):
+        emitter = EventEmitter()
+        received = []
+
+        def broken(event):
+            raise ValueError("subscriber bug")
+
+        emitter.subscribe(broken)
+        emitter.subscribe(received.append)
+
+        with caplog.at_level(logging.ERROR, logger="max_cli.common.events"):
+            emitter.emit(StatusEvent(message="hello"))
+
+        assert len(received) == 1
+        assert "subscriber bug" in caplog.text
+
+    def test_queue_is_bounded(self):
+        emitter = EventEmitter()
+
+        for index in range(EVENT_QUEUE_LIMIT + 500):
+            emitter.emit(StatusEvent(message=str(index)))
+
+        assert emitter.get_queue().qsize() == EVENT_QUEUE_LIMIT
+
+    def test_full_queue_drops_oldest_events(self):
+        emitter = EventEmitter()
+
+        for index in range(EVENT_QUEUE_LIMIT + 1):
+            emitter.emit(StatusEvent(message=str(index)))
+
+        assert emitter.get_queue().get_nowait().message == "1"

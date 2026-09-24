@@ -38,11 +38,16 @@ max files backup <directory>
 
 ## backups
 
-List available backups.
+List available backups, or restore one.
 
 ```bash
 max files backups
+max files backups --filter report
+max files backups --restore ~/.max_cli/backups/report_manual_20260925_101500.txt
+max files backups --restore <backup> -o ./restored
 ```
+
+With `--restore` alone, the file goes back to the path it was backed up from. The command refuses to overwrite a file that already exists there. In that case, pass `-o DIR` to restore into another folder. Backups made before Max CLI recorded original locations also need `-o DIR`.
 
 ## backup-cleanup
 

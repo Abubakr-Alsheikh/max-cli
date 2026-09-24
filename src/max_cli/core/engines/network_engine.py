@@ -135,14 +135,16 @@ class NetworkEngine:
         if (canvas_pkg / "build" / "Release" / "canvas.node").exists():
             return False
 
+        from max_cli.common.archives import UnsafeArchiveError, safe_extract_tar
+
         with tempfile.TemporaryDirectory() as tmp:
             tarball = Path(tmp) / "canvas.tar.gz"
             try:
                 urllib.request.urlretrieve(CANVAS_MIRROR_URL, tarball)
                 with tarfile.open(tarball, "r:gz") as archive:
-                    archive.extractall(canvas_pkg)  # noqa: S202 - trusted mirror binary
+                    safe_extract_tar(archive, canvas_pkg)
                 return (canvas_pkg / "build" / "Release" / "canvas.node").exists()
-            except Exception:
+            except (OSError, tarfile.TarError, UnsafeArchiveError):
                 return False
 
     def get_info(self, url: str) -> Dict[str, Any]:

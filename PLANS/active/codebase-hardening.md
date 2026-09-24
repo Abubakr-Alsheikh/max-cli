@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phase 0 done)
+**Status:** In Progress (Phases 0-1 done)
 **Priority:** P0
 **Updated:** 2026-09-24
 
@@ -28,9 +28,7 @@ Baseline on 2026-09-24:
   - Merge the `max grab` queue (`QueueManager`, `~/.max_cli/grab_history.json`) into `DaemonManager` + `task_queue` (`~/.max_cli/queue/history.json`)?
   - Fold the uncommitted `common/download_history.py` into that store instead of adding a third file?
   - Recommendation: yes to both. Put one persistence helper under `DaemonManager`, and migrate the old files on first load.
-- [ ] **D2. Plugin loading from `./plugins`.**
-  - Today `plugins/manager.py` runs any `*.py` in the current directory's `plugins/` folder.
-  - Recommendation: load only from `~/.max_cli/plugins`, and allow extra directories only through config.
+- [x] **D2. Plugin loading from `./plugins`.** Decided 2026-09-24: home directory only. Extra folders come from `"plugin_dirs"` in `~/.max_cli/plugins.json` (implemented in 1.7).
 - [ ] **D3. The "daemon".**
   - It's a `daemon=True` thread that dies when the CLI exits.
   - Option A: rename it to an in-process worker and remove the unused PID and log files.
@@ -61,7 +59,18 @@ Baseline on 2026-09-24:
 
 **Result:** CI runs pytest and ruff on Python 3.9 to 3.12, and ratcheted mypy (target `python_version = 3.9`) on 3.11. The strict xfails fail loudly when Phase 3 fixes the startup leaks, so their markers get removed.
 
-## Phase 1: Critical bugs (M-L, each task starts with a failing test)
+## Phase 1: Critical bugs (Completed 2026-09-25, branch `fix/hardening-p1-bugs`)
+
+- [x] Every row below has a regression test that failed on the old code before its fix. One commit per bug; 1.3 and 1.4 share a commit, and 1.12 reuses the helper from 1.9.
+- [x] New shared helper `common/archives.py` (`safe_extract_tar`), listed in AGENTS.md.
+- [x] Results:
+  - pytest: 219 → 289 passing.
+  - mypy: 50 → 45 errors (baseline updated).
+  - Rule audit: 84 → 47 violations. No `py39-union` or `tar-filter` violations remain.
+- [x] Found while working:
+  - `TestDaemonManager` wrote "Test" tasks into the real `~/.max_cli/tasks/queue.json`. It is now isolated in `tmp_path`; the 23 leftover tasks in the author's queue were not touched.
+  - The rule hook's `ruff --fix` deleted imports added before the code that used them. F401 is now unfixable in the hook.
+- [x] 1.5 fixed committed code only. The uncommitted `common/download_history.py` keeps its `X | Y` annotations until its author commits it.
 
 | # | Bug | Location | Fix | Test |
 |---|---|---|---|---|
@@ -161,4 +170,10 @@ Baseline on 2026-09-24:
   - Adding the stub packages exposed 20 hidden errors, and removing stale ignores cleared them again.
   - Measured on the committed tree without local WIP, mypy has 50 errors.
   - The uncommitted `common/download_history.py` adds 4 more (Python 3.9 `X | Y` syntax, Phase 1.5). The gate fails until they are fixed.
+- 2026-09-25: CI on PR #2 failed for two reasons, and fail-fast cancelled the other jobs:
+  - `mypy>=1.18.0` pulled mypy 2.3.1, which no longer supports `python_version = 3.9`. Capped at `<1.19`.
+  - The strict xfail on the 200 ms startup target passed unexpectedly on macOS runners. Timing depends on the machine, so that xfail is now non-strict. The deterministic `segno`/`pyperclip` checks stay strict.
+  - CI now runs the test matrix with `fail-fast: false`.
+  - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
+  - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.

@@ -4,7 +4,54 @@ from typing import TYPE_CHECKING, List, Dict, Any, Optional
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
 
-from max_cli.common.exceptions import ResourceNotFoundError
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
+
+SHRED_CHUNK_BYTES = 1024 * 1024
+HASH_CHUNK_BYTES = 1024 * 1024
+RESERVED_NAMES = {".", ".."}
+
+
+BACKUP_METADATA_SUFFIX = ".meta.json"
+
+
+def _backup_metadata_path(backup_path: Path) -> Path:
+    return backup_path.with_name(backup_path.name + BACKUP_METADATA_SUFFIX)
+
+
+def _read_original_path(backup_path: Path) -> Optional[Path]:
+    """Original location recorded by create_backup, or None if unknown."""
+    import json
+
+    metadata_path = _backup_metadata_path(backup_path)
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    original = metadata.get("original_path") if isinstance(metadata, dict) else None
+    return Path(original) if isinstance(original, str) and original else None
+
+
+def _file_digest(path: Path) -> str:
+    """SHA-256 of a file, read in chunks so large files never load whole."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_plain_name(value: object) -> bool:
+    """True for a single, non-empty path component with no separators or drive."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    if value in RESERVED_NAMES or "/" in value or "\\" in value:
+        return False
+    candidate = Path(value)
+    return (
+        candidate.name == value and not candidate.is_absolute() and not candidate.drive
+    )
 
 
 class FileOrganizer:
@@ -92,32 +139,34 @@ class FileOrganizer:
         Returns:
             Dictionary mapping hash to list of duplicate file paths
         """
-        import hashlib
-
         if not folder.exists() or not folder.is_dir():
             raise ResourceNotFoundError(f"Folder '{folder}' not found.")
-
-        hash_map: Dict[str, List[Path]] = {}
 
         if recursive:
             files = [f for f in folder.rglob("*") if f.is_file()]
         else:
             files = [f for f in folder.iterdir() if f.is_file()]
 
+        # Only files that share a size can be duplicates; skip hashing the rest.
+        by_size: Dict[int, List[Path]] = {}
         for file_path in files:
             try:
-                with open(file_path, "rb") as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
-
-                if file_hash in hash_map:
-                    hash_map[file_hash].append(file_path)
-                else:
-                    hash_map[file_hash] = [file_path]
+                by_size.setdefault(file_path.stat().st_size, []).append(file_path)
             except OSError:
                 continue
 
-        duplicates = {k: v for k, v in hash_map.items() if len(v) > 1}
-        return duplicates
+        hash_map: Dict[str, List[Path]] = {}
+        for same_size_files in by_size.values():
+            if len(same_size_files) < 2:
+                continue
+            for file_path in same_size_files:
+                try:
+                    file_hash = _file_digest(file_path)
+                except OSError:
+                    continue
+                hash_map.setdefault(file_hash, []).append(file_path)
+
+        return {digest: paths for digest, paths in hash_map.items() if len(paths) > 1}
 
     def delete_duplicates(
         self,
@@ -174,13 +223,33 @@ class FileOrganizer:
         errors = 0
         actions = []
 
+        base = path.resolve()
         for filename, category in categories.items():
+            # Names usually come from an AI response: treat them as untrusted.
+            if not (_is_plain_name(filename) and _is_plain_name(category)):
+                errors += 1
+                actions.append(f"[Rejected] {filename!r} -> {category!r}: unsafe name")
+                continue
+
             src = path / filename
             dest_dir = path / category
             dest = dest_dir / filename
+            # Compare resolved paths on both sides: catches symlinked category
+            # folders and stays correct on case-insensitive filesystems.
+            if dest.resolve().parent.parent != base:
+                errors += 1
+                actions.append(
+                    f"[Rejected] {filename!r} -> {category!r}: outside target"
+                )
+                continue
 
             if not src.exists():
                 errors += 1
+                continue
+
+            if dest.exists():
+                skipped += 1
+                actions.append(f"[Skipped] {filename}: {category}/{filename} exists")
                 continue
 
             if dry_run:
@@ -256,10 +325,15 @@ class FileOrganizer:
         file_size = path.stat().st_size
 
         try:
-            with open(path, "ba+") as f:
+            # "r+b" writes over existing bytes; append modes ignore seek() for writes.
+            with open(path, "r+b") as f:
                 for _ in range(passes):
                     f.seek(0)
-                    f.write(os.urandom(file_size))
+                    remaining = file_size
+                    while remaining > 0:
+                        chunk_size = min(SHRED_CHUNK_BYTES, remaining)
+                        f.write(os.urandom(chunk_size))
+                        remaining -= chunk_size
                     f.flush()
                     os.fsync(f.fileno())
 
@@ -290,14 +364,18 @@ class FileOrganizer:
 
         from datetime import datetime
 
+        import json
+        import shutil
+
         backup_dir = self.get_backup_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"{path.stem}_{label}_{timestamp}{path.suffix}"
         backup_path = backup_dir / backup_name
 
-        import shutil
-
         shutil.copy2(path, backup_path)
+        _backup_metadata_path(backup_path).write_text(
+            json.dumps({"original_path": str(path.resolve())}), encoding="utf-8"
+        )
 
         return backup_path
 
@@ -317,6 +395,8 @@ class FileOrganizer:
         for f in sorted(
             backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
         ):
+            if f.name.endswith(BACKUP_METADATA_SUFFIX):
+                continue
             if filename and filename not in f.stem:
                 continue
 
@@ -342,17 +422,35 @@ class FileOrganizer:
 
         Returns:
             Path to the restored file
+
+        Raises:
+            ValidationError: no target_dir and the original location is unknown
+                (backups made before locations were recorded), or a file
+                already exists there.
         """
         if not backup_path.exists():
             raise FileNotFoundError(f"Backup not found: {backup_path}")
 
         import shutil
 
+        original_path = _read_original_path(backup_path)
         if target_dir:
             target_dir.mkdir(parents=True, exist_ok=True)
-            restore_path = target_dir / backup_path.name
+            restore_name = original_path.name if original_path else backup_path.name
+            restore_path = target_dir / restore_name
+        elif original_path is None:
+            raise ValidationError(
+                f"No original location recorded for {backup_path.name}. "
+                "Choose a folder to restore into."
+            )
+        elif original_path.exists():
+            raise ValidationError(
+                f"{original_path} already exists. Restore into another folder "
+                "or move the current file first."
+            )
         else:
-            restore_path = backup_path.parent.parent / backup_path.name
+            original_path.parent.mkdir(parents=True, exist_ok=True)
+            restore_path = original_path
 
         shutil.copy2(backup_path, restore_path)
         return restore_path
@@ -374,8 +472,11 @@ class FileOrganizer:
         removed = 0
 
         for f in backup_dir.iterdir():
+            if f.name.endswith(BACKUP_METADATA_SUFFIX):
+                continue  # removed together with its backup below
             if f.stat().st_ctime < cutoff:
                 f.unlink()
+                _backup_metadata_path(f).unlink(missing_ok=True)
                 removed += 1
 
         return removed

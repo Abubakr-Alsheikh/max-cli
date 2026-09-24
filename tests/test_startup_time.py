@@ -71,7 +71,10 @@ def test_import_cost_below_ceiling(import_cost_seconds: float):
 
 
 @pytest.mark.xfail(
-    strict=True,
+    # Not strict: fast CI runners already meet the target while slower machines
+    # do not, so an unexpected pass must not fail the run. Phase 3 turns this
+    # into a plain assert once startup is under target everywhere.
+    strict=False,
     reason="events.py pydantic models + eager engine imports; hardening Phase 3",
 )
 def test_import_cost_meets_target(import_cost_seconds: float):

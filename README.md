@@ -662,9 +662,15 @@ mkdocs build
 
 ### Plugin System
 
-Max CLI supports plugins for extensibility. Plugins are stored in:
-- `~/.max_cli/plugins/` (user-level)
-- `./plugins/` (project-level)
+Max CLI supports plugins for extensibility. Plugins load from `~/.max_cli/plugins/`.
+
+To load plugins from another folder, list it under `"plugin_dirs"` in `~/.max_cli/plugins.json`:
+
+```json
+{"enabled": {}, "plugin_dirs": ["~/code/my-max-plugins"]}
+```
+
+Max CLI never loads plugins from the current directory. A cloned repository cannot run code just because you ran `max` inside it.
 
 #### Plugin Commands
 

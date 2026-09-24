@@ -43,6 +43,7 @@ src/max_cli/
 │   ├── cli_*.py               # Typer command definitions (No business logic)
 │   └── config/                # CLI config wizards
 ├── common/                    # SHARED / INFRASTRUCTURE
+│   ├── archives.py            # safe_extract_tar: use for every tar extraction
 │   ├── cache.py               # Centralized caching
 │   ├── concurrent.py          # Parallel processing workers
 │   ├── exceptions.py          # Custom MaxError classes

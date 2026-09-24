@@ -1,3 +1,6 @@
+import logging
+import subprocess
+
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -452,3 +455,97 @@ class TestMediaEngineDenoise:
         call_args = mock_popen.call_args[0][0]
         assert call_args[0] == str(Path("/usr/bin/ffmpeg"))
         assert call_args[0] != "ffmpeg"
+
+
+class TestGetDuration:
+    """Probe failures are reported instead of hidden as 0.0 (hardening 1.11)."""
+
+    @staticmethod
+    def _engine() -> MediaEngine:
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            return MediaEngine()
+
+    def test_returns_probe_duration(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=0, stdout="12.5\n")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") == 12.5
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            FileNotFoundError("ffprobe"),
+            subprocess.TimeoutExpired(cmd="ffprobe", timeout=15),
+        ],
+    )
+    def test_probe_failure_returns_none_and_logs(self, tmp_path, caplog, failure):
+        engine = self._engine()
+
+        with patch("subprocess.run", side_effect=failure):
+            with caplog.at_level(logging.WARNING):
+                duration = engine._get_duration(tmp_path / "in.mp4")
+
+        assert duration is None
+        assert "duration" in caplog.text.lower()
+
+    def test_unparseable_output_returns_none(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=0, stdout="N/A\n")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") is None
+
+    def test_probe_error_exit_returns_none(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=1, stdout="", stderr="bad file")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") is None
+
+
+class TestConcatDemuxerList:
+    """Regression tests for the concat list file (hardening 1.2)."""
+
+    @staticmethod
+    def _captured_list(engine: MediaEngine, inputs, output) -> str:
+        captured = {}
+
+        def fake_run(cmd):
+            list_file = Path(cmd[cmd.index("-i") + 1])
+            captured["text"] = list_file.read_text(encoding="utf-8")
+
+        with patch.object(engine, "_run", side_effect=fake_run):
+            engine._concatenate_demuxer(inputs, output)
+        return captured["text"]
+
+    @patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    def test_one_entry_per_line(self, _mock_which, tmp_path):
+        inputs = [tmp_path / "a.mp4", tmp_path / "b.mp4", tmp_path / "c.mp4"]
+        engine = MediaEngine()
+
+        text = self._captured_list(engine, inputs, tmp_path / "out.mp4")
+
+        lines = text.splitlines()
+        assert len(lines) == 3
+        assert all(line.startswith("file '") and line.endswith("'") for line in lines)
+        assert "\\n" not in text  # no escaped (literal backslash-n) separators
+
+    @patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    def test_single_quote_in_path_is_escaped(self, _mock_which, tmp_path):
+        tricky = tmp_path / "it's here.mp4"
+        engine = MediaEngine()
+
+        text = self._captured_list(engine, [tricky], tmp_path / "out.mp4")
+
+        escaped = str(tricky.absolute()).replace("'", "'\\''")
+        assert text.splitlines() == [f"file '{escaped}'"]
+
+    @patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    def test_list_file_removed_after_run(self, _mock_which, tmp_path):
+        engine = MediaEngine()
+        output = tmp_path / "out.mp4"
+
+        self._captured_list(engine, [tmp_path / "a.mp4"], output)
+
+        assert not (tmp_path / "out_concat_list.txt").exists()
