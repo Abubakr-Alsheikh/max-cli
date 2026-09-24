@@ -1,3 +1,4 @@
+import logging
 import shutil
 import subprocess
 import threading
@@ -7,6 +8,9 @@ from typing import Any, Dict, List, Optional
 from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
+logger = logging.getLogger(__name__)
+
+FFPROBE_TIMEOUT_SECONDS = 15
 RNNOISE_MODEL_DIR = Path.home() / ".max_cli" / "rnnoise"
 RNNOISE_MODEL_FILENAME = "std.rnnn"
 RNNOISE_MODEL_URL = (
@@ -814,14 +818,15 @@ class MediaEngine:
 
         self._run(cmd)
 
-    def _get_duration(self, input_path: Path) -> float:
-        ffprobe_path = Path(
-            str(self.ffmpeg_path).rsplit(".", 1)[0] + "_probe" + self.ffmpeg_path.suffix
-        )
+    def _get_duration(self, input_path: Path) -> Optional[float]:
+        """Media duration in seconds, or None when ffprobe cannot tell.
+
+        Duration only drives progress reporting, so a missing ffprobe must not
+        fail the operation; it is logged instead of silently returning 0.0.
+        """
+        ffprobe_path = self.ffmpeg_path.with_name("ffprobe" + self.ffmpeg_path.suffix)
         if not ffprobe_path.is_file():
-            ffprobe_path = self.ffmpeg_path.parent / (
-                "ffprobe" + self.ffmpeg_path.suffix
-            )
+            ffprobe_path = Path(shutil.which("ffprobe") or ffprobe_path)
         cmd = [
             str(ffprobe_path),
             "-v",
@@ -834,13 +839,23 @@ class MediaEngine:
         ]
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=15
+                cmd, capture_output=True, text=True, timeout=FFPROBE_TIMEOUT_SECONDS
             )
-            if result.returncode == 0 and result.stdout.strip():
-                return float(result.stdout.strip())
-        except Exception:
-            pass
-        return 0.0
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.warning("Could not read duration of %s: %s", input_path, exc)
+            return None
+        if result.returncode != 0:
+            logger.warning(
+                "ffprobe could not read duration of %s: %s",
+                input_path,
+                (result.stderr or "").strip(),
+            )
+            return None
+        try:
+            return float(result.stdout.strip())
+        except ValueError:
+            logger.warning("ffprobe returned no numeric duration for %s", input_path)
+            return None
 
     def _resolve_rnn_model(self) -> Path:
         model_path = RNNOISE_MODEL_DIR / RNNOISE_MODEL_FILENAME
@@ -922,7 +937,7 @@ class MediaEngine:
         else:
             raise ValueError(f"Unhandled mode: {mode}")
 
-        duration = self._get_duration(input_path)
+        duration = self._get_duration(input_path) or 0.0  # 0 = unknown, no percent
         emitter = get_emitter()
 
         cmd = [

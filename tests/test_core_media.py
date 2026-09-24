@@ -1,3 +1,6 @@
+import logging
+import subprocess
+
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -452,6 +455,53 @@ class TestMediaEngineDenoise:
         call_args = mock_popen.call_args[0][0]
         assert call_args[0] == str(Path("/usr/bin/ffmpeg"))
         assert call_args[0] != "ffmpeg"
+
+
+class TestGetDuration:
+    """Probe failures are reported instead of hidden as 0.0 (hardening 1.11)."""
+
+    @staticmethod
+    def _engine() -> MediaEngine:
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            return MediaEngine()
+
+    def test_returns_probe_duration(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=0, stdout="12.5\n")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") == 12.5
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            FileNotFoundError("ffprobe"),
+            subprocess.TimeoutExpired(cmd="ffprobe", timeout=15),
+        ],
+    )
+    def test_probe_failure_returns_none_and_logs(self, tmp_path, caplog, failure):
+        engine = self._engine()
+
+        with patch("subprocess.run", side_effect=failure):
+            with caplog.at_level(logging.WARNING):
+                duration = engine._get_duration(tmp_path / "in.mp4")
+
+        assert duration is None
+        assert "duration" in caplog.text.lower()
+
+    def test_unparseable_output_returns_none(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=0, stdout="N/A\n")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") is None
+
+    def test_probe_error_exit_returns_none(self, tmp_path):
+        engine = self._engine()
+        probe_result = MagicMock(returncode=1, stdout="", stderr="bad file")
+
+        with patch("subprocess.run", return_value=probe_result):
+            assert engine._get_duration(tmp_path / "in.mp4") is None
 
 
 class TestConcatDemuxerList:
