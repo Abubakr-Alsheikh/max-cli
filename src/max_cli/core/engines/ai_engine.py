@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from max_cli.config import settings
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
 from max_cli.common.cache import get_default_cache
@@ -59,8 +60,7 @@ class AIEngine:
 
     def _save_history(self) -> None:
         """Save conversation history to disk."""
-        data = {"history": self.history}
-        self._history_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_json(self._history_file, {"history": self.history})
 
     def clear_history(self) -> None:
         """Clear conversation history from memory and disk."""
@@ -70,8 +70,10 @@ class AIEngine:
 
     def export_history(self, output_path: Path) -> None:
         """Export conversation history to a JSON file."""
-        data = {"history": self.history, "exported_at": str(Path.cwd())}
-        output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        from datetime import datetime
+
+        data = {"history": self.history, "exported_at": datetime.now().isoformat()}
+        atomic_write_json(output_path, data)
 
     def import_history(self, input_path: Path) -> None:
         """Import conversation history from a JSON file."""

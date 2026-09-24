@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, List, Dict, Any, Optional
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 SHRED_CHUNK_BYTES = 1024 * 1024
@@ -364,7 +365,6 @@ class FileOrganizer:
 
         from datetime import datetime
 
-        import json
         import shutil
 
         backup_dir = self.get_backup_dir()
@@ -373,8 +373,10 @@ class FileOrganizer:
         backup_path = backup_dir / backup_name
 
         shutil.copy2(path, backup_path)
-        _backup_metadata_path(backup_path).write_text(
-            json.dumps({"original_path": str(path.resolve())}), encoding="utf-8"
+        atomic_write_json(
+            _backup_metadata_path(backup_path),
+            {"original_path": str(path.resolve())},
+            indent=None,
         )
 
         return backup_path

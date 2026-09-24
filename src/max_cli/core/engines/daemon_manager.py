@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
 from max_cli.common.logger import console
 from max_cli.core.engines.task_queue import (
@@ -60,10 +61,7 @@ class DaemonManager:
         self._ensure_dirs()
         try:
             data = [item.to_dict() for item in self._queue]
-            self.QUEUE_FILE.write_text(
-                json.dumps(data, indent=2, default=str),
-                encoding="utf-8",
-            )
+            atomic_write_json(self.QUEUE_FILE, data, default=str)
         except Exception as e:
             console.print(f"[red]Failed to save queue: {e}[/red]")
 
@@ -80,10 +78,7 @@ class DaemonManager:
         self._ensure_dirs()
         try:
             data = [item.to_dict() for item in self._history]
-            self.HISTORY_FILE.write_text(
-                json.dumps(data, indent=2, default=str),
-                encoding="utf-8",
-            )
+            atomic_write_json(self.HISTORY_FILE, data, default=str)
         except Exception as e:
             console.print(f"[red]Failed to save history: {e}[/red]")
 

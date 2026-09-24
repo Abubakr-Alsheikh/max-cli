@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
 import typer
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.plugins.base import (
     Plugin,
     PluginContext,
@@ -78,7 +79,7 @@ class PluginManager:
     def _save_config(self) -> None:
         config_file = self._config_dir / "plugins.json"
         config = {**self._config_data, "enabled": self._enabled_plugins}
-        config_file.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        atomic_write_json(config_file, config)
 
     @property
     def app(self) -> Any:

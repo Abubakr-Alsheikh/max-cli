@@ -192,6 +192,13 @@ class RuleVisitor(ast.NodeVisitor):
 
         if self.scope.is_src:
             self._check_text_encoding(node, func, kwargs)
+            if func.endswith(".write_text"):
+                self.add(
+                    "atomic-write",
+                    node,
+                    "Direct write_text can leave a truncated file on crash. Use "
+                    "atomic_write_text/atomic_write_json from max_cli.common.atomic.",
+                )
             if (
                 func.endswith("extractall")
                 and self.imports_tarfile

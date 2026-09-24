@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from max_cli.common.atomic import atomic_write_json
+
 
 class Cache:
     """Simple file-based cache with TTL support."""
@@ -52,7 +54,7 @@ class Cache:
         cache_file = self.cache_dir / f"{self._hash(key)}.json"
         expires = time.time() + (ttl if ttl is not None else self.ttl)
         data = {"value": value, "expires": expires}
-        cache_file.write_text(json.dumps(data))
+        atomic_write_json(cache_file, data, indent=None)
 
     def delete(self, key: str) -> bool:
         """Delete a cached item.

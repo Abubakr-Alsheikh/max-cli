@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.logger import console
 from max_cli.common.retry import retry
 from max_cli.common.exceptions import MaxError
@@ -145,7 +146,7 @@ class QueueManager:
         if not self.HISTORY_FILE.exists():
             return
         try:
-            data = json.loads(self.HISTORY_FILE.read_text())
+            data = json.loads(self.HISTORY_FILE.read_text(encoding="utf-8"))
             self._history = [QueueItem.from_dict(item) for item in data]
         except Exception:
             self._history = []
@@ -162,7 +163,7 @@ class QueueManager:
         self._ensure_queue_dir()
         try:
             data = [item.to_dict() for item in self._history]
-            self.HISTORY_FILE.write_text(json.dumps(data, indent=2))
+            atomic_write_json(self.HISTORY_FILE, data)
         except Exception as e:
             console.print(f"[red]Failed to save history: {e}[/red]")
 
@@ -193,7 +194,7 @@ class QueueManager:
         if not self.QUEUE_FILE.exists():
             return
         try:
-            data = json.loads(self.QUEUE_FILE.read_text())
+            data = json.loads(self.QUEUE_FILE.read_text(encoding="utf-8"))
             self._queue = [QueueItem.from_dict(item) for item in data]
         except Exception:
             self._queue = []
@@ -203,7 +204,7 @@ class QueueManager:
         self._ensure_queue_dir()
         try:
             data = [item.to_dict() for item in self._queue]
-            self.QUEUE_FILE.write_text(json.dumps(data, indent=2))
+            atomic_write_json(self.QUEUE_FILE, data)
         except Exception as e:
             console.print(f"[red]Failed to save queue: {e}[/red]")
 
