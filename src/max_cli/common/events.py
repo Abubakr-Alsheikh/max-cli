@@ -3,8 +3,11 @@ from typing import Any, Optional, Callable, Union
 from collections.abc import Generator
 from datetime import datetime
 from pydantic import BaseModel, Field
+import logging
 import threading
 import queue
+
+logger = logging.getLogger(__name__)
 
 
 class EventType(str, Enum):
@@ -120,11 +123,14 @@ MaxEvent = Union[
 ]
 
 
+EVENT_QUEUE_LIMIT = 1000  # oldest events drop once nobody drains the queue
+
+
 class EventEmitter:
     def __init__(self):
         self._subscribers: list[Callable[[MaxEvent], None]] = []
         self._lock = threading.Lock()
-        self._queue: queue.Queue[MaxEvent] = queue.Queue()
+        self._queue: queue.Queue[MaxEvent] = queue.Queue(maxsize=EVENT_QUEUE_LIMIT)
 
     def subscribe(self, callback: Callable[[MaxEvent], None]) -> None:
         with self._lock:
@@ -136,13 +142,27 @@ class EventEmitter:
                 self._subscribers.remove(callback)
 
     def emit(self, event: MaxEvent) -> None:
+        # Call subscribers outside the lock so a callback can emit or (un)subscribe.
         with self._lock:
-            for cb in self._subscribers:
+            subscribers = list(self._subscribers)
+        for callback in subscribers:
+            try:
+                callback(event)
+            except Exception:  # noqa: BLE001 - one bad subscriber must not stop others
+                logger.exception("Event subscriber %r failed", callback)
+        self._enqueue(event)
+
+    def _enqueue(self, event: MaxEvent) -> None:
+        """Keep the newest EVENT_QUEUE_LIMIT events when nobody drains the queue."""
+        while True:
+            try:
+                self._queue.put_nowait(event)
+                return
+            except queue.Full:
                 try:
-                    cb(event)
-                except Exception:
-                    pass
-        self._queue.put(event)
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    continue
 
     def get_queue(self) -> queue.Queue[MaxEvent]:
         return self._queue
