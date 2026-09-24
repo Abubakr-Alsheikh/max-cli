@@ -1,4 +1,6 @@
 from unittest.mock import patch, MagicMock
+
+import pytest
 from typer.testing import CliRunner
 from max_cli.interface.cli_network import app as network_app
 
@@ -15,6 +17,38 @@ class TestCLINetwork:
         result = runner.invoke(network_app, ["do", "--help"])
         assert result.exit_code == 0
         assert "--player-client" in result.stdout
+
+    @pytest.mark.parametrize("given", ["tv", "TV", "Android"])
+    @patch("max_cli.interface.cli_network._add_to_queue_or_download")
+    def test_player_client_reaches_downloader_as_lowercase_str(
+        self, mock_download, given
+    ):
+        result = runner.invoke(
+            network_app,
+            ["do", "https://example.com/video", "--player-client", given],
+        )
+
+        assert result.exit_code == 0, result.output
+        passed = mock_download.call_args.args[-1]
+        assert passed == given.lower()
+        assert type(passed) is str
+
+    @patch("max_cli.interface.cli_network._add_to_queue_or_download")
+    def test_player_client_defaults_to_none(self, mock_download):
+        result = runner.invoke(network_app, ["do", "https://example.com/video"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_download.call_args.args[-1] is None
+
+    @patch("max_cli.interface.cli_network._add_to_queue_or_download")
+    def test_invalid_player_client_is_rejected(self, mock_download):
+        result = runner.invoke(
+            network_app,
+            ["do", "https://example.com/video", "--player-client", "bogus"],
+        )
+
+        assert result.exit_code == 2
+        mock_download.assert_not_called()
 
     def test_pot_setup_help(self):
         """Test pot-setup command help."""

@@ -1,10 +1,10 @@
 import time
 import urllib.parse
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-import click
 import shutil
 import typer
 from rich.prompt import Confirm, Prompt
@@ -18,6 +18,19 @@ from max_cli.core.engines.network_engine import POT_PROVIDER_PACKAGE
 from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer(help="Download media from various platforms.")
+
+
+class PlayerClient(str, Enum):
+    """YouTube player clients accepted by --player-client."""
+
+    AUTO = "auto"
+    DEFAULT = "default"
+    WEB = "web"
+    TV = "tv"
+    IOS = "ios"
+    ANDROID = "android"
+    MWEB = "mweb"
+    TV_EMBEDDED = "tv_embedded"
 
 
 def _get_engine():
@@ -105,14 +118,11 @@ def download_media(
         "--progress/--no-progress",
         help="Show download progress bar.",
     ),
-    player_client: Optional[str] = typer.Option(
+    player_client: Optional[PlayerClient] = typer.Option(
         None,
         "--player-client",
-        help="YouTube player client override (fixes HTTP 403/SABR errors): auto, default, web, tv, ios, android, mweb, tv_embedded.",
-        click_type=click.Choice(
-            ["auto", "default", "web", "tv", "ios", "android", "mweb", "tv_embedded"],
-            case_sensitive=False,
-        ),
+        help="YouTube player client override (fixes HTTP 403/SABR errors).",
+        case_sensitive=False,
     ),
 ):
     """
@@ -126,6 +136,7 @@ def download_media(
     """
     final_quality = quality if quality else settings.GRAB_QUALITY
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA
+    player_client_name = player_client.value if player_client else None
 
     is_audio = audio
     if video:
@@ -195,7 +206,7 @@ def download_media(
                     no_playlist=no_playlist,
                     subtitles=subtitles,
                     custom_height=resolution,
-                    player_client=player_client,
+                    player_client=player_client_name,
                 )
                 console.print("[green]+ Added[/green]")
         except KeyboardInterrupt:
@@ -242,7 +253,7 @@ def download_media(
             subtitles,
             resolution,
             progress,
-            player_client,
+            player_client_name,
         )
         if queue:
             import threading
