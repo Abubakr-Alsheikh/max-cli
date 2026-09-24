@@ -170,4 +170,8 @@ Baseline on 2026-09-24:
   - Adding the stub packages exposed 20 hidden errors, and removing stale ignores cleared them again.
   - Measured on the committed tree without local WIP, mypy has 50 errors.
   - The uncommitted `common/download_history.py` adds 4 more (Python 3.9 `X | Y` syntax, Phase 1.5). The gate fails until they are fixed.
+- 2026-09-25: CI on PR #2 failed for two reasons, and fail-fast cancelled the other jobs:
+  - `mypy>=1.18.0` pulled mypy 2.3.1, which no longer supports `python_version = 3.9`. Capped at `<1.19`.
+  - The strict xfail on the 200 ms startup target passed unexpectedly on macOS runners. Timing depends on the machine, so that xfail is now non-strict. The deterministic `segno`/`pyperclip` checks stay strict.
+  - CI now runs the test matrix with `fail-fast: false`.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
