@@ -94,6 +94,11 @@ Baseline on 2026-09-24:
 - [ ] Pass `encoding="utf-8"` to the 26 text-mode opens the audit lists: `queue_manager.py:148,165,196,206`, `cache.py:36,55,94`, `ffmpeg_resolver.py:220,227`, `plugins/manager.py:63,73`, and others.
 - [ ] Replace the magic history caps (200, 100, 200) with named constants. Phase 3 makes them a single constant.
 - [ ] Replace `os.listdir` and `os.getcwd` in `ai_engine.py:115-118` with pathlib.
+- [ ] Widen `[tool.ruff.lint] select` one family per PR, fixing each family's findings as you go:
+  - `I` (import sorting, auto-fixable)
+  - `BLE` (blind excepts)
+  - `B`, `UP` (with `FA` for Python 3.9) and `DTZ`
+  - The expanded ruff 0.16 defaults flag 784 findings. Those rules stay off for now.
 
 **Done when:** `check_rules.py --audit` reports 0 `utf8` violations and a crash mid-write can't corrupt any JSON state file (tested by patching `replace` to raise).
 
@@ -156,3 +161,4 @@ Baseline on 2026-09-24:
   - Adding the stub packages exposed 20 hidden errors, and removing stale ignores cleared them again.
   - Measured on the committed tree without local WIP, mypy has 50 errors.
   - The uncommitted `common/download_history.py` adds 4 more (Python 3.9 `X | Y` syntax, Phase 1.5). The gate fails until they are fixed.
+- 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
