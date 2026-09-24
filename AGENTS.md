@@ -44,6 +44,7 @@ src/max_cli/
 │   └── config/                # CLI config wizards
 ├── common/                    # SHARED / INFRASTRUCTURE
 │   ├── archives.py            # safe_extract_tar: use for every tar extraction
+│   ├── atomic.py              # atomic_write_text/json: use for every state file
 │   ├── cache.py               # Centralized caching
 │   ├── concurrent.py          # Parallel processing workers
 │   ├── exceptions.py          # Custom MaxError classes
