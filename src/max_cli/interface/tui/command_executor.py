@@ -476,7 +476,7 @@ class CommandExecutor:
         category: str,
         command: str,
         values: dict[str, Any],
-        progress_callback: Callable[[float, str], None] | None = None,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
     ) -> ExecutionResult:
         schema = CommandRegistry.get_command(category, command)
         if not schema:
