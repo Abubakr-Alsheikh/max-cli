@@ -20,6 +20,8 @@ BASELINE_FILE = REPO_ROOT / "mypy-baseline.txt"
 MYPY_TARGET = "src"
 SUMMARY_PATTERN = re.compile(r"Found (\d+) errors? in")
 SUCCESS_MARKER = "Success: no issues found"
+BLOCKING_MARKER = "errors prevented further checking"
+MYPY_CRASH_EXIT_CODE = 2
 
 
 def run_mypy() -> tuple[int, str]:
@@ -32,6 +34,10 @@ def run_mypy() -> tuple[int, str]:
         errors="replace",
     )
     output = result.stdout + result.stderr
+    # A blocking error stops mypy early with a tiny count; never read that as progress.
+    if BLOCKING_MARKER in output or result.returncode == MYPY_CRASH_EXIT_CODE:
+        print(output)
+        raise SystemExit("mypy stopped early (blocking error above); count is invalid.")
     if SUCCESS_MARKER in output:
         return 0, output
     match = SUMMARY_PATTERN.search(output)
@@ -54,6 +60,7 @@ def main() -> int:
         print(f"mypy: {error_count} errors, baseline {baseline}. Fix the new errors.")
         return 1
     if error_count < baseline:
+        print(output)
         print(
             f"mypy: {error_count} errors, baseline {baseline}. Lock in the "
             "improvement: python scripts/mypy_baseline.py --update"
