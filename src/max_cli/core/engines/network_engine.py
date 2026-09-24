@@ -42,7 +42,7 @@ class NetworkEngine:
         import yt_dlp  # type: ignore[import-untyped]
 
         yt_dlp.YoutubeDL({"quiet": True})
-        from yt_dlp.extractor.youtube.pot._registry import _pot_providers  # type: ignore[import-untyped,attr-defined]
+        from yt_dlp.extractor.youtube.pot._registry import _pot_providers
 
         return bool(_pot_providers.value)
 
@@ -138,7 +138,7 @@ class NetworkEngine:
         with tempfile.TemporaryDirectory() as tmp:
             tarball = Path(tmp) / "canvas.tar.gz"
             try:
-                urllib.request.urlretrieve(CANVAS_MIRROR_URL, tarball)  # type: ignore[attr-defined]
+                urllib.request.urlretrieve(CANVAS_MIRROR_URL, tarball)
                 with tarfile.open(tarball, "r:gz") as archive:
                     archive.extractall(canvas_pkg)  # noqa: S202 - trusted mirror binary
                 return (canvas_pkg / "build" / "Release" / "canvas.node").exists()
@@ -147,7 +147,7 @@ class NetworkEngine:
 
     def get_info(self, url: str) -> Dict[str, Any]:
         """Peeks at the URL to see if it's a playlist and count items."""
-        import yt_dlp  # type: ignore[import-untyped]
+        import yt_dlp
 
         ydl_opts = {"quiet": True, "noplaylist": False, "extract_flat": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -184,7 +184,7 @@ class NetworkEngine:
         custom_height: Optional[int] = None,
         player_client: Optional[str] = None,
     ) -> Dict[str, Any]:
-        import yt_dlp  # type: ignore[import-untyped]
+        import yt_dlp
 
         from max_cli.common.events import (
             DownloadCompleteEvent,

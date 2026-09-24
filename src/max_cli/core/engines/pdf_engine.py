@@ -12,7 +12,7 @@ class PDFEngine:
         Combines multiple PDF files into one.
         Returns the total number of pages in the merged document.
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         result_pdf = fitz.open()
         total_pages = 0
@@ -40,7 +40,7 @@ class PDFEngine:
         Compresses a PDF by rasterizing pages to JPEG and rebuilding the PDF.
         Returns the number of pages processed.
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
         from PIL import Image
         import io
 
@@ -93,7 +93,7 @@ class PDFEngine:
         Extracts specific pages from a PDF.
         page_ranges example: "1-5,8,11-15" (1-based indexing for user, converted to 0-based).
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         doc = fitz.open(input_path)
         new_doc = fitz.open()
@@ -125,7 +125,7 @@ class PDFEngine:
 
     def get_page_count(self, input_path: Path) -> int:
         """Returns the total number of pages in a PDF."""
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         with fitz.open(input_path) as doc:
             return doc.page_count
@@ -151,7 +151,7 @@ class PDFEngine:
         Returns:
             Number of pages in output
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         with fitz.open(input_path) as doc:
             total_pages = doc.page_count
@@ -200,7 +200,7 @@ class PDFEngine:
         Returns:
             List of output file paths
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         with fitz.open(input_path) as doc:
             total_pages = doc.page_count
@@ -239,7 +239,7 @@ class PDFEngine:
         """
         Overlays text on the center of every page.
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         doc = fitz.open(input_path)
 
@@ -264,7 +264,7 @@ class PDFEngine:
         """
         Encrypts the PDF with a user password.
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         doc = fitz.open(input_path)
         perm = int(
@@ -285,7 +285,7 @@ class PDFEngine:
         Rips images out of the PDF and saves them to a folder.
         Returns count of extracted items.
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         doc = fitz.open(input_path)
         count = 0
@@ -320,7 +320,7 @@ class PDFEngine:
         Returns:
             Extracted text
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
         from PIL import Image
         import io
 
@@ -363,7 +363,7 @@ class PDFEngine:
         Returns:
             Dictionary mapping field names to their values
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
@@ -391,7 +391,7 @@ class PDFEngine:
             output_path: Output PDF file
             field_values: Dictionary mapping field names to values
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
@@ -412,7 +412,7 @@ class PDFEngine:
         """
         Flatten PDF form (convert fields to regular content).
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
@@ -450,7 +450,7 @@ class PDFEngine:
             compress_images: Compress images
             linearize: Create web-optimized (linearized) PDF
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
@@ -480,7 +480,7 @@ class PDFEngine:
         Returns:
             Dictionary with comparison results
         """
-        import fitz  # type: ignore[import-untyped]
+        import fitz
 
         if not path1.exists():
             raise FileNotFoundError(f"File not found: {path1}")

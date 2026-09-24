@@ -35,8 +35,27 @@ jobs:
       run: |
         pytest --cov=max_cli --cov-report=term-missing
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev,tui]
+
+    - name: Mypy (error count may only go down)
+      run: |
+        python scripts/mypy_baseline.py
+
   build:
-    needs: test
+    needs: [test, typecheck]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

@@ -44,7 +44,7 @@ def retry(
                     time.sleep(current_delay)
                     current_delay *= backoff
 
-            raise last_exception  # type: ignore[arg-type]
+            raise last_exception
 
         return wrapper
 
