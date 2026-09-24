@@ -7,7 +7,19 @@ if TYPE_CHECKING:
 from max_cli.common.exceptions import ResourceNotFoundError
 
 SHRED_CHUNK_BYTES = 1024 * 1024
+HASH_CHUNK_BYTES = 1024 * 1024
 RESERVED_NAMES = {".", ".."}
+
+
+def _file_digest(path: Path) -> str:
+    """SHA-256 of a file, read in chunks so large files never load whole."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _is_plain_name(value: object) -> bool:
@@ -107,32 +119,34 @@ class FileOrganizer:
         Returns:
             Dictionary mapping hash to list of duplicate file paths
         """
-        import hashlib
-
         if not folder.exists() or not folder.is_dir():
             raise ResourceNotFoundError(f"Folder '{folder}' not found.")
-
-        hash_map: Dict[str, List[Path]] = {}
 
         if recursive:
             files = [f for f in folder.rglob("*") if f.is_file()]
         else:
             files = [f for f in folder.iterdir() if f.is_file()]
 
+        # Only files that share a size can be duplicates; skip hashing the rest.
+        by_size: Dict[int, List[Path]] = {}
         for file_path in files:
             try:
-                with open(file_path, "rb") as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
-
-                if file_hash in hash_map:
-                    hash_map[file_hash].append(file_path)
-                else:
-                    hash_map[file_hash] = [file_path]
+                by_size.setdefault(file_path.stat().st_size, []).append(file_path)
             except OSError:
                 continue
 
-        duplicates = {k: v for k, v in hash_map.items() if len(v) > 1}
-        return duplicates
+        hash_map: Dict[str, List[Path]] = {}
+        for same_size_files in by_size.values():
+            if len(same_size_files) < 2:
+                continue
+            for file_path in same_size_files:
+                try:
+                    file_hash = _file_digest(file_path)
+                except OSError:
+                    continue
+                hash_map.setdefault(file_hash, []).append(file_path)
+
+        return {digest: paths for digest, paths in hash_map.items() if len(paths) > 1}
 
     def delete_duplicates(
         self,

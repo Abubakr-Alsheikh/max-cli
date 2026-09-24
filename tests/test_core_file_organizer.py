@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+from max_cli.core.engines import file_organizer as file_organizer_module
 from max_cli.core.engines.file_organizer import FileOrganizer
 from max_cli.common.exceptions import ResourceNotFoundError
 
@@ -108,6 +109,61 @@ class TestFileOrganizer:
 
         assert result["renamed"] == 1
         assert len(result["actions"]) == 1
+
+
+class TestFindDuplicates:
+    """Chunked hashing, size pre-grouping (hardening 1.10)."""
+
+    def test_groups_identical_files(self, tmp_path):
+        (tmp_path / "a.txt").write_bytes(b"same content")
+        (tmp_path / "b.txt").write_bytes(b"same content")
+        (tmp_path / "c.txt").write_bytes(b"different!!!")  # same size, other bytes
+
+        groups = FileOrganizer().find_duplicates(tmp_path)
+
+        assert [sorted(p.name for p in paths) for paths in groups.values()] == [
+            ["a.txt", "b.txt"]
+        ]
+
+    def test_files_with_unique_sizes_are_never_hashed(self, tmp_path, monkeypatch):
+        (tmp_path / "a.txt").write_bytes(b"dup")
+        (tmp_path / "b.txt").write_bytes(b"dup")
+        (tmp_path / "unique.bin").write_bytes(b"x" * 100)
+        hashed = []
+        original_digest = file_organizer_module._file_digest
+
+        def spy(path):
+            hashed.append(path.name)
+            return original_digest(path)
+
+        monkeypatch.setattr(file_organizer_module, "_file_digest", spy)
+
+        FileOrganizer().find_duplicates(tmp_path)
+
+        assert sorted(hashed) == ["a.txt", "b.txt"]
+
+    def test_digest_reads_in_chunks(self, tmp_path, monkeypatch):
+        import hashlib
+
+        payload = bytes(range(256)) * 40
+        target = tmp_path / "big.bin"
+        target.write_bytes(payload)
+        monkeypatch.setattr(file_organizer_module, "HASH_CHUNK_BYTES", 7)
+
+        digest = file_organizer_module._file_digest(target)
+
+        assert digest == hashlib.sha256(payload).hexdigest()
+
+    def test_unreadable_file_is_skipped(self, tmp_path, monkeypatch):
+        (tmp_path / "a.txt").write_bytes(b"dup")
+        (tmp_path / "b.txt").write_bytes(b"dup")
+
+        def failing_digest(path):
+            raise PermissionError("locked")
+
+        monkeypatch.setattr(file_organizer_module, "_file_digest", failing_digest)
+
+        assert FileOrganizer().find_duplicates(tmp_path) == {}
 
 
 class TestSmartSortValidation:
