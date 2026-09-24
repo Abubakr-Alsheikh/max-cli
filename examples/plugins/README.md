@@ -4,9 +4,8 @@ This directory contains example plugins for Max CLI.
 
 ## Installation
 
-1. Copy the plugin file to your plugins directory:
-   - `~/.max_cli/plugins/` (user-level)
-   - `./plugins/` (project-level)
+1. Copy the plugin file to `~/.max_cli/plugins/`, or to a folder listed under
+   `"plugin_dirs"` in `~/.max_cli/plugins.json`.
 
 2. Or install as a Python package in development mode.
 

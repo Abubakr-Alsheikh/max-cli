@@ -39,17 +39,22 @@ class PluginManager:
         config_dir: Optional[Path] = None,
     ):
         self._plugins: Dict[str, LoadedPlugin] = {}
-        self._plugin_dirs = plugin_dirs or self._get_default_plugin_dirs()
         self._config_dir = config_dir or self._get_default_config_dir()
         self._app: Optional[Any] = None
         self._load_config()
+        self._plugin_dirs = plugin_dirs or self._get_default_plugin_dirs()
 
     def _get_default_plugin_dirs(self) -> List[Path]:
-        dirs = [
-            Path.home() / ".max_cli" / "plugins",
-            Path.cwd() / "plugins",
-        ]
-        return [d for d in dirs if d.exists()]
+        """User plugin folder plus folders listed under "plugin_dirs" in plugins.json.
+
+        The current working directory is never searched: running `max` inside an
+        untrusted checkout must not execute code from its ./plugins folder.
+        """
+        dirs = [Path.home() / ".max_cli" / "plugins"]
+        extra_dirs = self._config_data.get("plugin_dirs", [])
+        if isinstance(extra_dirs, list):
+            dirs.extend(Path(d).expanduser() for d in extra_dirs if isinstance(d, str))
+        return [d for d in dirs if d.is_dir()]
 
     def _get_default_config_dir(self) -> Path:
         config_dir = Path.home() / ".max_cli"
@@ -58,20 +63,22 @@ class PluginManager:
 
     def _load_config(self) -> None:
         config_file = self._config_dir / "plugins.json"
+        self._config_data: Dict[str, Any] = {}
         if config_file.exists():
             try:
-                with open(config_file) as f:
-                    self._enabled_plugins = json.load(f).get("enabled", {})
-            except Exception:
-                self._enabled_plugins = {}
-        else:
-            self._enabled_plugins = {}
+                loaded = json.loads(config_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Ignoring unreadable %s: %s", config_file, exc)
+                loaded = {}
+            if isinstance(loaded, dict):
+                self._config_data = loaded
+        enabled = self._config_data.get("enabled", {})
+        self._enabled_plugins = enabled if isinstance(enabled, dict) else {}
 
     def _save_config(self) -> None:
         config_file = self._config_dir / "plugins.json"
-        config = {"enabled": self._enabled_plugins}
-        with open(config_file, "w") as f:
-            json.dump(config, f, indent=2)
+        config = {**self._config_data, "enabled": self._enabled_plugins}
+        config_file.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     @property
     def app(self) -> Any:

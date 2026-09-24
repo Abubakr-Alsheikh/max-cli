@@ -25,7 +25,9 @@ max-cli supports two types of plugins:
 
 Plugins are automatically discovered from:
 - `~/.max_cli/plugins/` (user plugins)
-- `./plugins/` (project plugins)
+- Folders listed under `"plugin_dirs"` in `~/.max_cli/plugins.json`
+
+The current directory is never searched (security: see hardening plan, D2).
 
 ---
 
@@ -265,12 +267,11 @@ Then copy your plugin files there.
 
 ### Method 3: Development Mode
 
-For development, use the project-level `plugins/` directory:
+For development, point Max CLI at your working folder instead of copying files:
 
-```
-max-cli/
-├── plugins/           # Auto-discovered
-└── src/max_cli/
+```json
+// ~/.max_cli/plugins.json
+{"enabled": {}, "plugin_dirs": ["~/code/my-max-plugins"]}
 ```
 
 ---
