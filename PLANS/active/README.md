@@ -4,6 +4,11 @@ Place new plan files here.
 
 ## Current Active Plans
 
+### Phase 0: Hardening (Do First)
+| Plan | Status | Priority |
+|------|--------|----------|
+| [codebase-hardening.md](./codebase-hardening.md) | Draft | P0 |
+
 ### Phase 3: Dashboard UX (In Progress)
 | Plan | Status |
 |------|--------|
