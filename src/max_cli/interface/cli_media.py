@@ -331,7 +331,7 @@ def concat_videos(
             log_error(f"No files found matching pattern: {pattern}")
             raise typer.Exit(1)
     elif target.is_file() and target.suffix == ".txt":
-        with open(target) as f:
+        with open(target, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("file "):

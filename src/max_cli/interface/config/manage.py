@@ -73,7 +73,7 @@ def save_local_to_global(
         raise typer.Exit(1)
 
     console.print(f"Found local config at: [bold]{local_env.resolve()}[/bold]")
-    content = local_env.read_text()
+    content = local_env.read_text(encoding="utf-8")
 
     if GLOBAL_CONFIG_PATH.exists() and not force:
         console.print(
@@ -229,7 +229,7 @@ def import_config(
         raise typer.Exit(1)
 
     try:
-        data = json.loads(input.read_text())
+        data = json.loads(input.read_text(encoding="utf-8"))
     except Exception as e:
         log_error(f"Invalid JSON: {e}")
         raise typer.Exit(1)

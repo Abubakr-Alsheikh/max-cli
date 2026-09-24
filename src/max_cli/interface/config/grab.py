@@ -63,7 +63,7 @@ def configure_grab():
     try:
         lines = []
         if GLOBAL_CONFIG_PATH.exists():
-            lines = GLOBAL_CONFIG_PATH.read_text().splitlines()
+            lines = GLOBAL_CONFIG_PATH.read_text(encoding="utf-8").splitlines()
 
         keys = [
             "GRAB_QUALITY",

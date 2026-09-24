@@ -228,7 +228,7 @@ class FFmpegResolver:
         if not RESOLUTION_CACHE_FILE.exists():
             return None
 
-        cached_path = Path(RESOLUTION_CACHE_FILE.read_text().strip())
+        cached_path = Path(RESOLUTION_CACHE_FILE.read_text(encoding="utf-8").strip())
         if cached_path.exists():
             resolver = FFmpegResolver()
             if resolver._validate_binary(cached_path):

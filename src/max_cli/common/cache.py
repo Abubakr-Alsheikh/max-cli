@@ -35,7 +35,7 @@ class Cache:
             return None
 
         try:
-            data = json.loads(cache_file.read_text())
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
             if data.get("expires", 0) < time.time():
                 cache_file.unlink()
                 return None
@@ -93,7 +93,7 @@ class Cache:
         now = time.time()
         for f in self.cache_dir.glob("*.json"):
             try:
-                data = json.loads(f.read_text())
+                data = json.loads(f.read_text(encoding="utf-8"))
                 if data.get("expires", 0) < now:
                     f.unlink()
                     count += 1
