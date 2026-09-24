@@ -69,9 +69,9 @@ class ImageEngine:
                     w, h = width, height
                 elif width is not None:
                     w = width
-                    h = int(original_dims[1] * (width / original_dims[0]))  # type: ignore[operator]
+                    h = int(original_dims[1] * (width / original_dims[0]))
                 else:
-                    w = int(original_dims[0] * (height / original_dims[1]))  # type: ignore[assignment]
+                    w = int(original_dims[0] * (height / original_dims[1]))
                     h = height  # type: ignore[assignment]
                 new_size = (w, h)
             elif max_dim:

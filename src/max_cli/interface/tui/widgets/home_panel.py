@@ -155,7 +155,7 @@ class HomePanel(Vertical):
         a_stats = activity.get_stats()
 
         total_commands = a_stats.get("success", 0) + a_stats.get("failed", 0)
-        downloads = a_stats.get("download", 0)  # type: ignore[arg-type]
+        downloads = a_stats.get("download", 0)
         queue_depth = q_stats.get("pending", 0) + q_stats.get("running", 0)
 
         self.query_one("#stat-commands", Static).update(str(total_commands))

@@ -41,6 +41,7 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 | **Download videos/music** | `max grab download` | `max grab download youtube.com/...` |
 | **Check download queue** | `max grab queue` | `max grab queue` |
 | **Download history** | `max grab history` | `max grab history` |
+| **Fix YouTube 403 errors** | `max grab pot-setup` | `max grab pot-setup` |
 | **Merge PDFs** | `max pdf bundle` | `max pdf bundle contracts/` |
 | **Compress images** | `max img compress` | `max img compress photos/` |
 | **Resize images** | `max img resize` | `max img resize logo.png --width 800` |
@@ -267,6 +268,12 @@ max grab download "..." -o ./my-videos
 
 # Add to queue without processing (batch mode)
 max grab download "..." --no-process
+
+# Fix YouTube HTTP 403 errors: install the PO token provider once
+max grab pot-setup
+
+# Or switch player client manually
+max grab download "..." --player-client web
 ```
 
 #### Interactive Mode

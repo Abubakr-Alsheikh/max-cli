@@ -96,3 +96,6 @@ GEMINI.md
 tasks/
 .geminiignore
 .qwenignore
+# Claude Code local state (hooks) and personal overrides
+.claude/.state/
+.claude/settings.local.json

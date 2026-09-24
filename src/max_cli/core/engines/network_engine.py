@@ -1,6 +1,10 @@
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable, Union
 import shutil
+import subprocess
+import tarfile
+import tempfile
+import urllib.request
 
 
 QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
@@ -10,6 +14,17 @@ QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
     "h": {"height": 1080, "bitrate": 192, "label": "1080p"},
     "x": {"height": 2160, "bitrate": 320, "label": "4K"},
 }
+
+POT_PROVIDER_PACKAGE = "bgutil-ytdlp-pot-provider"
+POT_PROVIDER_VERSION = "1.3.1"
+POT_SERVER_DIR = Path.home() / "bgutil-ytdlp-pot-provider"
+POT_SERVER_URL = (
+    "https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
+)
+CANVAS_MIRROR_URL = (
+    "https://registry.npmmirror.com/-/binary/canvas/v3.2.1/"
+    "canvas-v3.2.1-napi-v7-win32-x64.tar.gz"
+)
 
 
 class NetworkEngine:
@@ -22,9 +37,117 @@ class NetworkEngine:
             shutil.which(cmd) for cmd in ["node", "deno", "cjs", "quickjs"]
         )
 
+    def pot_provider_available(self) -> bool:
+        """Check if a PO token provider plugin is registered with yt-dlp."""
+        import yt_dlp  # type: ignore[import-untyped]
+
+        yt_dlp.YoutubeDL({"quiet": True})
+        from yt_dlp.extractor.youtube.pot._registry import _pot_providers  # type: ignore[import-untyped]  # private yt-dlp module, no stubs
+
+        return bool(_pot_providers.value)
+
+    def _run_command(
+        self, args: list, cwd: Optional[Path] = None, timeout: int = 600
+    ) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            args,
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+
+    def install_pot_provider(self) -> Dict[str, Any]:
+        """Install the bgutil POT provider plugin via pip."""
+        result = self._run_command(
+            [shutil.which("pip") or "pip", "install", "-U", POT_PROVIDER_PACKAGE],
+            timeout=900,
+        )
+        return {
+            "ok": result.returncode == 0,
+            "output": (result.stdout + result.stderr).strip(),
+        }
+
+    def setup_pot_server(self) -> Dict[str, Any]:
+        """Clone the bgutil server repo and install its Deno dependencies."""
+        deno = shutil.which("deno")
+        if not deno:
+            return {"ok": False, "output": "Deno not found. Install it first."}
+
+        steps: list[str] = []
+        if not POT_SERVER_DIR.exists():
+            steps.append("Cloning bgutil-ytdlp-pot-provider repository...")
+            result = self._run_command(
+                [
+                    "git",
+                    "clone",
+                    "--single-branch",
+                    "--branch",
+                    POT_PROVIDER_VERSION,
+                    "--depth",
+                    "1",
+                    POT_SERVER_URL,
+                    str(POT_SERVER_DIR),
+                ],
+                timeout=900,
+            )
+            if result.returncode != 0:
+                return {
+                    "ok": False,
+                    "output": (result.stdout + result.stderr).strip(),
+                }
+        else:
+            steps.append("Using existing bgutil-ytdlp-pot-provider repository.")
+
+        server_dir = POT_SERVER_DIR / "server"
+        steps.append("Installing Deno dependencies (may take a few minutes)...")
+        result = self._run_command(
+            [
+                deno,
+                "install",
+                "--allow-scripts=npm:canvas",
+                "--frozen",
+            ],
+            cwd=server_dir,
+            timeout=1800,
+        )
+        if result.returncode != 0:
+            return {
+                "ok": False,
+                "output": (result.stdout + result.stderr).strip(),
+            }
+
+        canvas_fixed = self._ensure_canvas_binary(server_dir)
+        if canvas_fixed:
+            steps.append("Downloaded canvas native binary (GitHub mirror fallback).")
+
+        return {"ok": True, "output": "\n".join(steps)}
+
+    def _ensure_canvas_binary(self, server_dir: Path) -> bool:
+        """Ensure the canvas native binary exists; download from mirror if missing."""
+        canvas_pkgs = sorted(
+            server_dir.glob("node_modules/.deno/canvas@*/node_modules/canvas")
+        )
+        if not canvas_pkgs:
+            return False
+        canvas_pkg = canvas_pkgs[-1]
+        if (canvas_pkg / "build" / "Release" / "canvas.node").exists():
+            return False
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tarball = Path(tmp) / "canvas.tar.gz"
+            try:
+                urllib.request.urlretrieve(CANVAS_MIRROR_URL, tarball)
+                with tarfile.open(tarball, "r:gz") as archive:
+                    archive.extractall(canvas_pkg)  # noqa: S202 - trusted mirror binary
+                return (canvas_pkg / "build" / "Release" / "canvas.node").exists()
+            except Exception:
+                return False
+
     def get_info(self, url: str) -> Dict[str, Any]:
         """Peeks at the URL to see if it's a playlist and count items."""
-        import yt_dlp  # type: ignore[import-untyped]
+        import yt_dlp
 
         ydl_opts = {"quiet": True, "noplaylist": False, "extract_flat": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -59,8 +182,9 @@ class NetworkEngine:
         progress_hook: Optional[Callable] = None,
         subtitles: bool = False,
         custom_height: Optional[int] = None,
+        player_client: Optional[str] = None,
     ) -> Dict[str, Any]:
-        import yt_dlp  # type: ignore[import-untyped]
+        import yt_dlp
 
         from max_cli.common.events import (
             DownloadCompleteEvent,
@@ -75,7 +199,7 @@ class NetworkEngine:
                 "[yellow]⚠️ Warning: No JavaScript runtime (Node.js/Deno) found.[/yellow]"
             )
             console.print(
-                "[dim]YouTube downloads may be limited or fail. Please install Node.js.[/dim]\n"
+                "[dim]YouTube downloads may be limited or fail. Install Deno: winget install DenoLand.Deno[/dim]\n"
             )
 
         q = quality.lower()[0]
@@ -115,7 +239,7 @@ class NetworkEngine:
                     )
                 )
 
-        ydl_opts = {
+        ydl_opts: Dict[str, Any] = {
             "outtmpl": str(output_path / "%(title)s.%(ext)s"),
             "quiet": True,
             "noprogress": True,
@@ -138,6 +262,17 @@ class NetworkEngine:
             ydl_opts["writesubtitles"] = True
             ydl_opts["writeautomaticsub"] = True
             ydl_opts["subtitleslangs"] = ["en", "all"]
+
+        if player_client and player_client.lower() != "auto":
+            ydl_opts["extractor_args"] = {
+                "youtube": {"player_client": [player_client]}
+            }
+        elif self.pot_provider_available() and (
+            "youtube.com" in url or "youtu.be" in url
+        ):
+            ydl_opts["extractor_args"] = {
+                "youtube": {"player_client": ["android"], "fetch_pot": "always"}
+            }
 
         post_processors = []
         if include_metadata:
@@ -195,6 +330,7 @@ def _download_executor(task: "TaskItem") -> Dict[str, Any]:
     subs = payload.get("subtitles", False)
     meta = payload.get("include_metadata", True)
     custom_h = payload.get("custom_height")
+    player_client = payload.get("player_client")
 
     engine.download_media(
         url=url,
@@ -204,6 +340,7 @@ def _download_executor(task: "TaskItem") -> Dict[str, Any]:
         subtitles=subs,
         include_metadata=meta,
         custom_height=custom_h,
+        player_client=player_client,
     )
     return {
         "output_path": str(out),

@@ -132,7 +132,7 @@ def compress_images(...):
 ### Pre-Commit Requirements
 
 - [ ] All tests pass (`pytest tests/`)
-- [ ] Type checking passes without ignoring third-party lack of stubs unnecessarily (`mypy src/`)
+- [ ] Type checking does not regress: `python scripts/mypy_baseline.py` passes. CI fails if the mypy error count rises above `mypy-baseline.txt`. After you fix errors, run it with `--update` to lock in the lower count. Ignore missing stubs per package in `mypy.ini`, never globally.
 - [ ] Code is formatted and linted cleanly (`ruff check . && ruff format .`)
 - [ ] `PLANS/active/` markdown files are updated if fulfilling a planned task.
 
@@ -140,6 +140,18 @@ def compress_images(...):
 
 - If a task takes too long (e.g., fighting type checkers on 3rd-party libs), mark it `[D]` (Deferred) in the `PLANS/` system and move on.
 - Update `README.md` and `docs/` ONLY if user-facing behavior, CLI commands, or installation steps change.
+
+### Automated Enforcement (Claude Code hooks & skills)
+
+`.claude/settings.json` wires hooks that enforce this file mechanically:
+
+- **PostToolUse `check_rules.py`**: after every Python edit it runs `ruff check --fix`. It also runs `ruff format`, but only on files that were already formatted at HEAD. Then it runs AST checks for this file's rules: lazy heavy imports, no UI or print in core, layering, `os.path`, `shell=True`, utf-8 encoding, `/tmp`, hardcoded ffmpeg, silent broad excepts, `extractall` filter, reason-less `# type: ignore`, and Python 3.9 syntax. It blocks only violations the edit *introduced* compared with HEAD. Run `python .claude/hooks/check_rules.py --audit src/max_cli` for a full debt report.
+- **PreToolUse `guard.py`**: denies `--no-verify`, force-push and `.env` edits. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
+- **Stop `stop_gate.py`**: when Python changed during the session, it runs `ruff check` plus `pytest -x` before the agent may finish. It blocks once, then warns.
+
+Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes) and `max-plans` (PLANS lifecycle). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
+
+The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges` and `textual-builder`. Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
 
 ## 6. Boundaries & Permissions
 

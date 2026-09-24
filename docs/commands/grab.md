@@ -25,6 +25,29 @@ max grab download
 | `--output` | `-o` | Output folder |
 | `--no-process` | | Add to queue without processing |
 | `--queue` | `-Q` | Add to queue |
+| `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |
+
+### YouTube Troubleshooting
+
+If downloads fail with `HTTP Error 403: Forbidden`, YouTube has likely blocked the default client. Fixes:
+
+1. **Install a JavaScript runtime** (required by yt-dlp for YouTube extraction):
+   ```bash
+   winget install DenoLand.Deno
+   ```
+2. **Install the PO token provider** (fixes the SABR experiment that blocks music videos):
+   ```bash
+   max grab pot-setup
+   ```
+   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies automatically. Once installed, `max grab` auto-detects it and uses the `android` client with token fetching — no extra flags needed.
+3. **Update yt-dlp** to the latest version:
+   ```bash
+   pip install -U yt-dlp
+   ```
+4. **Manually switch the player client**:
+   ```bash
+   max grab download "https://youtube.com/watch?v=..." --player-client web
+   ```
 
 ## Interactive Mode
 

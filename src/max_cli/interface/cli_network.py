@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import click
+import shutil
 import typer
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
@@ -12,6 +14,7 @@ from rich import box
 from max_cli.common.events import get_emitter
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
+from max_cli.core.engines.network_engine import POT_PROVIDER_PACKAGE
 from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer(help="Download media from various platforms.")
@@ -102,6 +105,15 @@ def download_media(
         "--progress/--no-progress",
         help="Show download progress bar.",
     ),
+    player_client: Optional[str] = typer.Option(
+        None,
+        "--player-client",
+        help="YouTube player client override (fixes HTTP 403/SABR errors): auto, default, web, tv, ios, android, mweb, tv_embedded.",
+        click_type=click.Choice(
+            ["auto", "default", "web", "tv", "ios", "android", "mweb", "tv_embedded"],
+            case_sensitive=False,
+        ),
+    ),
 ):
     """
     Download media using saved preferences or overrides.
@@ -183,6 +195,7 @@ def download_media(
                     no_playlist=no_playlist,
                     subtitles=subtitles,
                     custom_height=resolution,
+                    player_client=player_client,
                 )
                 console.print("[green]+ Added[/green]")
         except KeyboardInterrupt:
@@ -229,6 +242,7 @@ def download_media(
             subtitles,
             resolution,
             progress,
+            player_client,
         )
         if queue:
             import threading
@@ -258,6 +272,7 @@ def _add_to_queue_or_download(
     subtitles: bool = False,
     custom_height: Optional[int] = None,
     show_progress: bool = True,
+    player_client: Optional[str] = None,
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if queue_enabled:
@@ -272,6 +287,7 @@ def _add_to_queue_or_download(
             no_playlist=no_playlist,
             subtitles=subtitles,
             custom_height=custom_height,
+            player_client=player_client,
         )
         log_success("Added to queue.")
     else:
@@ -289,6 +305,7 @@ def _add_to_queue_or_download(
             custom_height=custom_height,
             quality_label=str(q_info["label"]),
             show_progress=show_progress,
+            player_client=player_client,
         )
 
 
@@ -304,6 +321,7 @@ def _download_immediate(
     custom_height: Optional[int] = None,
     quality_label: str = "",
     show_progress: bool = True,
+    player_client: Optional[str] = None,
 ) -> None:
     """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
@@ -343,22 +361,40 @@ def _download_immediate(
     if not include_metadata:
         console.print("[dim]Metadata disabled.[/dim]")
 
+    def _do_download() -> None:
+        eng = _get_engine()
+        eng.download_media(
+            url=url,
+            output_path=output_path,
+            quality=quality,
+            audio_only=audio_only,
+            include_metadata=include_metadata,
+            playlist_items=index,
+            no_playlist=no_playlist,
+            subtitles=subtitles,
+            custom_height=custom_height,
+            player_client=player_client,
+        )
+
+    def _handle_final_error(error: Optional[Exception]) -> None:
+        error_text = str(error or "")
+        is_youtube_403 = ("403" in error_text or "SABR" in error_text) and (
+            "youtube.com" in url or "youtu.be" in url
+        )
+        if is_youtube_403 and _offer_pot_setup():
+            try:
+                _do_download()
+                log_success("Download Finished.")
+                return
+            except Exception as retry_err:
+                error = retry_err
+        log_error(str(error))
+
     if not show_progress:
         last_error: Optional[Exception] = None
         for attempt in range(3):
             try:
-                eng = _get_engine()
-                eng.download_media(
-                    url=url,
-                    output_path=output_path,
-                    quality=quality,
-                    audio_only=audio_only,
-                    include_metadata=include_metadata,
-                    playlist_items=index,
-                    no_playlist=no_playlist,
-                    subtitles=subtitles,
-                    custom_height=custom_height,
-                )
+                _do_download()
                 log_success("Download Finished.")
                 return
             except Exception as e:
@@ -369,7 +405,7 @@ def _download_immediate(
                         f"[yellow]Download failed (attempt {attempt + 1}/3). Retrying in {wait}s...[/yellow]"
                     )
                     time.sleep(wait)
-        log_error(str(last_error))
+        _handle_final_error(last_error)
         return
 
     emitter = get_emitter()
@@ -382,18 +418,7 @@ def _download_immediate(
         retry_error: Optional[Exception] = None
         for attempt in range(3):
             try:
-                eng = _get_engine()
-                eng.download_media(
-                    url=url,
-                    output_path=output_path,
-                    quality=quality,
-                    audio_only=audio_only,
-                    include_metadata=include_metadata,
-                    playlist_items=index,
-                    no_playlist=no_playlist,
-                    subtitles=subtitles,
-                    custom_height=custom_height,
-                )
+                _do_download()
                 log_success("Download Finished.")
                 break
             except Exception as e:
@@ -405,9 +430,105 @@ def _download_immediate(
                     )
                     time.sleep(wait)
         else:
-            log_error(str(retry_error))
+            _handle_final_error(retry_error)
 
     subscriber.unsubscribe()
+
+
+@app.command("pot-setup")
+def pot_setup(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip all confirmations."),
+):
+    """
+    Install the YouTube PO token provider (fixes HTTP 403 / SABR errors).
+
+    This sets up the bgutil POT provider: pip plugin + Deno server script.
+    Required: Deno installed and on PATH (winget install DenoLand.Deno).
+    """
+    eng = _get_engine()
+
+    if not eng.has_js or not shutil.which("deno"):
+        log_error("Deno not found. Install it first: winget install DenoLand.Deno")
+        raise typer.Exit(code=1)
+
+    if eng.pot_provider_available():
+        console.print("[green]PO token provider is already installed.[/green]")
+        return
+
+    console.print(
+        "[cyan]This will install the bgutil POT provider to fix YouTube 403/SABR errors:[/cyan]"
+    )
+    console.print(
+        f"  1. pip install -U {POT_PROVIDER_PACKAGE} (yt-dlp plugin)"
+    )
+    console.print(
+        "  2. git clone bgutil-ytdlp-pot-provider (to ~/bgutil-ytdlp-pot-provider)"
+    )
+    console.print(
+        "  3. deno install of server dependencies (canvas, may take minutes)\n"
+    )
+
+    if not yes:
+        if not Confirm.ask("Proceed with installation?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return
+
+    with console.status("[bold]Installing yt-dlp plugin (pip)...[/bold]"):
+        result = eng.install_pot_provider()
+    if not result["ok"]:
+        log_error(f"pip install failed:\n{result['output'][-800:]}")
+        raise typer.Exit(code=1)
+    log_success("Plugin installed.")
+
+    if not yes:
+        if not Confirm.ask(
+            "Download and set up the bgutil token server (requires git + Deno)?"
+        ):
+            console.print("[yellow]Skipping server setup. Plugin alone is not enough.[/yellow]")
+            raise typer.Exit(code=1)
+
+    with console.status("[bold]Setting up token server (git clone + deno install)...[/bold]"):
+        result = eng.setup_pot_server()
+    if not result["ok"]:
+        log_error(f"Server setup failed:\n{result['output'][-800:]}")
+        raise typer.Exit(code=1)
+    console.print(result["output"])
+
+    if eng.pot_provider_available():
+        log_success("PO token provider is ready. YouTube downloads will work now.")
+    else:
+        log_error(
+            "Provider not detected after setup. Restart the terminal and re-run pot-setup."
+        )
+
+
+def _offer_pot_setup() -> bool:
+    """Offer to install the POT provider and retry once. Returns True if retry succeeded."""
+    eng = _get_engine()
+    if eng.pot_provider_available():
+        return False
+    console.print(
+        "\n[yellow]YouTube blocked this download (HTTP 403 / SABR experiment).[/yellow]"
+    )
+    console.print(
+        "[dim]Fix: install the PO token provider (auto-fetches tokens via Deno).[/dim]"
+    )
+    if not Confirm.ask("Install the YouTube PO token provider now?"):
+        return False
+    result = eng.install_pot_provider()
+    if not result["ok"]:
+        log_error(f"pip install failed:\n{result['output'][-800:]}")
+        return False
+    result = eng.setup_pot_server()
+    if not result["ok"]:
+        log_error(f"Server setup failed:\n{result['output'][-800:]}")
+        return False
+    console.print(result["output"])
+    if not eng.pot_provider_available():
+        log_error("Provider still not detected. Re-run `max grab pot-setup`.")
+        return False
+    log_success("Provider installed. Retrying download...")
+    return True
 
 
 @app.command("queue")

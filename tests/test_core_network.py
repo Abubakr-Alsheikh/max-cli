@@ -132,3 +132,131 @@ class TestNetworkEngine:
         )
 
         mock_instance.download.assert_called_once()
+
+    @patch("yt_dlp.YoutubeDL")
+    @patch("shutil.which")
+    def test_download_media_player_client(self, mock_which, mock_ytdl, tmp_path):
+        """Test that player_client is passed as extractor_args."""
+        mock_which.return_value = None
+
+        mock_instance = MagicMock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+
+        engine = NetworkEngine()
+        output_path = tmp_path / "downloads"
+        output_path.mkdir()
+
+        engine.download_media(
+            "https://www.youtube.com/watch?v=abc",
+            output_path,
+            quality="h",
+            player_client="tv",
+        )
+
+        _, kwargs = mock_ytdl.call_args
+        opts = kwargs.get("opts") or mock_ytdl.call_args.args[0]
+        extractor_args = opts.get("extractor_args", {})
+        assert extractor_args["youtube"]["player_client"] == ["tv"]
+
+    @patch("yt_dlp.YoutubeDL")
+    @patch("shutil.which")
+    def test_download_media_auto_pot_provider(
+        self, mock_which, mock_ytdl, tmp_path
+    ):
+        """Test that a PO token provider triggers android client + fetch_pot."""
+        mock_which.return_value = None
+
+        mock_instance = MagicMock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+
+        engine = NetworkEngine()
+        with patch.object(
+            engine, "pot_provider_available", return_value=True
+        ):
+            output_path = tmp_path / "downloads"
+            output_path.mkdir()
+
+            engine.download_media(
+                "https://www.youtube.com/watch?v=abc",
+                output_path,
+                quality="h",
+            )
+
+            _, kwargs = mock_ytdl.call_args
+            opts = kwargs.get("opts") or mock_ytdl.call_args.args[0]
+            extractor_args = opts.get("extractor_args", {})
+            assert extractor_args["youtube"]["player_client"] == ["android"]
+            assert extractor_args["youtube"]["fetch_pot"] == "always"
+
+    @patch("yt_dlp.YoutubeDL")
+    @patch("shutil.which")
+    def test_download_media_pot_provider_non_youtube(
+        self, mock_which, mock_ytdl, tmp_path
+    ):
+        """Test that non-YouTube URLs do not get android player_client."""
+        mock_which.return_value = None
+
+        mock_instance = MagicMock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+
+        engine = NetworkEngine()
+        with patch.object(
+            engine, "pot_provider_available", return_value=True
+        ):
+            output_path = tmp_path / "downloads"
+            output_path.mkdir()
+
+            engine.download_media(
+                "https://vimeo.com/12345",
+                output_path,
+                quality="h",
+            )
+
+            _, kwargs = mock_ytdl.call_args
+            opts = kwargs.get("opts") or mock_ytdl.call_args.args[0]
+            assert "extractor_args" not in opts
+
+    @patch("yt_dlp.YoutubeDL")
+    def test_pot_provider_available(self, mock_ytdl):
+        """Test PO token provider detection from the yt-dlp registry."""
+        engine = NetworkEngine()
+
+        with patch(
+            "yt_dlp.extractor.youtube.pot._registry._pot_providers",
+            new=MagicMock(value={"BgUtilHTTP": object()}),
+        ):
+            assert engine.pot_provider_available() is True
+
+        with patch(
+            "yt_dlp.extractor.youtube.pot._registry._pot_providers",
+            new=MagicMock(value={}),
+        ):
+            assert engine.pot_provider_available() is False
+
+    @patch("subprocess.run")
+    def test_install_pot_provider_success(self, mock_run):
+        """Test pip install of the POT provider plugin."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+        engine = NetworkEngine()
+        result = engine.install_pot_provider()
+        assert result["ok"] is True
+        mock_run.assert_called_once()
+
+    @patch("subprocess.run")
+    def test_setup_pot_server_clones_and_installs(self, mock_run, tmp_path):
+        """Test server setup skips clone when repo already exists."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
+        engine = NetworkEngine()
+        server_dir = tmp_path / "bgutil" / "server"
+        server_dir.mkdir(parents=True)
+        with (
+            patch(
+                "max_cli.core.engines.network_engine.POT_SERVER_DIR",
+                tmp_path / "bgutil",
+            ),
+            patch("shutil.which", return_value="deno"),
+            patch.object(engine, "_ensure_canvas_binary", return_value=False),
+        ):
+            result = engine.setup_pot_server()
+        assert result["ok"] is True
+        assert mock_run.call_count == 1
