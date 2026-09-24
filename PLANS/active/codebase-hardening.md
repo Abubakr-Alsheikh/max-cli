@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** Draft
+**Status:** In Progress (Phase 0 done)
 **Priority:** P0
 **Updated:** 2026-09-24
 
@@ -42,18 +42,24 @@ Baseline on 2026-09-24:
 
 ---
 
-## Phase 0: Safety net (S-M, needs approval for `pyproject.toml` / CI)
+## Phase 0: Safety net (Completed 2026-09-24, branch `chore/hardening-p0`)
 
-- [ ] Add `mypy` (plus `types-requests`) to the `dev` extra in `pyproject.toml`. *Ask first (AGENTS.md section 6).*
-- [ ] Add a mypy step to `.github/workflows/ci.yml`. It fails when the error count rises above the baseline file `mypy-baseline.txt` (58 today), and the baseline only ever goes down.
-- [ ] Fix `mypy.ini`: merge its two `[mypy]` sections into one.
-- [ ] `tests/test_startup_time.py`:
-  - Assert under 0.3 s instead of 2.0 s, and mark the test `slow` if CI runners are noisy.
-  - Add `segno`, `pyperclip` and `requests` to its forbidden-import list.
-- [ ] `.github/workflows/release.yml:34`: install `.[dev,tui]` so the TUI tests run before a release.
-- [ ] Remove the stale comments at `pyproject.toml:14,16`.
+- [x] Add `mypy>=1.18`, `types-requests`, `types-pyperclip` and `types-psutil` to the `dev` extra in `pyproject.toml` (approved).
+- [x] `scripts/mypy_baseline.py` plus a new `typecheck` job in `ci.yml`. The job fails when the count rises above `mypy-baseline.txt`, or drops without `--update`. `build` waits for it. Baseline: **50**.
+- [x] `mypy.ini`:
+  - Merge the duplicate `[mypy]` sections.
+  - Pin `platform = linux`, so Windows and CI report the same count.
+  - Ignore missing imports only for `fitz` and `pytesseract`.
+  - Remove 23 `# type: ignore` comments that mypy reports as unused.
+- [x] `tests/test_startup_time.py`:
+  - Measure import cost minus interpreter startup, best of 5.
+  - Ceiling 1.0 s as a regression guard.
+  - The 200 ms target is a strict xfail until Phase 3.
+  - Check registration imports once for every heavy package. `segno` and `pyperclip` are strict xfails until Phase 3.
+- [x] `release.yml`: install `.[dev,tui]`, **and run `pytest` before publishing**. Before this change it published without running any tests.
+- [x] Remove the stale comments in `pyproject.toml`.
 
-**Done when:** CI runs pytest, ruff and ratcheted mypy on Python 3.9 to 3.12, and the startup test would fail on the current 570 ms.
+**Result:** CI runs pytest and ruff on Python 3.9 to 3.12, and ratcheted mypy (target `python_version = 3.9`) on 3.11. The strict xfails fail loudly when Phase 3 fixes the startup leaks, so their markers get removed.
 
 ## Phase 1: Critical bugs (M-L, each task starts with a failing test)
 
@@ -146,3 +152,7 @@ Baseline on 2026-09-24:
 ## Decisions log
 
 - 2026-09-24: Plan created from the codebase review. Findings came from subagent review, and the major bugs were verified by reading the source.
+- 2026-09-24: Phase 0 done.
+  - Adding the stub packages exposed 20 hidden errors, and removing stale ignores cleared them again.
+  - Measured on the committed tree without local WIP, mypy has 50 errors.
+  - The uncommitted `common/download_history.py` adds 4 more (Python 3.9 `X | Y` syntax, Phase 1.5). The gate fails until they are fixed.

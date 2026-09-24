@@ -132,7 +132,7 @@ def compress_images(...):
 ### Pre-Commit Requirements
 
 - [ ] All tests pass (`pytest tests/`)
-- [ ] Type checking passes without ignoring third-party lack of stubs unnecessarily (`mypy src/`)
+- [ ] Type checking does not regress: `python scripts/mypy_baseline.py` passes. CI fails if the mypy error count rises above `mypy-baseline.txt`. After you fix errors, run it with `--update` to lock in the lower count. Ignore missing stubs per package in `mypy.ini`, never globally.
 - [ ] Code is formatted and linted cleanly (`ruff check . && ruff format .`)
 - [ ] `PLANS/active/` markdown files are updated if fulfilling a planned task.
 
