@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phase 0 done)
+**Status:** In Progress (Phases 0-1 done)
 **Priority:** P0
 **Updated:** 2026-09-24
 
@@ -28,9 +28,7 @@ Baseline on 2026-09-24:
   - Merge the `max grab` queue (`QueueManager`, `~/.max_cli/grab_history.json`) into `DaemonManager` + `task_queue` (`~/.max_cli/queue/history.json`)?
   - Fold the uncommitted `common/download_history.py` into that store instead of adding a third file?
   - Recommendation: yes to both. Put one persistence helper under `DaemonManager`, and migrate the old files on first load.
-- [ ] **D2. Plugin loading from `./plugins`.**
-  - Today `plugins/manager.py` runs any `*.py` in the current directory's `plugins/` folder.
-  - Recommendation: load only from `~/.max_cli/plugins`, and allow extra directories only through config.
+- [x] **D2. Plugin loading from `./plugins`.** Decided 2026-09-24: home directory only. Extra folders come from `"plugin_dirs"` in `~/.max_cli/plugins.json` (implemented in 1.7).
 - [ ] **D3. The "daemon".**
   - It's a `daemon=True` thread that dies when the CLI exits.
   - Option A: rename it to an in-process worker and remove the unused PID and log files.
@@ -61,7 +59,18 @@ Baseline on 2026-09-24:
 
 **Result:** CI runs pytest and ruff on Python 3.9 to 3.12, and ratcheted mypy (target `python_version = 3.9`) on 3.11. The strict xfails fail loudly when Phase 3 fixes the startup leaks, so their markers get removed.
 
-## Phase 1: Critical bugs (M-L, each task starts with a failing test)
+## Phase 1: Critical bugs (Completed 2026-09-25, branch `fix/hardening-p1-bugs`)
+
+- [x] Every row below has a regression test that failed on the old code before its fix. One commit per bug; 1.3 and 1.4 share a commit, and 1.12 reuses the helper from 1.9.
+- [x] New shared helper `common/archives.py` (`safe_extract_tar`), listed in AGENTS.md.
+- [x] Results:
+  - pytest: 219 → 289 passing.
+  - mypy: 50 → 45 errors (baseline updated).
+  - Rule audit: 84 → 47 violations. No `py39-union` or `tar-filter` violations remain.
+- [x] Found while working:
+  - `TestDaemonManager` wrote "Test" tasks into the real `~/.max_cli/tasks/queue.json`. It is now isolated in `tmp_path`; the 23 leftover tasks in the author's queue were not touched.
+  - The rule hook's `ruff --fix` deleted imports added before the code that used them. F401 is now unfixable in the hook.
+- [x] 1.5 fixed committed code only. The uncommitted `common/download_history.py` keeps its `X | Y` annotations until its author commits it.
 
 | # | Bug | Location | Fix | Test |
 |---|---|---|---|---|
