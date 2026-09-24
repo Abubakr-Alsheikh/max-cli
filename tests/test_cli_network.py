@@ -2,7 +2,9 @@ from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 from max_cli.interface.cli_network import app as network_app
 
-runner = CliRunner()
+# Rich renders --help with ANSI codes and wraps to terminal width, which splits
+# long option names. Plain, wide output keeps substring assertions stable.
+runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
 
 
 class TestCLINetwork:
