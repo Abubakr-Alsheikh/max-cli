@@ -13,6 +13,9 @@ from max_cli.common.exceptions import MaxError
 from max_cli.config import settings
 
 
+GRAB_HISTORY_LIMIT = 100  # most recent downloads kept in grab_history.json
+
+
 class QueueError(MaxError):
     """Raised when queue operations fail."""
 
@@ -171,9 +174,7 @@ class QueueManager:
         """Add a completed download to history."""
         with self._lock:
             self._history.insert(0, item)  # Add to beginning (most recent first)
-            # Keep only last 100 items
-            if len(self._history) > 100:
-                self._history = self._history[:100]
+            del self._history[GRAB_HISTORY_LIMIT:]
         self._save_history()
 
     def get_history(self) -> List[QueueItem]:

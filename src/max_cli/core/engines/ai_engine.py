@@ -1,4 +1,3 @@
-import os
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -7,6 +6,8 @@ from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
 from max_cli.common.cache import get_default_cache
+
+LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
 
 
 class AIEngine:
@@ -117,17 +118,22 @@ Return as a JSON array of strings."""
     def _get_local_context(self) -> str:
         """Scans current directory to give AI 'eyes'."""
         try:
-            files = os.listdir(".")
-            visible_files = [f for f in files if not f.startswith(".")][:30]
-
-            context = "\n[USER'S CURRENT ENVIRONMENT]\n"
-            context += f"Path: {os.getcwd()}\n"
-            context += f"Files in Folder: {', '.join(visible_files)}\n"
-            if len(files) > 30:
-                context += f"(...and {len(files) - 30} more files)\n"
-            return context
-        except Exception:
+            cwd = Path.cwd()
+            visible_files = sorted(
+                entry.name for entry in cwd.iterdir() if not entry.name.startswith(".")
+            )
+        except OSError:
             return ""
+
+        context = "\n[USER'S CURRENT ENVIRONMENT]\n"
+        context += f"Path: {cwd}\n"
+        context += (
+            f"Files in Folder: {', '.join(visible_files[:LOCAL_CONTEXT_FILE_LIMIT])}\n"
+        )
+        hidden_count = len(visible_files) - LOCAL_CONTEXT_FILE_LIMIT
+        if hidden_count > 0:
+            context += f"(...and {hidden_count} more files)\n"
+        return context
 
     def generate_cli_schema(self, app: Any, parent_name: str = "max") -> str:
         """
