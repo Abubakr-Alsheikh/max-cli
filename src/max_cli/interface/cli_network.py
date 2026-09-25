@@ -162,10 +162,10 @@ def download_media(
     Download media using saved preferences or overrides.
 
     Examples:
-        max grab                                    # Interactive mode
-        max grab https://youtube.com/watch?v=...   # Download directly
-        max grab -v https://...                    # Force video
-        max grab -a https://...                    # Audio only
+        max grab download                                   # Interactive mode
+        max grab download https://youtube.com/watch?v=...   # Download directly
+        max grab download -v https://...                    # Force video
+        max grab download -a https://...                    # Audio only
     """
     final_quality = quality if quality else settings.GRAB_QUALITY
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA

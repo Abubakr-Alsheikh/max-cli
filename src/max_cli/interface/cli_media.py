@@ -653,7 +653,7 @@ def stream_video_cmd(
     """
     Stream video to an RTMP server (Twitch, YouTube, etc.).
 
-    Example: max media stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
+    Example: max video stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
     """
     _get_engine()
 

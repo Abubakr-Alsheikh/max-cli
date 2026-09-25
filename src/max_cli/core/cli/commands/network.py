@@ -8,8 +8,12 @@ from max_cli.interface import cli_network
 
 def register(app: "Typer") -> None:
     """Register network and download commands."""
+    # Old name for `max grab`, kept hidden so existing scripts keep working.
     app.add_typer(
-        cli_network.app, name="net", help="Network tools (Download, Speedtest)."
+        cli_network.app,
+        name="net",
+        help="Alias of `max grab`.",
+        hidden=True,
     )
     app.add_typer(
         cli_network.app, name="grab", help="Download media from various platforms."
