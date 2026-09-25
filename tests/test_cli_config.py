@@ -4,10 +4,8 @@ The autouse fixture points every GLOBAL_CONFIG_PATH at tmp_path and moves the
 working directory there, so no test reads or writes ~/.max_config.env or a
 real .env file.
 
-`cli_config` mounts each single-command Typer app from interface/config as a
-sub-group, so the working invocations today are nested: `show show`,
-`setup setup`, `grab grab`. The documented `max config show` form is covered
-by strict xfail tests below.
+Every command sits directly under `max config` (`max config show`), as the
+README documents. It used to need a nested form, `max config show show`.
 """
 
 import json
@@ -34,7 +32,6 @@ RESOLVE_FFMPEG_PATH = "max_cli.common.ffmpeg_resolver.resolve_ffmpeg"
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 MANAGE_GROUPS = ["show", "save", "reset", "validate", "export", "import"]
-MANAGE_COMMANDS = ["show", "save", "reset", "validate", "export", "import"]
 
 
 def _plain(result) -> str:
@@ -74,27 +71,6 @@ def test_subgroup_help(args) -> None:
     assert "Usage" in result.stdout
 
 
-@pytest.mark.parametrize(
-    "args",
-    [["setup", "setup", "--help"], ["grab", "grab", "--help"]]
-    + [["show", command, "--help"] for command in MANAGE_COMMANDS],
-)
-def test_nested_command_help(args) -> None:
-    result = runner.invoke(config_app, args)
-
-    assert result.exit_code == 0, result.output
-    assert "Usage" in result.stdout
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "cli_config.py mounts single-command Typer apps with add_typer, so "
-        "`max config show` (and setup, grab, validate, ...) exits 2 with "
-        "'Missing command'; only `max config show show` works. README and "
-        "docs/commands/config.md document the single-word form."
-    ),
-)
 @pytest.mark.parametrize("command", ["show", "validate"])
 def test_documented_single_word_command_runs(command: str) -> None:
     result = runner.invoke(config_app, [command])
@@ -104,7 +80,7 @@ def test_documented_single_word_command_runs(command: str) -> None:
 
 class TestShow:
     def test_reports_missing_global_config(self) -> None:
-        result = runner.invoke(config_app, ["show", "show"])
+        result = runner.invoke(config_app, ["show"])
 
         assert result.exit_code == 0, result.output
         output = _plain(result)
@@ -115,7 +91,7 @@ class TestShow:
         isolated_config.write_text("AI_MODEL=x\n", encoding="utf-8")
         Path(".env").write_text("AI_MODEL=y\n", encoding="utf-8")
 
-        result = runner.invoke(config_app, ["show", "show"])
+        result = runner.invoke(config_app, ["show"])
 
         assert result.exit_code == 0, result.output
         output = _plain(result)
@@ -127,7 +103,7 @@ class TestSave:
     def test_copies_local_env_to_global(self, isolated_config: Path) -> None:
         Path(".env").write_text("AI_MODEL=gpt-4o\n", encoding="utf-8")
 
-        result = runner.invoke(config_app, ["save", "save"])
+        result = runner.invoke(config_app, ["save"])
 
         assert result.exit_code == 0, result.output
         assert isolated_config.read_text(encoding="utf-8") == "AI_MODEL=gpt-4o\n"
@@ -137,7 +113,7 @@ class TestSave:
         isolated_config.write_text("OLD=1\n", encoding="utf-8")
         Path(".env").write_text("NEW=1\n", encoding="utf-8")
         with patch.object(manage_module.Confirm, "ask", return_value=False):
-            result = runner.invoke(config_app, ["save", "save"])
+            result = runner.invoke(config_app, ["save"])
 
         assert result.exit_code == 1
         assert isolated_config.read_text(encoding="utf-8") == "OLD=1\n"
@@ -147,13 +123,13 @@ class TestSave:
         isolated_config.write_text("OLD=1\n", encoding="utf-8")
         Path(".env").write_text("NEW=1\n", encoding="utf-8")
 
-        result = runner.invoke(config_app, ["save", "save", "--force"])
+        result = runner.invoke(config_app, ["save", "--force"])
 
         assert result.exit_code == 0, result.output
         assert isolated_config.read_text(encoding="utf-8") == "NEW=1\n"
 
     def test_missing_local_env_exits_1(self) -> None:
-        result = runner.invoke(config_app, ["save", "save"])
+        result = runner.invoke(config_app, ["save"])
 
         assert result.exit_code == 1
         assert "No .env file found" in _plain(result)
@@ -164,7 +140,7 @@ class TestReset:
         isolated_config.write_text("A=1\n", encoding="utf-8")
         Path(".env").write_text("B=1\n", encoding="utf-8")
         with patch.object(manage_module.Confirm, "ask", return_value=True):
-            result = runner.invoke(config_app, ["reset", "reset"])
+            result = runner.invoke(config_app, ["reset"])
 
         assert result.exit_code == 0, result.output
         assert not isolated_config.exists()
@@ -174,7 +150,7 @@ class TestReset:
         isolated_config.write_text("A=1\n", encoding="utf-8")
         Path(".env").write_text("B=1\n", encoding="utf-8")
         with patch.object(manage_module.Confirm, "ask", return_value=True):
-            result = runner.invoke(config_app, ["reset", "reset", "--local"])
+            result = runner.invoke(config_app, ["reset", "--local"])
 
         assert result.exit_code == 0, result.output
         assert isolated_config.exists()
@@ -183,7 +159,7 @@ class TestReset:
 
 class TestValidate:
     def test_prints_validation_table(self) -> None:
-        result = runner.invoke(config_app, ["validate", "validate"])
+        result = runner.invoke(config_app, ["validate"])
 
         assert result.exit_code == 0, result.output
         output = _plain(result)
@@ -196,7 +172,7 @@ class TestExportImport:
         output = tmp_path / "exported.json"
 
         result = runner.invoke(
-            config_app, ["export", "export", "-o", str(output), "--include-defaults"]
+            config_app, ["export", "-o", str(output), "--include-defaults"]
         )
 
         assert result.exit_code == 0, result.output
@@ -211,7 +187,7 @@ class TestExportImport:
             json.dumps({"AI_MODEL": "gpt-4o", "SKIPPED": None}), encoding="utf-8"
         )
 
-        result = runner.invoke(config_app, ["import", "import", str(source), "--local"])
+        result = runner.invoke(config_app, ["import", str(source), "--local"])
 
         assert result.exit_code == 0, result.output
         env_text = Path(".env").read_text(encoding="utf-8")
@@ -222,7 +198,7 @@ class TestExportImport:
         source = tmp_path / "in.json"
         source.write_text(json.dumps({"AI_MODEL": "gpt-4o"}), encoding="utf-8")
 
-        result = runner.invoke(config_app, ["import", "import", str(source)])
+        result = runner.invoke(config_app, ["import", str(source)])
 
         assert result.exit_code == 0, result.output
         assert "AI_MODEL=gpt-4o" in isolated_config.read_text(encoding="utf-8")
@@ -231,14 +207,14 @@ class TestExportImport:
         source = tmp_path / "bad.json"
         source.write_text("{not json", encoding="utf-8")
 
-        result = runner.invoke(config_app, ["import", "import", str(source)])
+        result = runner.invoke(config_app, ["import", str(source)])
 
         assert result.exit_code == 1
         assert "Invalid JSON" in _plain(result)
 
     def test_import_missing_file_exits_1(self, tmp_path: Path) -> None:
         result = runner.invoke(
-            config_app, ["import", "import", str(tmp_path / "none.json")]
+            config_app, ["import", str(tmp_path / "none.json")]
         )
 
         assert result.exit_code == 1
@@ -250,7 +226,7 @@ class TestWizards:
         with patch.object(
             wizard_module.Prompt, "ask", side_effect=["openai", "gpt-4o", "dall-e-3"]
         ):
-            result = runner.invoke(config_app, ["setup", "setup"])
+            result = runner.invoke(config_app, ["setup"])
 
         assert result.exit_code == 0, result.output
         config_text = isolated_config.read_text(encoding="utf-8")
@@ -273,7 +249,7 @@ class TestWizards:
                 grab_wizard_module.Confirm, "ask", side_effect=[True, False, True]
             ),
         ):
-            result = runner.invoke(config_app, ["grab", "grab"])
+            result = runner.invoke(config_app, ["grab"])
 
         assert result.exit_code == 0, result.output
         lines = isolated_config.read_text(encoding="utf-8").splitlines()
