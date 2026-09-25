@@ -285,12 +285,6 @@ class TestOtherCommands:
         assert result.exit_code == 1
         assert "Invalid field format: x" in result.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_pdf.fill_form declares --field as str, not List[str]: the "
-        "loop walks the characters of one value, so 'name=John' fails on 'n' "
-        "and repeated -f flags keep only the last one",
-    )
     @patch(ENGINE_PATH)
     def test_form_fill_passes_fields(self, mock_get_engine, dummy_pdf):
         result = runner.invoke(

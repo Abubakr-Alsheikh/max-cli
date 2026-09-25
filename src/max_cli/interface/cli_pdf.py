@@ -496,7 +496,7 @@ def extract_form(
 @app.command("form-fill")
 def fill_form(
     target: Path = typer.Argument(..., help="PDF form to fill."),
-    field: str = typer.Option(
+    field: List[str] = typer.Option(
         ...,
         "-f",
         "--field",
