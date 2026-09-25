@@ -179,6 +179,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 ### 🚫 Never Do
 
 - Never expose raw stack traces to the user (wrap top-level calls in try/except).
+- Report failures with `log_error`. It marks the run as failed (`common/exit_status.py`), and `main()` exits 1 even when the command returns normally. Don't print errors with a bare `console.print`, or scripts see exit 0.
 - Never use `print()` or `typer.echo()` inside `core/engines/` (Engines return values; Interfaces print them).
 - Never commit secrets, API keys, or `.env` files.
 - Never use `os.path` (strictly use `pathlib.Path`).

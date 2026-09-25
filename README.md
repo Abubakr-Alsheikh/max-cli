@@ -750,6 +750,10 @@ max pdf --help
 
 ---
 
+### Exit codes for scripts
+
+`max` exits 0 when a command succeeds and 1 when it reports an error, even if it kept going after the error (for example one failed file in a batch). Usage mistakes such as a bad option exit 2. You can check `$?` or `%ERRORLEVEL%` in scripts.
+
 ## 🆘 Troubleshooting
 
 ### "FFmpeg not found"

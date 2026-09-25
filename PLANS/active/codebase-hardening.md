@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-6 and D5 done; the exit-code decision and ruff widening open)
+**Status:** In Progress (Phases 0-6, D5 and exit codes done; ruff widening open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -233,7 +233,7 @@ One commit per bug. Each fix turned its strict xfail test green, and the marker 
   - `load_all` crashes on plugins written like the example.
   - `on_load` gets `plugin_dir=None` for hyphenated names.
   - Unknown plugins report as enabled.
-- [ ] **Open decision: exit codes.** Most error paths in the file, PDF, media, audio, AI and tools commands call `log_error` and exit 0, so scripts can't detect failures. Proposal: exit 1 after every `log_error` in a command. It's a behavior change, so it needs the maintainer's approval.
+- [x] **Exit codes** (done 2026-09-25, branch `fix/exit-code-on-error`). `log_error` records the failure and `main()` exits 1, so every command that reports an error exits 1 without changing each handler. Usage errors keep exit code 2. Original note: Most error paths in the file, PDF, media, audio, AI and tools commands call `log_error` and exit 0, so scripts can't detect failures. Proposal: exit 1 after every `log_error` in a command. It's a behavior change, so it needs the maintainer's approval.
 
 **Result:** pytest 795 passed, 1 skipped, 4 xfailed (the 3 plugin bugs and the D5 startup target). mypy 41. Pillow deprecation warnings dropped from 10 to 6.
 
