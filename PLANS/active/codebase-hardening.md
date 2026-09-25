@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-4 done, D5 open)
+**Status:** In Progress (Phases 0-5 done, 5b and D5 open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -193,12 +193,42 @@ Baseline on 2026-09-24:
 
 **Result:** pytest 405 passed, 1 skipped, 1 xfailed. mypy 41 (unchanged). Rule audit 6 (unchanged).
 
-## Phase 5: Test coverage (L, can run alongside Phases 2-4)
+## Phase 5: Test coverage (Completed 2026-09-25, branch `test/hardening-p5-coverage`)
 
-- [ ] Add `CliRunner` tests for the groups that have none: `cli_ai`, `cli_audio`, `cli_files`, `cli_media`, `cli_pdf`, `cli_queue`, `cli_tools`, `cli_config`. Cover at least `--help`, one happy path with a mocked engine, and one `MaxError` path each.
-- [ ] Add engine tests for `audio_metadata_engine` and `system_engine`, plus `plugins/manager.py`, `common/cache.py` and `common/retry.py`.
-- [ ] Remove the `dummy_image` redefinition in `test_core_images.py`, which shadows the conftest fixture, and add real coverage for compress, resize and convert.
-- [ ] Set a coverage floor in CI at the current value, and raise it every phase.
+- [x] `CliRunner` tests for `cli_ai`, `cli_audio`, `cli_config`, `cli_files`, `cli_media`, `cli_pdf`, `cli_queue` and `cli_tools`. Each covers `--help` for every command, a happy path with the engine mocked (PDF tests use real PyMuPDF on temp files), and a `MaxError` path.
+- [x] Engine tests:
+  - `audio_metadata_engine`, using real FLAC, WAV and MP3 files built offline.
+  - `system_engine`, `plugins/manager.py`, `common/cache.py` and `common/retry.py`.
+- [x] `test_core_images.py` no longer shadows the conftest `dummy_image`, and it covers compress, resize and convert on real images.
+- [x] CI fails below 70% coverage (72% locally, 7,542 statements). Raise it every phase.
+- [x] Found while working: tests wrote to the real `~/.max_cli`, namely `.ffmpeg_resolved_path` and an AI cache entry. The autouse `isolated_home` fixture in `tests/conftest.py` now fakes `Path.home()` and the home-based constants.
+
+**Result:** pytest 785 passed, 1 skipped, 19 xfailed (up from 406). 18 of the xfails are the bugs below; the 19th is the startup target (D5).
+
+## Phase 5b: Fix the bugs Phase 5 found (M)
+
+Each bug has a strict xfail test that names its cause. Fix one bug per commit, then remove its marker.
+
+- [ ] `cli_config.py:7-14`: the documented `max config show/validate/save/...` exit with "Missing command". `add_typer` turns each single-command app into a group, so only `max config show show` works.
+- [ ] `plugins/manager.py:112-147`: `load_all` crashes on any plugin written like `examples/plugins/hello_world.py`. `discover_plugins` also returns the imported abstract `CLIPlugin`. One such user plugin breaks CLI startup.
+- [ ] `audio_metadata_engine.py:117-143`: `set_metadata`, `batch_set_metadata` and `auto_tag_from_filename` fail on MP3 and WAV, because files open without `easy=True`.
+- [ ] `audio_metadata_engine.py:70`: FLAC and OGG values come back as `"['Artist']"`, so `organize` creates `['Artist']` folders.
+- [ ] `audio_metadata_engine.py:143,181`: writing to a new `output_path` raises `MutagenError`.
+- [ ] `audio_metadata_engine.py:244-246`: the "Track - Artist - Title" filename pattern assigns the wrong fields.
+- [ ] `cli_files.py` `duplicates --delete` deletes without `Confirm.ask` or `--force` (AGENTS.md section 14).
+- [ ] `cli_pdf.py:499,520` `form-fill --field` is `str`, not `List[str]`, so it never works.
+- [ ] `cli_ai.py:354-377` `extract --schema` has the same `str`/`List[str]` bug.
+- [ ] `cli_pdf.py:37` `merge` with no PDFs raises a raw `ValueError`.
+- [ ] `cli_queue.py:74` `history --type bogus` raises a raw `ValueError`.
+- [ ] `cli_pdf.py:463`: Rich markup swallows `[ocr]` in the install tip.
+- [ ] `common/cache.py:153`: `@cached` drops `Path` arguments from the key, so different paths share one entry.
+- [ ] `plugins/manager.py:201`: `on_load` gets `plugin_dir=None` for hyphenated plugin names.
+- [ ] `plugins/manager.py:233`: unknown plugins report as enabled.
+- [ ] Not tested yet:
+  - Most error paths in the file, PDF, media, audio, AI and tools commands call `log_error` and exit 0, so scripts can't detect failures. Decide on one exit-code policy.
+  - `config validate` adds the `MAX_WORKERS` row twice.
+  - `retry(max_attempts=0)` raises `TypeError`.
+  - `image_processor.py:22,123` calls `getdata`, which Pillow 14 removes.
 
 ## Phase 6: Docs and PLANS hygiene (S-M)
 
@@ -229,6 +259,8 @@ Baseline on 2026-09-24:
   - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
   - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
+- 2026-09-25: Phase 5. Three subagents wrote the tests in parallel, each in separate files. The bugs they found stay as strict xfails and moved to Phase 5b, so each fix gets its own reviewed commit.
+- 2026-09-25: Phase 4 follow-up. The maintainer kept `artist-album` as the dashboard's organize pattern because plain `artist` had caused a problem. The FLAC `['Artist']` folder bug in Phase 5b may be that problem.
 - 2026-09-25: Phase 4. Where the CLI and TUI disagreed, the CLI value became the preset, because CLI users see those values in `--help` and the docs.
 - 2026-09-25: Phase 3.
   - The maintainer answered D1 (merge all stores, including the WIP history), D3 (option A) and D4 (keep 200 ms, dataclasses).
