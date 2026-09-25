@@ -251,7 +251,11 @@ class TestErrors:
         from max_cli import main as main_module
 
         mock_get_engine.return_value.get_stats.side_effect = MaxError("store broken")
-        monkeypatch.setattr(main_module, "app", typer.Typer(name="max"))
+        from max_cli.core.cli.lazy_group import LazyTyperGroup
+
+        monkeypatch.setattr(
+            main_module, "app", typer.Typer(name="max", cls=LazyTyperGroup)
+        )
         monkeypatch.setattr(main_module, "init_plugins", MagicMock())
         monkeypatch.setattr(sys, "argv", ["max", "queue", "stats"])
 
