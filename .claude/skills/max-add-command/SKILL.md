@@ -37,7 +37,7 @@ Work through these steps in order. Skip a step only when it does not apply, and 
 - Show progress with `EventSubscriber` from `max_cli.interface.event_subscriber`. Don't pass Rich objects into core.
 
 ## 4. Registration
-- A new group is registered in `src/max_cli/core/cli/commands/<area>.py` with `app.add_typer(...)`, which `core/cli/registry.py` then picks up. A new command in an existing group needs no registration.
+- A new group is one `LazyGroupSpec` entry in `_GROUPS` in `src/max_cli/core/cli/registry.py` (module path, help line, `hidden=True` for aliases). The group's module loads only when someone runs it, so never import `interface` modules at module level in `registry.py` or `main.py`. `tests/test_lazy_groups.py` checks that every entry loads. A new command in an existing group needs no registration.
 - Run `max <group> --help` and `max <group> <cmd> --help` and read the output.
 
 ## 5. TUI (only if the command should appear in `max dashboard`)

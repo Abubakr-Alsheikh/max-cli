@@ -39,7 +39,7 @@ src/max_cli/
 ├── core/                      # DOMAIN / BUSINESS LOGIC
 │   ├── presets.py             # Defaults shared by CLI and TUI (CRF levels, bitrates, output names)
 │   ├── engines/               # Sub-domain logic (image, pdf, ai, network)
-│   └── cli/                   # Command & Plugin registry
+│   └── cli/                   # registry.py (lazy group table) + lazy_group.py + plugin commands
 ├── interface/                 # ADAPTERS / CLI LAYER
 │   ├── cli_*.py               # Typer command definitions (No business logic)
 │   └── config/                # CLI config wizards
@@ -77,7 +77,9 @@ PLANS/                         # Project Management (Active/Deferred tasks)
 
 ### Lazy Loading Pattern (MANDATORY)
 
-Max CLI enforces lazy loading to keep `max --help` startup under 200ms. Heavy imports are deferred until first use.
+Max CLI enforces lazy loading to keep `import max_cli.main` under 200ms (about 90ms since hardening D5; `tests/test_startup_time.py` asserts it). Heavy imports are deferred until first use.
+
+**Command groups load lazily too.** The root app uses `LazyTyperGroup` (`core/cli/lazy_group.py`). Each built-in group is one entry in `_GROUPS` in `core/cli/registry.py`: module path, help line, hidden flag. `max --help` lists the groups from that table without importing them, and `max <group> ...` imports only that group's `interface/cli_*.py`. To add a group, add an entry there; don't import `interface` modules from `registry.py` or `main.py`.
 
 **Engine Files (`core/engines/*.py`)** — Move heavy imports inside methods:
 ```python

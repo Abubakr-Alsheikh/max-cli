@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-6 done; D5, the exit-code decision and ruff widening open)
+**Status:** In Progress (Phases 0-6 and D5 done; the exit-code decision and ruff widening open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -151,7 +151,7 @@ Baseline on 2026-09-24:
   - `scripts/mypy_baseline.py --update` wrote CRLF on Windows; it writes LF now.
 
 **Done when:**
-- [ ] `import max_cli.main` takes under 200 ms. **Not met: about 430 ms** (down from 550 ms). See the results.
+- [x] `import max_cli.main` takes under 200 ms: about 90 ms after D5 (it was 550 ms before Phase 3).
 - [x] The audit shows 0 `no-ui-in-core`, `lazy-import`, `engine-at-import` and `no-print-in-core` violations.
 - [x] One history file exists.
 - [x] Every existing CLI command still passes its tests.
@@ -168,7 +168,10 @@ Baseline on 2026-09-24:
 
 ## Decisions needed before closing the startup target
 
-- [ ] **D5. How to reach 200 ms.**
+- [x] **D5. How to reach 200 ms.** Decided and done 2026-09-25: option A, lazy command groups (branch `perf/d5-lazy-command-groups`).
+  - `import max_cli.main` dropped from about 430 ms to about 90 ms, and `tests/test_startup_time.py` asserts the 200 ms target.
+  - `max --help` takes about 300 ms, mostly Rich drawing the help screen plus plugin discovery. It imports no command group.
+  - `main.py` also imports the Rich logger only inside its error handlers.
   - Option A: lazy command groups. `max --help` lists the groups without importing them, and each group's module (and `settings`) loads only when you run it. This is the bigger change, and it also speeds up every command.
   - Option B: replace pydantic-settings with a small dataclass plus `.env` loader. This loses pydantic's field validation, and `config_panel` reads `Settings.model_fields`.
   - Option C: raise the target to what's reachable now (about 450 ms) and keep the 1.0 s ceiling.
