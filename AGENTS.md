@@ -37,6 +37,7 @@ Max CLI strictly separates business logic from the user interface using a Modula
 ```text
 src/max_cli/
 ├── core/                      # DOMAIN / BUSINESS LOGIC
+│   ├── presets.py             # Defaults shared by CLI and TUI (CRF levels, bitrates, output names)
 │   ├── engines/               # Sub-domain logic (image, pdf, ai, network)
 │   └── cli/                   # Command & Plugin registry
 ├── interface/                 # ADAPTERS / CLI LAYER
@@ -160,6 +161,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 ### ✅ Always Do
 
 - Use existing utilities from `max_cli.common` (`@retry`, `process_batch_parallel`, `format_size`).
+- Put defaults that both the CLI and the TUI use (quality levels, bitrates, output file names) in `max_cli.core.presets` and import them in both. `tests/interface/tui/test_preset_drift.py` fails when a TUI field default differs from the CLI option with the same name.
 - Use custom exceptions from `max_cli.common.exceptions` (`MaxError`, `ResourceNotFoundError`).
 - Use `console`, `log_success`, and `log_error` from `max_cli.common.logger` for user output in the `interface/` layer.
 - Use the event system (`EventEmitter` from `max_cli.common.events`, `EventSubscriber` from `max_cli.interface.event_subscriber`) for progress tracking — never pass Rich UI objects into core/common functions.
