@@ -153,7 +153,7 @@ def compress_images(...):
 
 Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes) and `max-plans` (PLANS lifecycle). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
 
-The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges` and `textual-builder`. Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
+The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges`, `textual-builder` and `handoff` (session handovers in `.claude/handoffs/`; read the newest one first when resuming work). Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
 
 ## 6. Boundaries & Permissions
 
