@@ -14,8 +14,9 @@ app = typer.Typer()
 def _get_engine():
     try:
         from max_cli.core.engines.media_engine import MediaEngine
+        from max_cli.interface.ffmpeg_prompt import ffmpeg_prompt_callbacks
 
-        return MediaEngine(auto_resolve=True)
+        return MediaEngine(auto_resolve=True, **ffmpeg_prompt_callbacks())
     except RuntimeError as e:
         log_error(str(e))
         raise typer.Exit(1)

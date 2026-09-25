@@ -3,10 +3,13 @@ import shutil
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
+
+if TYPE_CHECKING:
+    from max_cli.common.ffmpeg_resolver import ConfirmDownload, DownloadProgress
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,14 @@ class MediaEngine:
     Requires FFmpeg to be installed in the system PATH.
     """
 
-    def __init__(self, auto_resolve: bool = True) -> None:
+    def __init__(
+        self,
+        auto_resolve: bool = True,
+        confirm_download: Optional["ConfirmDownload"] = None,
+        on_progress: Optional["DownloadProgress"] = None,
+    ) -> None:
+        self._confirm_download = confirm_download
+        self._on_progress = on_progress
         self.ffmpeg_path: Path = self._resolve_ffmpeg(auto_resolve)
 
     def _resolve_ffmpeg(self, auto_resolve: bool) -> Path:
@@ -43,7 +53,11 @@ class MediaEngine:
         if auto_resolve:
             from max_cli.common.ffmpeg_resolver import resolve_ffmpeg
 
-            return resolve_ffmpeg(auto_download=True)
+            return resolve_ffmpeg(
+                auto_download=True,
+                confirm_download=self._confirm_download,
+                on_progress=self._on_progress,
+            )
 
         raise RuntimeError(
             "FFmpeg is not installed or not in PATH. "

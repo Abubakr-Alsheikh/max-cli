@@ -21,6 +21,7 @@ def setup_ffmpeg(
     """Download and install FFmpeg binary to ~/.max_cli/bin/."""
     from max_cli.common.ffmpeg_resolver import FFmpegResolver, resolve_ffmpeg
     from max_cli.common.logger import console, log_error, log_success
+    from max_cli.interface.ffmpeg_prompt import ffmpeg_prompt_callbacks
 
     resolver = FFmpegResolver()
 
@@ -29,7 +30,7 @@ def setup_ffmpeg(
         console.print("[yellow]Removed existing FFmpeg binary.[/yellow]")
 
     try:
-        path = resolve_ffmpeg(auto_download=True)
+        path = resolve_ffmpeg(auto_download=True, **ffmpeg_prompt_callbacks())
         log_success(f"FFmpeg ready at: {path}")
     except Exception as e:
         log_error(str(e))
