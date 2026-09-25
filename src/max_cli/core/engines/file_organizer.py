@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
@@ -60,7 +60,7 @@ class FileOrganizer:
     Core logic for organizing and renaming files.
     """
 
-    def scan_directory(self, folder: Path) -> List[Path]:
+    def scan_directory(self, folder: Path) -> list[Path]:
         """Returns a sorted list of files in the folder (excluding subfolders)."""
         if not folder.exists() or not folder.is_dir():
             raise ResourceNotFoundError(f"Folder '{folder}' not found.")
@@ -78,7 +78,7 @@ class FileOrganizer:
         dry_run: bool = False,
         start_index: int = 1,
         transaction_log: Optional["TransactionLog"] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Renames files by prepending numbers (1_file.txt, 2_file.txt).
         Returns statistics about the operation.
@@ -133,7 +133,7 @@ class FileOrganizer:
 
     def find_duplicates(
         self, folder: Path, recursive: bool = False
-    ) -> Dict[str, List[Path]]:
+    ) -> dict[str, list[Path]]:
         """
         Find duplicate files based on content hash.
 
@@ -151,14 +151,14 @@ class FileOrganizer:
             files = sorted(f for f in folder.iterdir() if f.is_file())
 
         # Only files that share a size can be duplicates; skip hashing the rest.
-        by_size: Dict[int, List[Path]] = {}
+        by_size: dict[int, list[Path]] = {}
         for file_path in files:
             try:
                 by_size.setdefault(file_path.stat().st_size, []).append(file_path)
             except OSError:
                 continue
 
-        hash_map: Dict[str, List[Path]] = {}
+        hash_map: dict[str, list[Path]] = {}
         for same_size_files in by_size.values():
             if len(same_size_files) < 2:
                 continue
@@ -174,10 +174,10 @@ class FileOrganizer:
     def delete_duplicates(
         self,
         folder: Path,
-        duplicates: Dict[str, List[Path]],
+        duplicates: dict[str, list[Path]],
         transaction_log: Optional["TransactionLog"] = None,
         auto_backup: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete duplicate files, keeping the first in each group."""
         removed = 0
         kept_paths: list[Path] = []
@@ -217,10 +217,10 @@ class FileOrganizer:
     def smart_sort(
         self,
         path: Path,
-        categories: Dict[str, str],
+        categories: dict[str, str],
         dry_run: bool = False,
         transaction_log: Optional["TransactionLog"] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         moved = 0
         skipped = 0
         errors = 0
@@ -383,7 +383,7 @@ class FileOrganizer:
 
         return backup_path
 
-    def list_backups(self, filename: str = None) -> List[Dict[str, Any]]:
+    def list_backups(self, filename: str = None) -> list[dict[str, Any]]:
         """
         List available backups.
 
@@ -486,7 +486,7 @@ class FileOrganizer:
         return removed
 
 
-def _file_organize_executor(task: "TaskItem") -> Dict[str, Any]:
+def _file_organize_executor(task: "TaskItem") -> dict[str, Any]:
     from pathlib import Path
 
     engine = FileOrganizer()
@@ -506,7 +506,7 @@ def _file_organize_executor(task: "TaskItem") -> Dict[str, Any]:
     }
 
 
-def _file_duplicates_executor(task: "TaskItem") -> Dict[str, Any]:
+def _file_duplicates_executor(task: "TaskItem") -> dict[str, Any]:
     from pathlib import Path
 
     engine = FileOrganizer()

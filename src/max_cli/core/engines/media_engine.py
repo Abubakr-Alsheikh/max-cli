@@ -5,7 +5,7 @@ MediaEngine stays until every caller has moved.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from max_cli.core.engines.audio_engine import AudioEngine
 from max_cli.core.engines.stream_engine import StreamEngine
@@ -20,7 +20,7 @@ class MediaEngine(VideoEngine, AudioEngine, StreamEngine):
     """
 
 
-def _video_compress_executor(task: TaskItem) -> Dict[str, Any]:
+def _video_compress_executor(task: TaskItem) -> dict[str, Any]:
     engine = MediaEngine()
     payload = task.payload
     input_path = Path(payload["input_path"])
@@ -41,7 +41,7 @@ def _video_compress_executor(task: TaskItem) -> Dict[str, Any]:
     }
 
 
-def _video_convert_executor(task: TaskItem) -> Dict[str, Any]:
+def _video_convert_executor(task: TaskItem) -> dict[str, Any]:
     engine = MediaEngine()
     payload = task.payload
     input_path = Path(payload["input_path"])
@@ -55,7 +55,7 @@ def _video_convert_executor(task: TaskItem) -> Dict[str, Any]:
     }
 
 
-def _video_to_audio_executor(task: TaskItem) -> Dict[str, Any]:
+def _video_to_audio_executor(task: TaskItem) -> dict[str, Any]:
     engine = MediaEngine()
     payload = task.payload
     input_path = Path(payload["input_path"])
@@ -79,7 +79,7 @@ register_executor(TaskType.VIDEO_CONVERT, _video_convert_executor)
 register_executor(TaskType.VIDEO_TO_AUDIO, _video_to_audio_executor)
 
 
-def _video_denoise_executor(task: TaskItem) -> Dict[str, Any]:
+def _video_denoise_executor(task: TaskItem) -> dict[str, Any]:
     engine = MediaEngine()
     payload = task.payload
     input_path = Path(payload["input_path"])

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -52,7 +52,7 @@ class ImageEngine:
         force_format: Optional[str] = None,
         quantize_png: bool = False,
         strip_exif: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Versatile processor for compression, resizing, and conversion.
         """

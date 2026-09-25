@@ -5,9 +5,9 @@ import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
-QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
+QUALITY_MAP: dict[str, dict[str, Union[str, int]]] = {
     "ss": {"height": 360, "bitrate": 64, "label": "360p"},
     "s": {"height": 480, "bitrate": 64, "label": "480p"},
     "m": {"height": 720, "bitrate": 128, "label": "720p"},
@@ -61,7 +61,7 @@ class NetworkEngine:
             check=False,
         )
 
-    def install_pot_provider(self) -> Dict[str, Any]:
+    def install_pot_provider(self) -> dict[str, Any]:
         """Install the bgutil POT provider plugin via pip."""
         result = self._run_command(
             [shutil.which("pip") or "pip", "install", "-U", POT_PROVIDER_PACKAGE],
@@ -72,7 +72,7 @@ class NetworkEngine:
             "output": (result.stdout + result.stderr).strip(),
         }
 
-    def setup_pot_server(self) -> Dict[str, Any]:
+    def setup_pot_server(self) -> dict[str, Any]:
         """Clone the bgutil server repo and install its Deno dependencies."""
         deno = shutil.which("deno")
         if not deno:
@@ -150,7 +150,7 @@ class NetworkEngine:
             except (OSError, tarfile.TarError, UnsafeArchiveError):
                 return False
 
-    def get_info(self, url: str) -> Dict[str, Any]:
+    def get_info(self, url: str) -> dict[str, Any]:
         """Peeks at the URL to see if it's a playlist and count items."""
         import yt_dlp
 
@@ -160,7 +160,7 @@ class NetworkEngine:
 
     def get_quality_info(
         self, quality: str, custom_height: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get quality information based on quality code or custom height."""
         if custom_height:
             return {
@@ -188,7 +188,7 @@ class NetworkEngine:
         subtitles: bool = False,
         custom_height: Optional[int] = None,
         player_client: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         import yt_dlp
 
         from max_cli.common.events import (
@@ -234,7 +234,7 @@ class NetworkEngine:
                     )
                 )
 
-        ydl_opts: Dict[str, Any] = {
+        ydl_opts: dict[str, Any] = {
             "outtmpl": str(output_path / "%(title)s.%(ext)s"),
             "quiet": True,
             "noprogress": True,
@@ -336,7 +336,7 @@ def make_download_task(url: str, **options: Any) -> "TaskItem":
     """Build a queued DOWNLOAD task. `options` are download_media keywords."""
     from max_cli.core.engines.task_migration import DOWNLOAD_OPTION_KEYS
 
-    payload: Dict[str, Any] = {"url": url}
+    payload: dict[str, Any] = {"url": url}
     for key in DOWNLOAD_OPTION_KEYS:
         if key in options:
             value = options[key]
@@ -350,14 +350,14 @@ def make_download_task(url: str, **options: Any) -> "TaskItem":
     )
 
 
-def _download_executor(task: "TaskItem") -> Dict[str, Any]:
+def _download_executor(task: "TaskItem") -> dict[str, Any]:
     engine = NetworkEngine()
     payload = task.payload
     url = payload["url"]
     out = Path(payload.get("output_path") or DEFAULT_DOWNLOAD_DIR)
-    finished_files: List[str] = []
+    finished_files: list[str] = []
 
-    def track_progress(status: Dict[str, Any]) -> None:
+    def track_progress(status: dict[str, Any]) -> None:
         if status.get("status") == "downloading":
             total = status.get("total_bytes") or status.get("total_bytes_estimate") or 0
             if total:

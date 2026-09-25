@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.cache import get_default_cache
@@ -18,7 +18,7 @@ DOWNLOAD_CHUNK_SIZE = 8192
 logger = logging.getLogger(__name__)
 
 
-def find_searchable_files(folder: Path, extensions: List[str]) -> List[Path]:
+def find_searchable_files(folder: Path, extensions: list[str]) -> list[Path]:
     """Files under `folder` (recursive) whose suffix is in `extensions`.
 
     `extensions` are given without dots and matched case-insensitively.
@@ -50,7 +50,7 @@ def download_image(url: str, destination: Path) -> Path:
     return destination
 
 
-def _ai_call_errors() -> Tuple[Type[BaseException], ...]:
+def _ai_call_errors() -> tuple[type[BaseException], ...]:
     """Errors from an AI request or from parsing its reply."""
     import openai
 
@@ -73,7 +73,7 @@ class AIEngine:
         if settings.OLLAMA_ENABLED:
             self.ollama_mode = True
 
-        self.history: List[Dict[str, str]] = []
+        self.history: list[dict[str, str]] = []
         self._history_file = Path.home() / ".max_cli" / "chat_history.json"
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_history()
@@ -137,7 +137,7 @@ class AIEngine:
         self.history = data.get("history", [])
         self._save_history()
 
-    def get_suggestions(self) -> List[str]:
+    def get_suggestions(self) -> list[str]:
         """Get context-aware suggestions based on conversation history."""
         if not self.history or not self.client:
             return [
@@ -219,7 +219,7 @@ Return as a JSON array of strings."""
 
     def interpret_intent(
         self, user_prompt: str, app_instance: Any, explain: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Translates natural language to CLI commands with local context."""
         if not self.client:
             if settings.OLLAMA_ENABLED:
@@ -292,7 +292,7 @@ If the request is unrelated to the tools or ambiguous, return:
         except Exception as e:
             raise MaxError(f"AI Interpretation Error: {e}") from e
 
-    def categorize_files(self, file_list: List[str]) -> Dict[str, str]:
+    def categorize_files(self, file_list: list[str]) -> dict[str, str]:
         """AI-powered semantic grouping of files."""
         cache = get_default_cache()
         cache_key = f"categorize:{','.join(sorted(file_list))}"
@@ -423,8 +423,8 @@ If the request is unrelated to the tools or ambiguous, return:
         raise MaxError("AI generated a response, but no image URL was found.")
 
     def run_pipeline(
-        self, operations: List[Dict[str, Any]], input_data: Any = None
-    ) -> List[Dict[str, Any]]:
+        self, operations: list[dict[str, Any]], input_data: Any = None
+    ) -> list[dict[str, Any]]:
         """
         Run a pipeline of AI operations.
 
@@ -519,7 +519,7 @@ If the request is unrelated to the tools or ambiguous, return:
 
         return results
 
-    def semantic_search(self, query: str, files: List[Path]) -> List[Dict[str, Any]]:
+    def semantic_search(self, query: str, files: list[Path]) -> list[dict[str, Any]]:
         """
         Search files by content using AI.
 
@@ -535,7 +535,7 @@ If the request is unrelated to the tools or ambiguous, return:
 
         results = []
 
-        skippable_errors: Tuple[Type[BaseException], ...] = (
+        skippable_errors: tuple[type[BaseException], ...] = (
             OSError,
             *_ai_call_errors(),
         )
@@ -575,8 +575,8 @@ Does this file match the query? Reply with YES or NO followed by a brief explana
         return results
 
     def extract_structured_data(
-        self, image_path: Path, schema: Dict[str, str]
-    ) -> Dict[str, Any]:
+        self, image_path: Path, schema: dict[str, str]
+    ) -> dict[str, Any]:
         """
         Extract structured data from an image using AI vision.
 

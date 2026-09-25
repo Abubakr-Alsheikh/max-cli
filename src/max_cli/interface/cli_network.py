@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from rich import box
@@ -74,7 +74,7 @@ def _download_stats() -> dict:
     return _get_task_manager().get_stats(task_type=TaskType.DOWNLOAD)
 
 
-def _print_outcome(task_ids: List[str]) -> None:
+def _print_outcome(task_ids: list[str]) -> None:
     """Print how many of `task_ids` completed and failed."""
     from max_cli.core.engines.task_queue import TaskStatus
 
@@ -196,7 +196,7 @@ def download_media(
         # Track if we should keep processing
         processing = False  # Don't start yet
 
-        queued_ids: List[str] = []
+        queued_ids: list[str] = []
 
         def process_forever():
             """Process queued downloads until the prompt loop ends."""

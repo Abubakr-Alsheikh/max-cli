@@ -4,7 +4,7 @@ import logging
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from max_cli.common.events import ProgressEvent, get_emitter
 from max_cli.core.engines.ffmpeg_base import FFmpegEngine
@@ -23,7 +23,7 @@ class AudioEngine(FFmpegEngine):
 
     def extract_audio(
         self, input_path: Path, output_path: Path, bitrate: str = "192k"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Extracts audio from video and converts it to the desired format.
         Supported extensions: .mp3, .wav, .aac, .flac
@@ -240,7 +240,7 @@ class AudioEngine(FFmpegEngine):
         strength: str = "medium",
         profile: Optional[str] = None,
         hum_cutoff: int = 80,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Denoise audio using FFmpeg audio filters.
         Emits ProgressEvent via the global event bus for CLI progress bars.
@@ -314,7 +314,7 @@ class AudioEngine(FFmpegEngine):
             bufsize=1,
         )
 
-        stderr_collected: List[str] = []
+        stderr_collected: list[str] = []
         stderr_lock = threading.Lock()
 
         def _collect_stderr():

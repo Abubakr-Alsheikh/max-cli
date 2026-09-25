@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
@@ -42,8 +42,8 @@ class TaskManager:
     LEGACY_DIR = Path.home() / ".max_cli"
 
     def __init__(self):
-        self._queue: List[TaskItem] = []
-        self._history: List[TaskItem] = []
+        self._queue: list[TaskItem] = []
+        self._history: list[TaskItem] = []
         self._lock = threading.Lock()
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
@@ -107,8 +107,8 @@ class TaskManager:
 
     def _migrate_legacy_stores(self) -> None:
         """Fold the old grab and download history files into this store once."""
-        migrated_queue: List[TaskItem] = []
-        migrated_history: List[TaskItem] = []
+        migrated_queue: list[TaskItem] = []
+        migrated_history: list[TaskItem] = []
         legacy_files = [
             task_migration.LEGACY_GRAB_QUEUE,
             task_migration.LEGACY_GRAB_HISTORY,
@@ -236,7 +236,7 @@ class TaskManager:
                     return item
         return None
 
-    def get_all(self, status: Optional[TaskStatus] = None) -> List[TaskItem]:
+    def get_all(self, status: Optional[TaskStatus] = None) -> list[TaskItem]:
         with self._lock:
             items = list(self._queue)
             if status:
@@ -252,7 +252,7 @@ class TaskManager:
             self._save_history()
         return task
 
-    def get_pending(self, task_type: Optional[TaskType] = None) -> List[TaskItem]:
+    def get_pending(self, task_type: Optional[TaskType] = None) -> list[TaskItem]:
         with self._lock:
             return [
                 i
@@ -265,7 +265,7 @@ class TaskManager:
         self,
         limit: int = 50,
         task_type: Optional[TaskType] = None,
-    ) -> List[TaskItem]:
+    ) -> list[TaskItem]:
         with self._lock:
             items = list(self._history)
             if task_type:
@@ -311,12 +311,12 @@ class TaskManager:
             self._save_history()
             return count
 
-    def get_stats(self, task_type: Optional[TaskType] = None) -> Dict[str, Any]:
+    def get_stats(self, task_type: Optional[TaskType] = None) -> dict[str, Any]:
         with self._lock:
             queue = [
                 i for i in self._queue if task_type is None or i.type == task_type
             ]
-            stats: Dict[str, Any] = {
+            stats: dict[str, Any] = {
                 "total": len(queue),
                 "pending": sum(1 for i in queue if i.status == TaskStatus.PENDING),
                 "running": sum(1 for i in queue if i.status == TaskStatus.RUNNING),

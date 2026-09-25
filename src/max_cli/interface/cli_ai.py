@@ -1,7 +1,7 @@
 import shlex
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from rich.panel import Panel
@@ -365,7 +365,7 @@ def semantic_search_cmd(
 @app.command("extract")
 def extract_data_cmd(
     target: Path = typer.Argument(..., help="Image file to extract data from."),
-    schema: List[str] = typer.Option(
+    schema: list[str] = typer.Option(
         ...,
         "--schema",
         "-s",

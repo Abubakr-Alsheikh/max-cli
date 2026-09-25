@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def find_pdfs(folder: Path) -> List[Path]:
+def find_pdfs(folder: Path) -> list[Path]:
     """PDFs directly inside `folder`, in natural order ("2" before "10").
 
     Skips names starting with "." or "_", which are hidden or temp files.
@@ -24,7 +24,7 @@ class PDFEngine:
     Core logic for PDF manipulation using PyMuPDF and Pillow.
     """
 
-    def merge_pdfs(self, input_paths: List[Path], output_path: Path) -> int:
+    def merge_pdfs(self, input_paths: list[Path], output_path: Path) -> int:
         """
         Combines multiple PDF files into one.
         Returns the total number of pages in the merged document.
@@ -108,12 +108,12 @@ class PDFEngine:
 
     def bundle_pdfs(
         self,
-        input_paths: List[Path],
+        input_paths: list[Path],
         output_path: Path,
         compress: bool = True,
         dpi: int = 150,
         quality: int = 80,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Merge PDFs into one file and optionally compress it.
 
         The merge goes to a hidden temp file next to `output_path`, so a
@@ -238,7 +238,7 @@ class PDFEngine:
         input_path: Path,
         output_dir: Path,
         chunk_size: int = 10,
-    ) -> List[Path]:
+    ) -> list[Path]:
         """
         Split a PDF into multiple files of chunk_size pages each.
 
@@ -407,7 +407,7 @@ class PDFEngine:
 
         return result_text
 
-    def extract_form_data(self, input_path: Path) -> Dict[str, str]:
+    def extract_form_data(self, input_path: Path) -> dict[str, str]:
         """
         Extract data from PDF form fields.
 
@@ -420,7 +420,7 @@ class PDFEngine:
             raise FileNotFoundError(f"File not found: {input_path}")
 
         doc = fitz.open(input_path)
-        form_data: Dict[str, str] = {}
+        form_data: dict[str, str] = {}
 
         for page in doc:
             widgets = page.widgets()
@@ -432,7 +432,7 @@ class PDFEngine:
         return form_data
 
     def fill_form(
-        self, input_path: Path, output_path: Path, field_values: Dict[str, str]
+        self, input_path: Path, output_path: Path, field_values: dict[str, str]
     ) -> None:
         """
         Fill PDF form fields with provided values.
@@ -524,7 +524,7 @@ class PDFEngine:
         )
         doc.close()
 
-    def compare_pdfs(self, path1: Path, path2: Path) -> Dict[str, Any]:
+    def compare_pdfs(self, path1: Path, path2: Path) -> dict[str, Any]:
         """
         Compare two PDFs and generate a diff report.
 
@@ -541,7 +541,7 @@ class PDFEngine:
         doc1 = fitz.open(path1)
         doc2 = fitz.open(path2)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "file1": path1.name,
             "file2": path2.name,
             "pages_equal": True,
@@ -581,7 +581,7 @@ class PDFEngine:
         return result
 
 
-def _pdf_merge_executor(task: "TaskItem") -> Dict[str, Any]:
+def _pdf_merge_executor(task: "TaskItem") -> dict[str, Any]:
     from pathlib import Path
 
     engine = PDFEngine()
@@ -598,7 +598,7 @@ def _pdf_merge_executor(task: "TaskItem") -> Dict[str, Any]:
     }
 
 
-def _pdf_compress_executor(task: "TaskItem") -> Dict[str, Any]:
+def _pdf_compress_executor(task: "TaskItem") -> dict[str, Any]:
     from pathlib import Path
 
     engine = PDFEngine()

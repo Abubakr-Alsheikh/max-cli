@@ -5,7 +5,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
 
@@ -36,16 +36,16 @@ class LoadedPlugin:
 class PluginManager:
     def __init__(
         self,
-        plugin_dirs: Optional[List[Path]] = None,
+        plugin_dirs: Optional[list[Path]] = None,
         config_dir: Optional[Path] = None,
     ):
-        self._plugins: Dict[str, LoadedPlugin] = {}
+        self._plugins: dict[str, LoadedPlugin] = {}
         self._config_dir = config_dir or self._get_default_config_dir()
         self._app: Optional[Any] = None
         self._load_config()
         self._plugin_dirs = plugin_dirs or self._get_default_plugin_dirs()
 
-    def _get_default_plugin_dirs(self) -> List[Path]:
+    def _get_default_plugin_dirs(self) -> list[Path]:
         """User plugin folder plus folders listed under "plugin_dirs" in plugins.json.
 
         The current working directory is never searched: running `max` inside an
@@ -64,7 +64,7 @@ class PluginManager:
 
     def _load_config(self) -> None:
         config_file = self._config_dir / "plugins.json"
-        self._config_data: Dict[str, Any] = {}
+        self._config_data: dict[str, Any] = {}
         if config_file.exists():
             try:
                 loaded = json.loads(config_file.read_text(encoding="utf-8"))
@@ -89,14 +89,14 @@ class PluginManager:
     def app(self, value: Any) -> None:
         self._app = value
 
-    def discover_plugins(self) -> List[Type[Plugin]]:
-        plugins: List[Type[Plugin]] = []
+    def discover_plugins(self) -> list[type[Plugin]]:
+        plugins: list[type[Plugin]] = []
         for plugin_dir in self._plugin_dirs:
             plugins.extend(self._discover_plugins_in_dir(plugin_dir))
         return plugins
 
-    def _discover_plugins_in_dir(self, plugin_dir: Path) -> List[Type[Plugin]]:
-        plugins: List[Type[Plugin]] = []
+    def _discover_plugins_in_dir(self, plugin_dir: Path) -> list[type[Plugin]]:
+        plugins: list[type[Plugin]] = []
         if not plugin_dir.exists():
             return plugins
         for plugin_file in plugin_dir.glob("*.py"):
@@ -123,7 +123,7 @@ class PluginManager:
 
     def load_plugin(
         self,
-        plugin_class: Type[Plugin],
+        plugin_class: type[Plugin],
         **kwargs: Any,
     ) -> LoadedPlugin:
         plugin = plugin_class(**kwargs)
@@ -236,7 +236,7 @@ class PluginManager:
         loaded = self._plugins.get(name)
         return loaded.plugin if loaded else None
 
-    def list_plugins(self, include_disabled: bool = False) -> List[str]:
+    def list_plugins(self, include_disabled: bool = False) -> list[str]:
         if include_disabled:
             return list(self._plugins.keys())
         return [
@@ -245,10 +245,10 @@ class PluginManager:
             if loaded.enabled and loaded.plugin
         ]
 
-    def get_all_plugins(self) -> Dict[str, LoadedPlugin]:
+    def get_all_plugins(self) -> dict[str, LoadedPlugin]:
         return self._plugins.copy()
 
-    def get_plugin_info(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_plugin_info(self, name: str) -> Optional[dict[str, Any]]:
         loaded = self._plugins.get(name)
         if not loaded or not loaded.plugin:
             return None

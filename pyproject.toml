@@ -57,7 +57,7 @@ extend-exclude = [".agents", ".claude/skills"]
 [tool.ruff.lint]
 # Explicit rule set: newer ruff releases change the default selection, which
 # made CI (latest ruff) disagree with local runs. Widen this deliberately.
-select = ["E4", "E7", "E9", "F", "I", "B"]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["max_cli"]

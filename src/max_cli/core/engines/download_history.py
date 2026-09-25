@@ -8,7 +8,7 @@ settings did the user pick last time.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from max_cli.core.engines.task_manager import TaskManager, get_task_manager
@@ -27,13 +27,13 @@ class DownloadHistory:
         self,
         url: str,
         title: str = "",
-        output_files: Optional[List[str]] = None,
-        settings_used: Optional[Dict[str, Any]] = None,
+        output_files: Optional[list[str]] = None,
+        settings_used: Optional[dict[str, Any]] = None,
         file_size: int = 0,
         status: str = "completed",
     ) -> TaskItem:
         """Record a download that ran outside the queue."""
-        payload: Dict[str, Any] = dict(settings_used or {})
+        payload: dict[str, Any] = dict(settings_used or {})
         payload["url"] = url
         succeeded = status == TaskStatus.COMPLETED.value
         task = TaskItem(
@@ -50,7 +50,7 @@ class DownloadHistory:
         )
         return self._manager.record(task)
 
-    def is_already_downloaded(self, url: str) -> Optional[Dict[str, Any]]:
+    def is_already_downloaded(self, url: str) -> Optional[dict[str, Any]]:
         """Return the newest entry for `url`, or None if it was never downloaded."""
         for task in self._downloads():
             if task.payload.get("url") == url:
@@ -65,7 +65,7 @@ class DownloadHistory:
                 return str(Path(task.output_files[0]).parent)
         return None
 
-    def get_last_settings(self) -> Dict[str, Any]:
+    def get_last_settings(self) -> dict[str, Any]:
         """Return the options of the newest download, without its URL."""
         for task in self._downloads():
             settings = dict(task.payload)
@@ -73,10 +73,10 @@ class DownloadHistory:
             return settings
         return {}
 
-    def get_recent(self, limit: int = RECENT_DOWNLOADS_LIMIT) -> List[Dict[str, Any]]:
+    def get_recent(self, limit: int = RECENT_DOWNLOADS_LIMIT) -> list[dict[str, Any]]:
         """Return the newest entries, one per URL."""
         seen_urls = set()
-        entries: List[Dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
         for task in self._downloads():
             url = task.payload.get("url")
             if url in seen_urls:
@@ -87,7 +87,7 @@ class DownloadHistory:
                 break
         return entries
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         downloads = self._downloads()
         return {
             "total": len(downloads),
@@ -101,7 +101,7 @@ class DownloadHistory:
         """Remove every finished download from history. Returns the count."""
         return self._manager.clear_history(task_type=TaskType.DOWNLOAD)
 
-    def _downloads(self) -> List[TaskItem]:
+    def _downloads(self) -> list[TaskItem]:
         """Finished downloads, newest first."""
         return self._manager.get_history(limit=0, task_type=TaskType.DOWNLOAD)
 
@@ -114,7 +114,7 @@ def _file_size(task: TaskItem) -> int:
     return int(task.result.get("file_size") or 0)
 
 
-def _to_entry(task: TaskItem) -> Dict[str, Any]:
+def _to_entry(task: TaskItem) -> dict[str, Any]:
     settings = dict(task.payload)
     url = settings.pop("url", "")
     return {

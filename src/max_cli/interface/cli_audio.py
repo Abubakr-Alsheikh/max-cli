@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
@@ -298,7 +298,7 @@ def clear_metadata(
 @app.command("batch")
 @app.command("b", hidden=True)
 def batch_set_metadata(
-    targets: List[Path] = typer.Argument(
+    targets: list[Path] = typer.Argument(
         ..., help="Audio files to update (supports glob patterns)."
     ),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="Song title."),
@@ -364,7 +364,7 @@ def batch_set_metadata(
 @app.command("organize")
 @app.command("org", hidden=True)
 def organize_files(
-    targets: List[Path] = typer.Argument(
+    targets: list[Path] = typer.Argument(
         ..., help="Audio files to organize (supports glob patterns)."
     ),
     output: Path = typer.Option(
