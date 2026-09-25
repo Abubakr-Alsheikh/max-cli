@@ -253,28 +253,6 @@ class MaxDashboardApp(App):
         margin: 0 0 0 1;
     }
 
-    /* ══════════════════════════════════════════════════════
-       DOWNLOAD PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #download-options {
-        height: auto;
-        margin: 1 0;
-    }
-    #output-row {
-        height: auto;
-        margin-bottom: 1;
-    }
-    #download-actions {
-        height: auto;
-        margin: 1 0;
-    }
-    #recent-scroll {
-        height: 8;
-        border: solid $border;
-        background: $surface;
-        padding: 0 1;
-    }
 
     /* ══════════════════════════════════════════════════════
        CHAT PANEL
