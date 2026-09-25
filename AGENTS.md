@@ -221,7 +221,8 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 
 - **FFmpeg Auto-Resolution Pattern**:
   - Resolver: `src/max_cli/common/ffmpeg_resolver.py` (3-tier: PATH → `~/.max_cli/bin/` → auto-download)
-  - Engine: `src/max_cli/core/engines/media_engine.py` (`__init__` calls `_resolve_ffmpeg`, uses `self.ffmpeg_path` in all commands)
+  - Engine: `src/max_cli/core/engines/ffmpeg_base.py` (`FFmpegEngine.__init__` calls `_resolve_ffmpeg`; every command uses `self.ffmpeg_path`). `VideoEngine`, `AudioEngine` and `StreamEngine` subclass it, and `media_engine.MediaEngine` combines all three for existing callers
+  - Prompt: `src/max_cli/interface/ffmpeg_prompt.py` supplies the download confirmation and progress callbacks. The resolver never prompts itself
   - Interface: `src/max_cli/interface/cli_media.py` (`_get_engine()` with `auto_resolve=True`)
   - *Shows: Zero-friction onboarding — user never sees "FFmpeg not found". Binary auto-downloaded, validated, and cached.*
 
