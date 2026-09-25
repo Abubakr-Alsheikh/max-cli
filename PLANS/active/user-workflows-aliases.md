@@ -1,9 +1,10 @@
 # Plan: User-Defined Workflows & Aliases
 
-> Status: Draft
-> Priority: P1
-> Related: User Experience & Laziness (Feature 2D)
-> Depends on: None (standalone feature)
+**Status:** Draft
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** User Experience & Laziness (Feature 2D)
+**Depends on:** None (standalone feature)
 
 ## Overview
 

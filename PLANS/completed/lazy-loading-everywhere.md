@@ -1,9 +1,10 @@
 # Plan: Lazy Loading Everywhere (Startup Time Optimization)
 
-> Status: Completed
-> Priority: P0
-> Related: Architecture & System Design (Feature 3)
-> Depends on: None (can be implemented independently)
+**Status:** Completed
+**Priority:** P0
+**Updated:** 2026-09-25
+**Related:** Architecture & System Design (Feature 3)
+**Depends on:** None (can be implemented independently)
 
 ## Overview
 
@@ -96,14 +97,14 @@ main.py
 
 ## Goals
 
-- [ ] Reduce `max --help` startup time to < 50ms
-- [ ] Move all heavy third-party imports inside functions (lazy imports)
-- [ ] Remove module-level engine instantiation from interface files
-- [ ] Implement lazy import proxies for engine access
-- [ ] Fix cross-interface imports (`cli_files.py` → `cli_ai.py`)
-- [ ] Ensure no regression in command execution time (lazy import should only affect first call)
-- [ ] Add startup time benchmarks to prevent regression
-- [ ] Maintain backward compatibility — all commands work exactly the same
+- [D] Reduce `max --help` startup time to < 50ms (AGENTS.md sets the target at 200 ms now; `codebase-hardening.md` tracks it as D5)
+- [x] Move all heavy third-party imports inside functions (lazy imports)
+- [x] Remove module-level engine instantiation from interface files (now: a `_get_engine()` helper in each `cli_*.py`)
+- [D] Implement lazy import proxies for engine access (superseded: Phase 3 chose `_get_engine()` helpers, so `common/lazy.py` was never needed)
+- [x] Fix cross-interface imports (`cli_files.py` → `cli_ai.py`) (now: `_get_ai_engine()` in `cli_files.py`)
+- [x] Ensure no regression in command execution time (lazy import should only affect first call)
+- [x] Add startup time benchmarks to prevent regression (now: `tests/test_startup_time.py`)
+- [x] Maintain backward compatibility — all commands work exactly the same
 
 ---
 
@@ -833,11 +834,18 @@ def test_ai_engine_lazy_client():
 
 ## Success Criteria
 
-- [ ] `max --help` starts in < 100ms (measured with `time` command)
-- [ ] `yt_dlp`, `openai`, `PIL`, `fitz`, `mutagen` are NOT in `sys.modules` after `register(app)`
-- [ ] All existing tests pass without modification
-- [ ] `max images compress test.jpg` works correctly (PIL imported at call time)
-- [ ] `max ai ask "hello"` works correctly (openai imported at call time)
-- [ ] `max grab download <url>` works correctly (yt_dlp imported at call time)
-- [ ] Startup time benchmark test passes in CI
-- [ ] No `ImportError` at runtime for any command
+- [D] `max --help` starts in < 100ms (measured with `time` command) (replaced by the 200 ms AGENTS.md target, tracked as D5 in `codebase-hardening.md`)
+- [x] `yt_dlp`, `openai`, `PIL`, `fitz`, `mutagen` are NOT in `sys.modules` after `register(app)` (now: `test_heavy_package_not_imported_at_startup`, 12 packages)
+- [x] All existing tests pass without modification
+- [x] `max images compress test.jpg` works correctly (PIL imported at call time)
+- [x] `max ai ask "hello"` works correctly (openai imported at call time)
+- [x] `max grab download <url>` works correctly (yt_dlp imported at call time)
+- [x] Startup time benchmark test passes in CI (the 1.0 s ceiling and heavy-import checks pass; the 200 ms target test is a non-strict xfail)
+- [x] No `ImportError` at runtime for any command
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+  - The rule audit (`check_rules.py --audit`) reports 0 `lazy-import` and 0 `engine-at-import` violations. The full suite passes (795 passed).
+  - `QueueManager` (Phase 6) no longer exists. `core/engines/__init__.py` is empty, and `task_queue.EXECUTOR_MODULES` imports each executor's module on first use.
+  - Startup still misses the goal: `import max_cli.main` costs about 430 ms, mostly pydantic-settings through `max_cli.config`. The 50 ms and 100 ms numbers here predate the 200 ms target in AGENTS.md. D5 in `codebase-hardening.md` owns that work, so this plan closes.

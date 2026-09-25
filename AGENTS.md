@@ -236,8 +236,8 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 
 - **TUI Dashboard Pattern**:
   - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command, graceful fallback if textual missing)
-  - App: `src/max_cli/interface/tui/app.py` (Textual App with 9 tabs: Home, Download, Queue, History, Files, Tools, Config, System, AI Chat; keyboard shortcuts 1-9)
-  - Widgets: `src/max_cli/interface/tui/widgets/` (HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, ToolsPanel, ConfigPanel, SystemPanel, ChatPanel)
+  - App: `src/max_cli/interface/tui/app.py` (Textual App with a sidebar of 9 sections: Home, Download, Queue, History, Files, Analytics, Config, System, Chat; keys `q` quit, `r` refresh, `ctrl+b` toggle sidebar)
+  - Widgets: `src/max_cli/interface/tui/widgets/` (Sidebar, HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, AnalyticsPanel, ConfigPanel, SystemPanel, ChatPanel)
   - Registry: `src/max_cli/interface/tui/command_registry.py` (35+ command schemas across 7 categories with field definitions)
   - Executor: `src/max_cli/interface/tui/command_executor.py` (direct engine method calls, lazy engine loading, handles None/int/Path/dict return types)
   - Activity: `src/max_cli/interface/tui/activity_log.py` (unified activity logging across all operations, filtering by category)

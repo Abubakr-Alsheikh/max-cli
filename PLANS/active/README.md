@@ -1,61 +1,40 @@
 # Active Plans
 
-Place new plan files here.
+Plans being worked on. Finished plans move to `../completed/` and parked ones to `../deferred/`. The workflow lives in `.claude/skills/max-plans/SKILL.md`.
+
+Reconciled against the code on 2026-09-25 (hardening Phase 6).
 
 ## Current Active Plans
 
-### Phase 0: Hardening (Do First)
-| Plan | Status | Priority |
-|------|--------|----------|
-| [codebase-hardening.md](./codebase-hardening.md) | In Progress (Phases 0-5b done, D5 open) | P0 |
-
-### Phase 3: Dashboard UX (In Progress)
-| Plan | Status |
-|------|--------|
-| [dashboard-home-analytics-redesign.md](./dashboard-home-analytics-redesign.md) | Draft |
-
-### Phase 1: Architecture (Completed)
-| Plan | Status |
-|------|--------|
-| [lazy-loading-everywhere.md](./lazy-loading-everywhere.md) | Completed |
-| [event-driven-progress-system.md](./event-driven-progress-system.md) | Completed |
-| [global-task-queue.md](./global-task-queue.md) | Completed |
-
-### Phase 2: UX & Laziness
-| Plan | Status | Priority |
-|------|--------|----------|
-| [ffmpeg-auto-resolution.md](./ffmpeg-auto-resolution.md) | Completed | P0 |
-| [file-undo-transaction-log.md](./file-undo-transaction-log.md) | Completed | P1 |
-| [interactive-dashboard-tui.md](./interactive-dashboard-tui.md) | Completed | P2 |
-| [interactive-tui-expansion.md](./interactive-tui-expansion.md) | Completed | P1 |
-| [tui-bugfix-and-ux-improvements.md](./tui-bugfix-and-ux-improvements.md) | Completed | P0 |
-| [user-workflows-aliases.md](./user-workflows-aliases.md) | Draft | P1 |
-
-### Other Plans
-| Plan | Status |
-|------|--------|
-| [audio-noise-removal.md](./audio-noise-removal.md) | Draft |
-| [grab-media-improvements.md](./grab-media-improvements.md) | Draft |
-| [plugin_commands_migration.md](./plugin_commands_migration.md) | Draft |
+| Plan | Status | Priority | What's left |
+|------|--------|----------|-------------|
+| [codebase-hardening.md](./codebase-hardening.md) | In Progress | P0 | Phase 6 wrap-up, D5 (startup under 200 ms), exit-code decision |
+| [tui-bugfix-and-ux-improvements.md](./tui-bugfix-and-ux-improvements.md) | In Progress | P0 | Config search crash, chat blocks the UI, files filter, grab/download category mismatch |
+| [dashboard-home-analytics-redesign.md](./dashboard-home-analytics-redesign.md) | In Progress | P1 | Downloads stat card reads 0, panel tests, docs |
+| [interactive-tui-expansion.md](./interactive-tui-expansion.md) | In Progress | P1 | Unwired System buttons, blocking Chat/Files actions, registry/executor tests, dashboard docs |
+| [global-task-queue.md](./global-task-queue.md) | In Progress | P1 | `--queue` on the commands that already have executors; `audio_convert` and `ai_batch` executors |
+| [file-undo-transaction-log.md](./file-undo-transaction-log.md) | In Progress | P2 | 11 mypy errors in `common/transaction_log.py` |
+| [user-workflows-aliases.md](./user-workflows-aliases.md) | Draft | P1 | Not started |
+| [plugin_commands_migration.md](./plugin_commands_migration.md) | Draft | P2 | Not started; plugins are out of focus for now |
 
 ## Creating a New Plan
 
 ```markdown
 # Plan: <Feature Name>
 
-> Status: [Draft/In Progress/Completed]
-> Priority: [P0/P1/P2/P3]
+**Status:** Draft | In Progress | Completed | Deferred
+**Priority:** P0 | P1 | P2
+**Updated:** YYYY-MM-DD
 
-## Overview
+## Goal
+One paragraph: the user-visible outcome.
 
-Brief description.
+## Tasks
+- [ ] Engine: ...
+- [ ] Interface: ...
+- [ ] Tests: ...
+- [ ] Docs: README.md, docs/commands/<group>.md
 
-## Goals
-
-- [ ] Goal 1
-- [ ] Goal 2
-
-## Implementation Notes
-
-Technical notes.
+## Decisions
+- <decision> (why)
 ```

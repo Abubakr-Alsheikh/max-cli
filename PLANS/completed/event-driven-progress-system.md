@@ -1,8 +1,9 @@
 # Plan: Unified Event-Driven Progress System
 
-> Status: Completed
-> Priority: P1
-> Related: Architecture & System Design (Feature 1)
+**Status:** Completed
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** Architecture & System Design (Feature 1)
 
 ## Overview
 
@@ -34,14 +35,14 @@ This plan introduces an **Event Emitter pattern** using Python's `queue.Queue` w
 
 ## Goals
 
-- [ ] Remove all Rich imports from `common/concurrent.py`
-- [ ] Create a universal `EventEmitter` class in `common/`
-- [ ] Define a standardized event schema (typed dicts/Pydantic models)
-- [ ] Refactor `process_batch_parallel` to emit events instead of accepting Rich objects
-- [ ] Refactor engines to emit progress events (MediaEngine, ImageEngine, PDFEngine, NetworkEngine)
-- [ ] Create an `EventSubscriber` utility in `interface/` that listens to events and updates Rich UI
-- [ ] Maintain backward compatibility — existing commands should not break
-- [ ] Add tests for EventEmitter and EventSubscriber
+- [x] Remove all Rich imports from `common/concurrent.py`
+- [x] Create a universal `EventEmitter` class in `common/`
+- [x] Define a standardized event schema (typed dicts/Pydantic models) (now: dataclasses in `common/events.py`)
+- [x] Refactor `process_batch_parallel` to emit events instead of accepting Rich objects
+- [x] Refactor engines to emit progress events (MediaEngine, ImageEngine, PDFEngine, NetworkEngine) (now: image and PDF batches emit through `process_batch_parallel`, `NetworkEngine` emits `DownloadProgressEvent`, `AudioEngine` denoise emits `ProgressEvent`)
+- [x] Create an `EventSubscriber` utility in `interface/` that listens to events and updates Rich UI
+- [x] Maintain backward compatibility — existing commands should not break
+- [x] Add tests for EventEmitter and EventSubscriber (now: `test_events.py`, `test_event_subscriber.py`, `test_download_progress.py`)
 
 ---
 
@@ -741,9 +742,16 @@ def test_subscriber_updates_progress():
 
 ## Success Criteria
 
-- [ ] `common/concurrent.py` has zero Rich imports
-- [ ] All batch operations emit standardized events
-- [ ] `cli_images.py` fully migrated to event-driven progress
-- [ ] All existing tests pass
-- [ ] New event system tests pass
-- [ ] No regression in CLI output quality (Rich UI looks the same or better)
+- [x] `common/concurrent.py` has zero Rich imports
+- [x] All batch operations emit standardized events
+- [x] `cli_images.py` fully migrated to event-driven progress
+- [x] All existing tests pass
+- [x] New event system tests pass
+- [x] No regression in CLI output quality (Rich UI looks the same or better)
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+  - Hardening Phase 3 switched the event models from pydantic to dataclasses to cut startup cost.
+  - `cli_images.py`, `cli_pdf.py` (compress) and `cli_network.py` use `EventSubscriber`. `cli_media.py` subscribes directly for `denoise`.
+  - Video commands other than `denoise` show `console.status` and emit no per-file events, as Phase 5 decided. The deprecated `progress`/`task_id` parameters are gone from `process_batch_parallel`.

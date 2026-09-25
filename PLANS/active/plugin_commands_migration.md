@@ -1,5 +1,11 @@
 # Plan: Convert CLI Commands to Optional Plugins
 
+**Status:** Draft
+**Priority:** P2
+**Updated:** 2026-09-25
+
+Out of focus for now (maintainer, 2026-09-25). Hardening Phase 3 emptied `core/engines/__init__.py` and made engine loading lazy, which this plan needs.
+
 ## Overview
 
 This plan outlines which CLI commands should be moved from built-in to optional plugins, allowing users to install only the features they need.

@@ -1,8 +1,9 @@
 # Plan: Dashboard Home Redesign + Analytics Tab
 
-> Status: Draft
-> Priority: P1
-> Related: UX & Laziness (Feature 2C Phase 3)
+**Status:** In Progress
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** UX & Laziness (Feature 2C Phase 3)
 
 ## Overview
 
@@ -10,11 +11,11 @@ Redesign the Home tab into a live system dashboard and add a dedicated Analytics
 
 ## Goals
 
-- [ ] **Home tab redesigned** — live system status bar (CPU/Memory/Disk), stats cards, richer activity feed, better quick-action grid layout
-- [ ] **Analytics tab created** — live CPU, memory, disk monitoring, per-category activity breakdowns, storage management
-- [ ] **`psutil` added as optional TUI dependency** for cross-platform system monitoring
-- [ ] All auto-refreshing every 2 seconds for a "live terminal" feel
-- [ ] Zero UX regressions on existing tabs
+- [x] **Home tab redesigned** — live system status bar (CPU/Memory/Disk), stats cards, richer activity feed, better quick-action grid layout (commit 9964cd6; three quick-action cards, not a 2x4 grid)
+- [x] **Analytics tab created** — live CPU, memory, disk monitoring, per-category activity breakdowns, storage management (`widgets/analytics_panel.py`)
+- [x] **`psutil` added as optional TUI dependency** for cross-platform system monitoring
+- [x] All auto-refreshing every 2 seconds for a "live terminal" feel
+- [x] Zero UX regressions on existing tabs
 
 ## Implementation Details
 
@@ -325,32 +326,34 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 
 ### Manual Testing Checklist
 
-- [ ] `max dashboard` starts and Home tab shows system status bar
-- [ ] CPU, Memory, Disk progress bars update every 2 seconds
-- [ ] Stats cards show correct counts
-- [ ] Quick actions grid is 2x4, clickable, routes to correct tabs
-- [ ] Activity feed shows latest 10 entries with proper formatting
-- [ ] Analytics tab shows live CPU/memory/disk numbers
-- [ ] Activity by category bars reflect actual ActivityLog data
-- [ ] Storage section shows correct cache/backup sizes
-- [ ] Tab switch works without lag
-- [ ] `psutil` not imported at module level (lazy inside methods)
-- [ ] All existing tabs (Download, Queue, History, Files, Config, System, AI Chat) work as before
+- [x] `max dashboard` starts and Home tab shows system status bar
+- [x] CPU, Memory, Disk progress bars update every 2 seconds
+- [ ] Stats cards show correct counts. The Downloads card reads `ActivityLog.get_stats()["download"]`, but `DownloadPanel` logs through `CommandExecutor` with `category="grab"`, so the card stays at 0.
+- [D] Quick actions grid is 2x4, clickable, routes to correct tabs. Commit 9964cd6 kept three cards (Download Media, Smart Sort Files, Ask AI), the only ones with a section to route to. All three route correctly.
+- [x] Activity feed shows latest 10 entries with proper formatting
+- [x] Analytics tab shows live CPU/memory/disk numbers
+- [x] Activity by category bars reflect actual ActivityLog data
+- [x] Storage section shows correct cache/backup sizes
+- [x] Tab switch works without lag (now: sidebar sections toggle `display`)
+- [x] `psutil` not imported at module level (lazy inside methods)
+- [x] All existing tabs (Download, Queue, History, Files, Config, System, AI Chat) work as before
 
 ## Success Criteria
 
-- [ ] `max dashboard` launches with new Home tab layout
-- [ ] Home tab shows live CPU, memory, disk progress bars
-- [ ] Home tab shows 4 stat cards with real data
-- [ ] Home tab has 2x4 quick action grid
-- [ ] Analytics tab exists between Files and Config
-- [ ] Analytics tab shows live system resources
-- [ ] Analytics tab shows activity stats and category breakdown
-- [ ] Analytics tab shows storage info (cache, backups)
-- [ ] All data auto-refreshes every 2 seconds
-- [ ] `psutil` is only imported inside methods, not at module level
-- [ ] `ruff check`, `mypy`, and `pytest` all pass
-- [ ] `_format_bytes()` duplication replaced with `common.utils.format_size`
+- [x] `max dashboard` launches with new Home tab layout
+- [x] Home tab shows live CPU, memory, disk progress bars
+- [ ] Home tab shows 4 stat cards with real data. All four cards (Commands, Downloads, Queue, Cached) render, but the Downloads count is wrong (see above).
+- [D] Home tab has 2x4 quick action grid. Replaced by three routable cards (see the checklist above).
+- [x] Analytics tab exists between Files and Config (now: a `Sidebar` section in that position)
+- [x] Analytics tab shows live system resources
+- [x] Analytics tab shows activity stats and category breakdown
+- [x] Analytics tab shows storage info (cache, backups)
+- [x] All data auto-refreshes every 2 seconds (app.py refreshes the visible panel)
+- [x] `psutil` is only imported inside methods, not at module level
+- [x] `ruff check`, `mypy`, and `pytest` all pass (mypy is clean on `home_panel.py`, `analytics_panel.py` and `system_panel.py`)
+- [x] `_format_bytes()` duplication replaced with `common.utils.format_size`
+- [ ] Tests: the three Testing Strategy tests (analytics panel render, home stats render, analytics section switch) do not exist yet.
+- [ ] Docs: `docs/commands/dashboard.md` and README.md do not mention the Home or Analytics sections.
 
 ## Risks & Mitigations
 
@@ -360,3 +363,10 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 | `psutil.cpu_percent(interval=0)` returns 0.0 on first call on some platforms | CPU shows 0% briefly | Call `psutil.cpu_percent(interval=0)` once during mount to warm up the counter |
 | Frequent refresh (2s) causes flicker or high CPU | Poor UX or battery drain | Textual's reactive system only updates changed values; `psutil` calls are cheap (<1ms) |
 | Large ActivityLog (500 entries) parsing every 2s | Slow refresh | Cache stats in `ActivityLog.get_stats()` or debounce to every 5s for slow metrics |
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6. Commit 9964cd6 shipped nearly all of this plan while the file still said Draft. Status is now In Progress; the Downloads count, tests and docs remain.
+- Home keeps three quick-action cards instead of a 2x4 grid, because only those three map to a dashboard section.
+- The Analytics storage block shows the transaction count on its "Logs" line.
+- Queue depth now comes from `get_task_manager()` (`core/engines/task_manager.py`), which replaced `DaemonManager`.
