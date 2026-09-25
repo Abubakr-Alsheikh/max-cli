@@ -7,6 +7,74 @@ if TYPE_CHECKING:
 
 SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
 
+# ID3 frame for each field set_metadata writes. Formats that mutagen can't
+# open in "easy" mode (WAV) keep raw ID3 tags, which need frame objects.
+ID3_FRAME_IDS = {
+    "title": "TIT2",
+    "artist": "TPE1",
+    "album": "TALB",
+    "albumartist": "TPE2",
+    "genre": "TCON",
+    "date": "TDRC",
+    "tracknumber": "TRCK",
+    "discnumber": "TPOS",
+    "composer": "TCOM",
+}
+ID3_TEXT_ENCODING_UTF8 = 3
+
+
+def _tag_text(value: Any) -> str:
+    """Tag value as display text. Vorbis and MP4 tags hold lists of strings."""
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def _prepare_target(file_path: Path, output_path: Optional[Path]) -> Path:
+    """The file to tag: `file_path`, or a fresh copy of it at `output_path`.
+
+    mutagen can only save into a file that already holds the audio, so a new
+    output file starts as a copy of the source.
+    """
+    import shutil
+
+    if output_path is None or output_path == file_path:
+        return file_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(file_path, output_path)
+    return output_path
+
+
+def _open_for_tagging(path: Path) -> Any:
+    """Open `path` with tags ready to edit (easy key names where possible)."""
+    from mutagen._file import File as MutagenFile
+
+    audio = MutagenFile(path, easy=True)
+    if audio is None:
+        raise ValueError(f"Unable to read file: {path}")
+    if audio.tags is None:
+        audio.add_tags()
+    return audio
+
+
+def _set_tag(audio: Any, field: str, value: str) -> None:
+    from mutagen import id3
+
+    if not isinstance(audio.tags, id3.ID3):
+        audio[field] = value
+        return
+    if field == "comment":
+        frame = id3.COMM(
+            encoding=ID3_TEXT_ENCODING_UTF8, lang="eng", desc="", text=[value]
+        )
+        audio.tags.setall("COMM", [frame])
+        return
+    frame_id = ID3_FRAME_IDS[field]
+    frame_class = getattr(id3, frame_id)
+    audio.tags.setall(
+        frame_id, [frame_class(encoding=ID3_TEXT_ENCODING_UTF8, text=[value])]
+    )
+
 
 def find_audio_files(folder: Path) -> List[Path]:
     """Supported audio files directly inside `folder`, sorted by name."""
@@ -67,7 +135,7 @@ class AudioMetadataEngine:
             except Exception:
                 value = None
             if value is not None:
-                val_str = str(value)
+                val_str = _tag_text(value)
                 short = frame_id.split(":")[0]
                 if short in ID3_CONVENIENCE:
                     metadata[ID3_CONVENIENCE[short]] = val_str
@@ -101,12 +169,8 @@ class AudioMetadataEngine:
         Set metadata on an audio file.
         If output_path is provided, writes to a new file; otherwise modifies in place.
         """
-        from mutagen._file import File as MutagenFile
-
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
-
-        target = output_path if output_path else file_path
 
         if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             raise ValueError(
@@ -114,33 +178,25 @@ class AudioMetadataEngine:
                 f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
             )
 
-        audio = MutagenFile(file_path)
+        fields = {
+            "title": title,
+            "artist": artist,
+            "album": album,
+            "albumartist": albumartist,
+            "genre": genre,
+            "date": date,
+            "tracknumber": tracknumber,
+            "discnumber": discnumber,
+            "composer": composer,
+            "comment": comment,
+        }
+        target = _prepare_target(file_path, output_path)
+        audio = _open_for_tagging(target)
+        for field, value in fields.items():
+            if value is not None:
+                _set_tag(audio, field, value)
 
-        if audio is None:
-            raise ValueError(f"Unable to read file: {file_path}")
-
-        if title is not None:
-            audio["title"] = title
-        if artist is not None:
-            audio["artist"] = artist
-        if album is not None:
-            audio["album"] = album
-        if albumartist is not None:
-            audio["albumartist"] = albumartist
-        if genre is not None:
-            audio["genre"] = genre
-        if date is not None:
-            audio["date"] = date
-        if tracknumber is not None:
-            audio["tracknumber"] = tracknumber
-        if discnumber is not None:
-            audio["discnumber"] = discnumber
-        if composer is not None:
-            audio["composer"] = composer
-        if comment is not None:
-            audio["comment"] = comment
-
-        audio.save(target)
+        audio.save()
         return target
 
     def clear_metadata(
@@ -158,27 +214,23 @@ class AudioMetadataEngine:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        target = output_path if output_path else file_path
-
         if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             raise ValueError(
                 f"Unsupported format: {file_path.suffix}. "
                 f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
             )
 
-        audio = MutagenFile(file_path)
+        target = _prepare_target(file_path, output_path)
+        audio = MutagenFile(target)
 
         if audio is None:
-            raise ValueError(f"Unable to read file: {file_path}")
+            raise ValueError(f"Unable to read file: {target}")
 
-        if keep_duration and hasattr(audio, "info"):
-            audio.info.length
-
-        tags_to_remove = list(audio.keys())
-        for key in tags_to_remove:
+        # Removing tags never touches the stream info (duration, bitrate).
+        for key in list(audio.keys()):
             del audio[key]
 
-        audio.save(target)
+        audio.save()
 
         return target
 
@@ -235,23 +287,23 @@ class AudioMetadataEngine:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        stem = file_path.stem
-        parts = stem.split(" - ")
+        parts = [part.strip() for part in file_path.stem.split(" - ")]
 
-        title = None
+        track = None
         artist = None
-
-        if len(parts) >= 2:
-            artist = parts[0].strip()
-            title = parts[1].strip()
-        elif len(parts) == 1:
-            title = parts[0].strip()
+        if len(parts) >= 3 and parts[0].isdigit():
+            track, artist, title = parts[0], parts[1], " - ".join(parts[2:])
+        elif len(parts) >= 2:
+            artist, title = parts[0], " - ".join(parts[1:])
+        else:
+            title = parts[0]
 
         return self.set_metadata(
             file_path,
             output_path,
             title=title,
             artist=artist,
+            tracknumber=track,
         )
 
     def organize(

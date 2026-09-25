@@ -153,10 +153,6 @@ def test_get_metadata_maps_id3_frames_to_friendly_names(engine, tmp_path):
     assert metadata["sample_rate"] == 44100
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="get_metadata str()s Vorbis comment lists: FLAC title reads as \"['T']\"",
-)
 def test_get_metadata_returns_plain_strings_for_flac(engine, flac_file):
     engine.set_metadata(flac_file, title="T")
 
@@ -217,11 +213,6 @@ def test_set_metadata_unsupported_extension_raises(engine, tmp_path):
         engine.set_metadata(text_file, title="x")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="set_metadata opens files without easy=True, so ID3 tags reject "
-    "plain string keys: TypeError 'x' not a Frame instance",
-)
 @pytest.mark.parametrize("builder", [make_mp3, make_wav], ids=["mp3", "wav"])
 def test_set_metadata_on_id3_formats(engine, tmp_path, builder):
     suffix = ".mp3" if builder is make_mp3 else ".wav"
@@ -232,11 +223,6 @@ def test_set_metadata_on_id3_formats(engine, tmp_path, builder):
     assert engine.get_metadata(audio_path)["title"] == "x"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="set_metadata passes output_path to mutagen save(), which needs an "
-    "existing file; writing to a new file raises MutagenError",
-)
 def test_set_metadata_to_new_output_path(engine, flac_file, tmp_path):
     output_path = tmp_path / "copy.flac"
 
@@ -323,11 +309,6 @@ def test_auto_tag_missing_file_raises(engine, tmp_path):
         engine.auto_tag_from_filename(tmp_path / "A - B.flac")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="docstring promises 'Track - Artist - Title' support, but the code "
-    "takes parts[0] as artist, so '01 - Artist - Title' tags artist='01'",
-)
 def test_auto_tag_handles_track_artist_title(engine, tmp_path):
     audio_path = make_flac(tmp_path / "01 - Artist - Title.flac")
 
@@ -511,11 +492,6 @@ def test_organize_records_moves_in_transaction_log(monkeypatch, tmp_path):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="get_metadata returns \"['Artist']\" for FLAC, so organize creates "
-    "a folder named ['Artist'] instead of Artist",
-)
 def test_organize_real_flac_by_artist(engine, tmp_path):
     source_dir = tmp_path / "in"
     source_dir.mkdir()
