@@ -13,12 +13,13 @@ max files organize <directory>
 Find duplicate files.
 
 ```bash
-max files duplicates <directory> [--recursive] [--delete]
+max files duplicates <directory> [--recursive] [--delete] [--force]
 ```
 
 **Options:**
 - `-r, --recursive` - Search recursively
-- `-d, --delete` - Delete duplicates
+- `-d, --delete` - Delete duplicates, keeping the alphabetically first copy of each group. Asks before deleting.
+- `-f, --force` - Delete without asking
 
 ## shred
 
