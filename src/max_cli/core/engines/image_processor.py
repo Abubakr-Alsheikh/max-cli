@@ -1,5 +1,24 @@
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
+
+if TYPE_CHECKING:
+    from PIL import Image
+
+
+def _pixels_only(img: "Image.Image") -> "Image.Image":
+    """A copy of `img` with its pixels (and palette) but no EXIF or other info.
+
+    Uses paste instead of getdata/putdata: getdata is deprecated in Pillow 12,
+    and the old rebuild dropped the palette of "P" mode images.
+    """
+    from PIL import Image
+
+    clean_img = Image.new(img.mode, img.size)
+    palette = img.getpalette()
+    if img.mode == "P" and palette:
+        clean_img.putpalette(palette)
+    clean_img.paste(img)
+    return clean_img
 
 
 class ImageEngine:
@@ -19,10 +38,7 @@ class ImageEngine:
         from PIL import Image
 
         with Image.open(input_path) as img:
-            data = list(img.getdata())
-            clean_img = Image.new(img.mode, img.size)
-            clean_img.putdata(data)
-            clean_img.save(output_path, optimize=True)
+            _pixels_only(img).save(output_path, optimize=True)
 
     def process_single_image(
         self,
@@ -119,9 +135,7 @@ class ImageEngine:
 
             if strip_exif:
                 # Rebuild image to drop all hidden metadata blocks
-                clean_img = Image.new(img.mode, img.size)
-                clean_img.putdata(list(img.getdata()))
-                clean_img.save(output_path, target_format, **save_args)
+                _pixels_only(img).save(output_path, target_format, **save_args)
             else:
                 img.save(output_path, target_format, **save_args)
 

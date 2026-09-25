@@ -201,3 +201,16 @@ def test_strip_metadata_rewrites_pixels_only(engine, tmp_path):
     with Image.open(output_path) as result:
         assert result.size == (10, 10)
         assert result.getpixel((0, 0)) == (0, 0, 255)
+
+
+def test_strip_metadata_keeps_palette_images_intact(tmp_path):
+    """The old getdata/putdata rebuild dropped the palette of "P" images."""
+    source = tmp_path / "palette.png"
+    Image.new("RGB", (8, 8), color=(200, 30, 60)).convert("P").save(source)
+
+    output = tmp_path / "clean.png"
+    ImageEngine().strip_metadata(source, output)
+
+    with Image.open(source) as original, Image.open(output) as cleaned:
+        expected = original.convert("RGB").getpixel((0, 0))
+        assert cleaned.convert("RGB").getpixel((0, 0)) == expected
