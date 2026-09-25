@@ -167,6 +167,9 @@ def find_duplicates(
     delete: bool = typer.Option(
         False, "-d", "--delete", help="Delete duplicates (keeps one copy)."
     ),
+    force: bool = typer.Option(
+        False, "-f", "--force", help="Delete without asking for confirmation."
+    ),
 ):
     """
     Find and optionally remove duplicate files based on content.
@@ -195,6 +198,13 @@ def find_duplicates(
             for p in paths:
                 console.print(f"  {p}")
             console.print()
+
+        if delete and not force:
+            if not Confirm.ask(
+                f"Delete {total_dupes} duplicate(s)? A backup is kept for undo."
+            ):
+                console.print("[dim]Cancelled. Nothing was deleted.[/dim]")
+                return
 
         if delete:
             from max_cli.common.transaction_log import TransactionLog

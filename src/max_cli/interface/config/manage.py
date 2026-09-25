@@ -126,7 +126,6 @@ def validate_config():
 
     issues = []
 
-    table.add_row("MAX_WORKERS", str(settings.MAX_WORKERS), "[green]OK[/green]")
     table.add_row("BATCH_SIZE", str(settings.BATCH_SIZE), "[green]OK[/green]")
     table.add_row(
         "DOWNLOAD_TIMEOUT", str(settings.DOWNLOAD_TIMEOUT), "[green]OK[/green]"

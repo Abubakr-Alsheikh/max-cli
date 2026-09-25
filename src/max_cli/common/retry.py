@@ -22,6 +22,8 @@ def retry(
         backoff: Multiplier for delay after each retry
         exceptions: Tuple of exceptions to catch and retry
     """
+    if max_attempts < 1:
+        raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)

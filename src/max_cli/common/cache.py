@@ -138,6 +138,13 @@ def get_default_cache() -> Cache:
     return _default_cache
 
 
+def _key_text(value: Any) -> str:
+    """Cache-key text; paths resolve so "a.txt" and "./a.txt" share a key."""
+    if isinstance(value, Path):
+        return str(value.resolve())
+    return str(value)
+
+
 def cached(key_prefix: str, ttl: Optional[int] = None):
     """Decorator for caching function results.
 
@@ -150,8 +157,8 @@ def cached(key_prefix: str, ttl: Optional[int] = None):
         def wrapper(*args, **kwargs):
             cache = get_default_cache()
             key_parts = [key_prefix]
-            key_parts.extend(str(arg) for arg in args if not isinstance(arg, Path))
-            key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+            key_parts.extend(_key_text(arg) for arg in args)
+            key_parts.extend(f"{k}={_key_text(v)}" for k, v in sorted(kwargs.items()))
             cache_key = ":".join(key_parts)
 
             result = cache.get(cache_key)

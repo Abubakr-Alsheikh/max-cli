@@ -34,7 +34,11 @@ def merge_pdfs(
     if inputs is None:
         inputs = [Path(".")]
 
-    files_to_merge = _resolve_files(inputs)
+    try:
+        files_to_merge = _resolve_files(inputs)
+    except ValueError as e:
+        log_error(str(e))
+        raise typer.Exit(1)
 
     if not output:
         # Smart default naming
@@ -460,7 +464,8 @@ def ocr_pdf(
     except RuntimeError as e:
         log_error(str(e))
         console.print(
-            "[yellow]Tip: Install OCR dependencies with: pip install max-cli[ocr][/yellow]"
+            # "\[" keeps Rich from reading [ocr] as a style tag.
+            "[yellow]Tip: Install OCR dependencies with: pip install max-cli\\[ocr][/yellow]"
         )
     except Exception as e:
         log_error(f"OCR failed: {e}")
@@ -496,7 +501,7 @@ def extract_form(
 @app.command("form-fill")
 def fill_form(
     target: Path = typer.Argument(..., help="PDF form to fill."),
-    field: str = typer.Option(
+    field: List[str] = typer.Option(
         ...,
         "-f",
         "--field",

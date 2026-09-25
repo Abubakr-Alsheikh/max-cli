@@ -4,14 +4,12 @@ from max_cli.interface.config import setup_app, grab_app, manage_app
 
 app = typer.Typer(help="Manage API keys and settings.")
 
-app.add_typer(setup_app, name="setup")
-app.add_typer(grab_app, name="grab")
-app.add_typer(manage_app, name="show")
-app.add_typer(manage_app, name="save")
-app.add_typer(manage_app, name="reset")
-app.add_typer(manage_app, name="validate")
-app.add_typer(manage_app, name="export")
-app.add_typer(manage_app, name="import")
+# Mount the sub-apps without a name so their commands sit directly under
+# `max config` (`max config show`). A name made each one a nested group, so
+# only `max config show show` worked.
+app.add_typer(setup_app)
+app.add_typer(grab_app)
+app.add_typer(manage_app)
 
 
 @app.command("setup-ffmpeg")

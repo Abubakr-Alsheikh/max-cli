@@ -111,11 +111,6 @@ class TestHistory:
         assert "Downloaded clip" not in result.output
         assert "Task History (1 items)" in result.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_queue.queue_history calls TaskType(task_type) unguarded: an "
-        "unknown --type raises a raw ValueError instead of a friendly error",
-    )
     def test_unknown_type_is_reported(self):
         result = runner.invoke(queue_app, ["history", "--type", "bogus"])
         assert result.exit_code != 0

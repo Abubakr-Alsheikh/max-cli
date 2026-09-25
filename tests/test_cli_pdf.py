@@ -109,12 +109,6 @@ class TestMerge:
         assert "Error: Merge failed: disk full" in result.output
         assert not output_path.exists()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_pdf.merge_pdfs calls _resolve_files outside its try block: "
-        "no PDF inputs raise a raw ValueError instead of log_error + exit 1 "
-        "(bundle handles the same case)",
-    )
     def test_no_pdfs_is_reported(self, tmp_path):
         empty_folder = tmp_path / "empty"
         empty_folder.mkdir()
@@ -285,12 +279,6 @@ class TestOtherCommands:
         assert result.exit_code == 1
         assert "Invalid field format: x" in result.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_pdf.fill_form declares --field as str, not List[str]: the "
-        "loop walks the characters of one value, so 'name=John' fails on 'n' "
-        "and repeated -f flags keep only the last one",
-    )
     @patch(ENGINE_PATH)
     def test_form_fill_passes_fields(self, mock_get_engine, dummy_pdf):
         result = runner.invoke(
@@ -314,11 +302,6 @@ class TestOtherCommands:
         assert "Error: pytesseract missing" in result.output
         assert "Tip: Install OCR dependencies" in result.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_pdf.ocr_pdf prints 'pip install max-cli[ocr]' through Rich "
-        "markup, which eats '[ocr]' as a style tag",
-    )
     @patch(ENGINE_PATH)
     def test_ocr_install_tip_keeps_extra_name(self, mock_get_engine, dummy_pdf):
         mock_get_engine.return_value.ocr_pdf.side_effect = RuntimeError("missing")

@@ -4,7 +4,7 @@ import shlex
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.logger import console, log_error, log_success
@@ -351,7 +351,7 @@ def semantic_search_cmd(
 @app.command("extract")
 def extract_data_cmd(
     target: Path = typer.Argument(..., help="Image file to extract data from."),
-    schema: str = typer.Option(
+    schema: List[str] = typer.Option(
         ...,
         "--schema",
         "-s",

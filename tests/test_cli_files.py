@@ -231,7 +231,9 @@ class TestDuplicates:
     def test_delete_keeps_one_copy_and_backs_up(self, work_dir, fake_home):
         _make_duplicates(work_dir)
 
-        result = runner.invoke(files_app, ["duplicates", str(work_dir), "--delete"])
+        result = runner.invoke(
+            files_app, ["duplicates", str(work_dir), "--delete", "--force"]
+        )
 
         assert result.exit_code == 0, result.output
         assert "Removed 1 duplicate(s)." in result.output
@@ -244,12 +246,6 @@ class TestDuplicates:
         assert result.exit_code == 0, result.output
         assert "No duplicates found!" in result.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_files.find_duplicates deletes on --delete with no "
-        "Confirm.ask prompt and no --force flag, which AGENTS.md section 14 "
-        "requires for destructive commands",
-    )
     def test_delete_asks_for_confirmation(self, work_dir):
         _make_duplicates(work_dir)
 

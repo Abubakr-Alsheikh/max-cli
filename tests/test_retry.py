@@ -118,3 +118,9 @@ def test_logs_warning_per_retry_and_error_on_give_up(mock_sleep, caplog):
         "Attempt 1/2 failed: a. Retrying in 1.0s...",
         "Failed after 2 attempts: b",
     ]
+
+
+def test_retry_rejects_zero_attempts():
+    """retry(max_attempts=0) used to end in `raise None` (TypeError)."""
+    with pytest.raises(ValueError, match="at least 1"):
+        retry(max_attempts=0)

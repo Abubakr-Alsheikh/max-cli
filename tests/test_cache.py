@@ -211,11 +211,6 @@ def test_cached_decorator_does_not_cache_none(default_cache):
     assert len(calls) == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="@cached drops Path arguments from the key, so calls with different "
-    "paths share one cache entry and return stale results",
-)
 def test_cached_decorator_distinguishes_path_arguments(default_cache, tmp_path):
     @cached("name")
     def file_name(path: Path) -> str:
