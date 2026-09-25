@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
-
 if TYPE_CHECKING:
     from max_cli.common.ffmpeg_resolver import ConfirmDownload, DownloadProgress
 

@@ -1,11 +1,12 @@
-import typer
 from pathlib import Path
 from typing import List, Optional
 
+import typer
+
+from max_cli.common.events import get_emitter
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size, natural_sort_key
 from max_cli.core.presets import PDF_COMPRESS_DPI, PDF_COMPRESS_QUALITY
-from max_cli.common.events import get_emitter
 from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer()

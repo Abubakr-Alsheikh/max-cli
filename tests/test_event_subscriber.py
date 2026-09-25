@@ -1,12 +1,12 @@
 from max_cli.common.events import (
-    EventEmitter,
     BatchProgressEvent,
-    FileStartEvent,
+    CompleteEvent,
+    EventEmitter,
     FileCompleteEvent,
     FileErrorEvent,
-    CompleteEvent,
-    StatusEvent,
+    FileStartEvent,
     ProgressEvent,
+    StatusEvent,
 )
 from max_cli.interface.event_subscriber import EventSubscriber
 

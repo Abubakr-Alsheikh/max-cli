@@ -55,4 +55,7 @@ target-version = "py39"
 [tool.ruff.lint]
 # Explicit rule set: newer ruff releases change the default selection, which
 # made CI (latest ruff) disagree with local runs. Widen this deliberately.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["max_cli"]

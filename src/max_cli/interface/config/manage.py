@@ -1,12 +1,13 @@
-import typer
 import json
 from pathlib import Path
+
+import typer
+from rich import box
 from rich.prompt import Confirm
 from rich.table import Table
-from rich import box
 
 from max_cli.common.atomic import atomic_write_json, atomic_write_text
-from max_cli.common.logger import console, log_success, log_error
+from max_cli.common.logger import console, log_error, log_success
 from max_cli.config import settings
 
 app = typer.Typer()

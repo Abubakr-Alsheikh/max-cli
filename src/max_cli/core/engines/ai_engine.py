@@ -1,12 +1,13 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Type
-from max_cli.config import settings
+from typing import Any, Dict, List, Optional, Tuple, Type
+
 from max_cli.common.atomic import atomic_write_json
+from max_cli.common.cache import get_default_cache
 from max_cli.common.exceptions import MaxError
 from max_cli.common.utils import encode_image_to_base64
-from max_cli.common.cache import get_default_cache
+from max_cli.config import settings
 
 LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
 IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 60

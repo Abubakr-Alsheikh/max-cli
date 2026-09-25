@@ -1,8 +1,10 @@
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from max_cli.core.engines.ai_engine import AIEngine
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from max_cli.common.exceptions import MaxError
+from max_cli.core.engines.ai_engine import AIEngine
 
 
 class TestAIEngine:

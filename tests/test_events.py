@@ -3,20 +3,20 @@ import subprocess
 import sys
 import threading
 
+from max_cli.common.concurrent import process_batch_parallel, process_batch_sequential
 from max_cli.common.events import (
     EVENT_QUEUE_LIMIT,
-    EventEmitter,
-    EventType,
-    EventLevel,
-    StatusEvent,
     BatchProgressEvent,
-    FileErrorEvent,
     CompleteEvent,
+    EventEmitter,
+    EventLevel,
+    EventType,
+    FileErrorEvent,
     ProgressEvent,
+    StatusEvent,
     get_emitter,
     reset_emitter,
 )
-from max_cli.common.concurrent import process_batch_parallel, process_batch_sequential
 
 
 class TestEventTypes:

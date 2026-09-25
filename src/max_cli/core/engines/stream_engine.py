@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from max_cli.core.engines.ffmpeg_base import FFmpegEngine
 
 

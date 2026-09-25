@@ -1,11 +1,13 @@
-import typer
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
+
+import typer
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
 from max_cli.common.events import EventType, get_emitter
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.common.utils import format_size
 from max_cli.core.presets import (
     AUDIO_COMPRESS_BITRATES,
     DEFAULT_AUDIO_COMPRESS_QUALITY,
@@ -13,7 +15,6 @@ from max_cli.core.presets import (
     bitrate_for_quality,
     sibling_path,
 )
-from max_cli.common.utils import format_size
 
 app = typer.Typer()
 

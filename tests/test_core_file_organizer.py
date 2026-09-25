@@ -1,8 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.core.engines import file_organizer as file_organizer_module
 from max_cli.core.engines.file_organizer import FileOrganizer
-from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 
 
 class TestFileOrganizer:

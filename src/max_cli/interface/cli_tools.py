@@ -1,7 +1,8 @@
-import typer
 from pathlib import Path
 
-from max_cli.common.logger import console, log_success, log_error
+import typer
+
+from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()
 

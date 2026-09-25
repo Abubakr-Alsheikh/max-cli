@@ -1,6 +1,6 @@
 import typer
 
-from max_cli.interface.config import setup_app, grab_app, manage_app
+from max_cli.interface.config import grab_app, manage_app, setup_app
 
 app = typer.Typer(help="Manage API keys and settings.")
 

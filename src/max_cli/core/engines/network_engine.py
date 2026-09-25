@@ -1,12 +1,11 @@
-from pathlib import Path
-from typing import Optional, Dict, Any, Callable, List, Union
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import urllib.parse
 import urllib.request
-
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
 
 QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
     "ss": {"height": 360, "bitrate": 64, "label": "360p"},
@@ -44,7 +43,9 @@ class NetworkEngine:
         import yt_dlp  # type: ignore[import-untyped]
 
         yt_dlp.YoutubeDL({"quiet": True})
-        from yt_dlp.extractor.youtube.pot._registry import _pot_providers  # type: ignore[import-untyped]  # private yt-dlp module, no stubs
+        from yt_dlp.extractor.youtube.pot._registry import (
+            _pot_providers,  # type: ignore[import-untyped]  # private yt-dlp module, no stubs
+        )
 
         return bool(_pot_providers.value)
 
@@ -393,6 +394,10 @@ def _download_executor(task: "TaskItem") -> Dict[str, Any]:
     }
 
 
-from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+from max_cli.core.engines.task_queue import (  # noqa: E402
+    TaskItem,
+    TaskType,
+    register_executor,
+)
 
 register_executor(TaskType.DOWNLOAD, _download_executor)

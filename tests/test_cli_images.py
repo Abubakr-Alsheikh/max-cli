@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from typer.testing import CliRunner
-from max_cli.interface.cli_images import app as images_app
 from PIL import Image
+from typer.testing import CliRunner
 
+from max_cli.interface.cli_images import app as images_app
 
 runner = CliRunner()
 
