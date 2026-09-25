@@ -2,6 +2,7 @@ import pytest
 
 from max_cli.core.engines import daemon_manager as daemon_module
 from max_cli.core.engines.task_queue import (
+    EXECUTOR_MODULES,
     TaskStatus,
     TaskType,
     TaskItem,
@@ -64,6 +65,10 @@ class TestExecutorRegistry:
 
     def test_get_unknown_executor_returns_none(self):
         assert get_executor(TaskType.AI_BATCH) is None
+
+    @pytest.mark.parametrize("task_type", sorted(EXECUTOR_MODULES, key=str))
+    def test_get_executor_loads_engine_on_demand(self, task_type):
+        assert get_executor(task_type) is not None
 
     def test_list_registered_executors(self):
         result = list_registered_executors()

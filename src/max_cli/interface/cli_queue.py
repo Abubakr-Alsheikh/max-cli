@@ -4,16 +4,21 @@ from rich.table import Table
 from rich.text import Text
 
 from max_cli.common.logger import console
-from max_cli.core.engines.daemon_manager import DaemonManager
 from max_cli.core.engines.task_queue import TaskStatus, TaskType
 
 app = typer.Typer(help="Manage background task queue")
-daemon = DaemonManager()
+
+
+def _get_engine():
+    from max_cli.core.engines.daemon_manager import DaemonManager
+
+    return DaemonManager()
 
 
 @app.command("status")
 @app.command("s", hidden=True)
 def queue_status() -> None:
+    daemon = _get_engine()
     stats = daemon.get_stats()
     tasks = daemon.get_all()
 
@@ -68,7 +73,7 @@ def queue_history(
     task_type: str = typer.Option(None, "--type", "-t", help="Filter by task type"),
 ) -> None:
     tt = TaskType(task_type) if task_type else None
-    history = daemon.get_history(limit=limit, task_type=tt)
+    history = _get_engine().get_history(limit=limit, task_type=tt)
 
     if not history:
         console.print("[dim]No history.[/dim]")
@@ -103,7 +108,7 @@ def queue_history(
 def queue_cancel(
     task_id: str = typer.Argument(..., help="Task ID to cancel"),
 ) -> None:
-    if daemon.cancel(task_id):
+    if _get_engine().cancel(task_id):
         console.print(f"[green]Cancelled task {task_id}[/green]")
     else:
         console.print(f"[red]Task {task_id} not found or is running[/red]")
@@ -115,7 +120,7 @@ def queue_cancel(
 def queue_retry(
     task_id: str = typer.Argument(..., help="Task ID to retry"),
 ) -> None:
-    task = daemon.retry(task_id)
+    task = _get_engine().retry(task_id)
     if task:
         console.print(f"[green]Retrying task {task_id}: {task.title}[/green]")
     else:
@@ -139,6 +144,7 @@ def queue_clear(
             console.print("[dim]Cancelled.[/dim]")
             return
 
+    daemon = _get_engine()
     if all_tasks:
         count = daemon.clear()
         console.print(f"[green]Cleared {count} tasks[/green]")
@@ -158,13 +164,13 @@ def queue_process(
     ),
 ) -> None:
     console.print("[bold]Processing queue...[/bold]")
-    count = daemon.process_now(max_tasks=max_tasks)
+    count = _get_engine().process_now(max_tasks=max_tasks)
     console.print(f"[green]Processed {count} tasks[/green]")
 
 
 @app.command("stats")
 def queue_stats() -> None:
-    stats = daemon.get_stats()
+    stats = _get_engine().get_stats()
 
     panel_lines = [
         f"Total in queue:  [bold]{stats['total']}[/bold]",

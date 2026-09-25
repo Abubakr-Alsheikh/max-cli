@@ -26,12 +26,9 @@ HEAVY_PACKAGES = [
     "psutil",
     "torch",
     "pandas",
+    "segno",
+    "pyperclip",
 ]
-# Still imported at startup; fixed in PLANS/active/codebase-hardening.md Phase 3.
-KNOWN_STARTUP_LEAKS = {
-    "segno": "system_engine imports segno at module level (hardening Phase 3)",
-    "pyperclip": "system_engine imports pyperclip at module level (hardening Phase 3)",
-}
 
 
 def _best_run_seconds(code: str) -> float:
@@ -102,14 +99,7 @@ def modules_after_registration() -> set:
     return set(result.stdout.split())
 
 
-@pytest.mark.parametrize(
-    "package",
-    HEAVY_PACKAGES
-    + [
-        pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=reason))
-        for name, reason in KNOWN_STARTUP_LEAKS.items()
-    ],
-)
+@pytest.mark.parametrize("package", HEAVY_PACKAGES)
 def test_heavy_package_not_imported_at_startup(
     package: str, modules_after_registration: set
 ):
