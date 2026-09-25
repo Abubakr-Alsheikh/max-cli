@@ -681,12 +681,18 @@ def queue_status():
 def show_history(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of items to show."),
     clear: bool = typer.Option(False, "--clear", "-c", help="Clear history."),
+    force: bool = typer.Option(
+        False, "-f", "--force", help="Clear without asking for confirmation."
+    ),
 ):
     """Show download history."""
     from max_cli.core.engines.task_queue import TaskType
 
     manager = _get_task_manager()
     if clear:
+        if not force and not Confirm.ask("Clear your whole download history?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return
         count = manager.clear_history(task_type=TaskType.DOWNLOAD)
         log_success(f"Cleared {count} items from history.")
         return

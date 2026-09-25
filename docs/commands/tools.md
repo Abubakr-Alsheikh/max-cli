@@ -39,10 +39,10 @@ On Linux, the clipboard needs `xclip`, `xsel` or `wl-clipboard` installed.
 Save the image on your clipboard to a file. Use it right after you take a screenshot.
 
 ```bash
-max tools paste [OUTPUT]
+max tools paste [OUTPUT] [--force]
 ```
 
-`OUTPUT` defaults to `clipboard.png`. If you leave off the extension, Max adds `.png`. Max replaces a file that already has that name.
+`OUTPUT` defaults to `clipboard.png`. If you leave off the extension, Max adds `.png`. If a file with that name exists, Max asks before replacing it. `--force`, `-f` replaces it without asking.
 
 **Examples:**
 

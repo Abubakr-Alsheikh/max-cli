@@ -83,7 +83,7 @@ max grab queue --process    # Process pending downloads now
 # Show download history
 max grab history
 max grab history --limit 20
-max grab history --clear    # Delete the download history
+max grab history --clear    # Delete the download history (asks first; -f skips)
 
 # Clear the queue
 max grab clear              # Clear pending downloads
