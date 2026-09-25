@@ -348,3 +348,23 @@ class TestSecureDelete:
 
         assert FileOrganizer().secure_delete(target, auto_backup=False) is True
         assert not target.exists()
+
+
+def test_duplicate_groups_are_sorted_so_the_kept_copy_is_predictable(
+    tmp_path, monkeypatch
+):
+    """Directory order differs by filesystem (macOS CI kept b.txt, not a.txt)."""
+    from pathlib import Path
+
+    from max_cli.core.engines.file_organizer import FileOrganizer
+
+    for name in ["b.txt", "a.txt", "c.txt"]:
+        (tmp_path / name).write_text("same", encoding="utf-8")
+    real_iterdir = Path.iterdir
+    monkeypatch.setattr(
+        Path, "iterdir", lambda self: reversed(sorted(real_iterdir(self)))
+    )
+
+    groups = FileOrganizer().find_duplicates(tmp_path)
+
+    assert [p.name for p in next(iter(groups.values()))] == ["a.txt", "b.txt", "c.txt"]
