@@ -700,7 +700,7 @@ max config import cfg.json  # Load settings from JSON
 max config setup-ffmpeg     # Download and install FFmpeg
 ```
 
-`max config export` includes your API key unless you pass `--include-defaults`. Don't share or commit the file.
+`max config export` leaves your API key out. Add `--include-secrets` to include it, and keep that file private.
 
 ---
 

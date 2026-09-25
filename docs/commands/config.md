@@ -87,15 +87,16 @@ max config validate
 Save your settings to a JSON file.
 
 ```bash
-max config export [-o FILE] [--include-defaults]
+max config export [-o FILE] [--include-defaults] [--include-secrets]
 ```
 
 **Options:**
 
 - `-o` - Output file (default: `max-config.json`)
 - `--include-defaults` - Include settings you never changed
+- `--include-secrets` - Also write your `OPENAI_API_KEY`
 
-> **Warning**: Without `--include-defaults`, the export includes your `OPENAI_API_KEY`. Don't share or commit that file.
+The export leaves your API key out, so you can share the file. With `--include-secrets` it contains the key in plain text: keep that file private and never commit it.
 
 ## import
 
