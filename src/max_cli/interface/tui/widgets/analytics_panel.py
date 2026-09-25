@@ -20,7 +20,6 @@ class AnalyticsPanel(Vertical):
         "command": "yellow",
         "file_op": "magenta",
         "ai": "purple",
-        "grab": "green",
     }
 
     def compose(self) -> ComposeResult:

@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Priority:** P0
-**Updated:** 2026-09-25
+**Updated:** 2026-09-26
 **Related:** Interactive TUI Expansion (Feature 2C Phase 2)
 
 ## Overview
@@ -1228,12 +1228,13 @@ register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)
 - [x] History panel: click row → shows activity details (looks up `ActivityLog.get_entry`)
 - [x] History panel: clear history → works (two-press "Confirm?" button)
 - [x] Config panel: API keys saved correctly (not masked) (`_original_values` restores masked keys on save)
-- [ ] Config panel: search and clear search → all fields visible. `_on_search` reads `label.renderable`, which `Label` no longer has in Textual 8, so typing in the search box raises `AttributeError`.
+- [x] Config panel: search and clear search → all fields visible. Each row carries its field name in `name`, and `_on_search` matches on that instead of `label.renderable`, which Textual 8 removed.
 - [x] Files panel: navigate directories → works
 - [x] Files panel: quick actions → execute or show appropriate message
 - [x] System panel: refresh → content doesn't grow (`_update_disk_usage` builds the text fresh each time)
 - [x] System panel: clear cache → works
-- [ ] Chat panel: send message → shows thinking indicator, then response. The panel adds a "Thinking..." message, but `_process_request` calls the AI engine on the UI thread, so Textual never paints it before the reply arrives.
+- [x] Chat panel: send message → shows thinking indicator, then response. `_process_request` runs the AI call in a thread worker and updates the UI through `call_from_thread`.
+- [x] Files panel: the filter box hides rows that don't match. `_load_directory` applies the filter and the chosen sort each time it loads.
 - [D] Keyboard shortcuts: 1-9 switch tabs. Commit 652a38b removed the number bindings; the `Sidebar` and `Ctrl+B` replace them.
 
 ## Success Criteria
@@ -1264,6 +1265,14 @@ register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)
 7. Update `PLANS/active/interactive-tui-expansion.md` with completion status
 
 ## Decisions
+
+- 2026-09-26 (roadmap Step 1, branch `fix/dashboard-p0-bugs`): fixed the four open P0 bugs, each with a test that failed first (`tests/interface/tui/test_dashboard_bugs.py`):
+  - Config search crash.
+  - Dead Files filter.
+  - Downloads counted as 0: `ActivityEntry` now maps the `grab` category to `download`, which also fixes entries already on disk.
+  - Chat blocking the UI.
+- The same work found `CONFIG_SECTIONS` listing settings that no longer exist (`OPENAI_MODEL`, `YTDLP_*` and others), so the AI and Downloads sections showed almost nothing. The sections now list real `Settings` fields, and a test checks it.
+- Test isolation: `isolated_home` now points `ActivityLog.LOG_FILE` at the fake home. Before this, dashboard tests could write to the real `~/.max_cli/activity_log.json`.
 
 - 2026-09-25: Reconciled against the code during hardening Phase 6. Status moved from Completed to In Progress because two checklist items fail.
 - Commit 652a38b removed the Tools panel and the 1-9 shortcuts, so issues 7, 49, 55 and 64 no longer apply.
