@@ -544,10 +544,9 @@ class TestBinaryName:
 
 
 class TestConstants:
+    # conftest fakes Path.home() per test, so compare the path endings.
     def test_max_cli_bin_dir(self) -> None:
-        assert MAX_CLI_BIN_DIR == Path.home() / ".max_cli" / "bin"
+        assert MAX_CLI_BIN_DIR.parts[-2:] == (".max_cli", "bin")
 
     def test_resolution_cache_file(self) -> None:
-        assert (
-            RESOLUTION_CACHE_FILE == Path.home() / ".max_cli" / ".ffmpeg_resolved_path"
-        )
+        assert RESOLUTION_CACHE_FILE.parts[-2:] == (".max_cli", ".ffmpeg_resolved_path")
