@@ -72,7 +72,13 @@ def queue_history(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of history items"),
     task_type: str = typer.Option(None, "--type", "-t", help="Filter by task type"),
 ) -> None:
-    tt = TaskType(task_type) if task_type else None
+    try:
+        tt = TaskType(task_type) if task_type else None
+    except ValueError:
+        valid_types = ", ".join(t.value for t in TaskType)
+        console.print(f"[red]Unknown task type '{task_type}'.[/red]")
+        console.print(f"[dim]Valid types: {valid_types}[/dim]")
+        raise typer.Exit(1)
     history = _get_engine().get_history(limit=limit, task_type=tt)
 
     if not history:
