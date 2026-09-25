@@ -464,7 +464,8 @@ def ocr_pdf(
     except RuntimeError as e:
         log_error(str(e))
         console.print(
-            "[yellow]Tip: Install OCR dependencies with: pip install max-cli[ocr][/yellow]"
+            # "\[" keeps Rich from reading [ocr] as a style tag.
+            "[yellow]Tip: Install OCR dependencies with: pip install max-cli\\[ocr][/yellow]"
         )
     except Exception as e:
         log_error(f"OCR failed: {e}")
