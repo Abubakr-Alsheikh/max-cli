@@ -1,25 +1,29 @@
+"""`max video`: parses options, calls `core/operations/video.py`, prints the result.
+
+Each command's options must match its catalog entry in
+`core/catalog/groups/video.py`; `tests/test_catalog_drift.py` checks them.
+"""
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from max_cli.common.events import EventType, get_emitter
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
+from max_cli.core.operations import video as video_ops
 from max_cli.core.presets import (
-    AUDIO_CONVERT_BITRATES,
-    CONCAT_METHODS,
     DEFAULT_AUDIO_CONVERT_QUALITY,
     DEFAULT_CONCAT_METHOD,
     DEFAULT_VIDEO_LEVEL,
-    DEFAULT_VIDEO_PRESET,
     DEFAULT_VIDEO_TO_AUDIO_QUALITY,
-    VIDEO_TO_AUDIO_BITRATES,
-    bitrate_for_quality,
-    crf_for_level,
-    sibling_path,
 )
+
+if TYPE_CHECKING:
+    from max_cli.core.operations.result import ActionResult
 
 app = typer.Typer()
 
@@ -33,6 +37,49 @@ def _get_engine():
     except RuntimeError as e:
         log_error(str(e))
         raise typer.Exit(1) from None
+
+
+def _run(
+    operation: Callable[..., "ActionResult"],
+    fail_message: str,
+    status: Optional[str] = None,
+    **kwargs: Any,
+) -> Optional["ActionResult"]:
+    """Call a video operation and report its errors.
+
+    Bad input (a missing file, an unknown option) exits 1 before any work
+    starts. Other failures print `fail_message` and return None.
+    """
+    engine = _get_engine()
+    try:
+        if status:
+            with console.status(status):
+                return operation(engine=engine, **kwargs)
+        return operation(engine=engine, **kwargs)
+    except (ResourceNotFoundError, ValidationError) as e:
+        log_error(str(e))
+        raise typer.Exit(1) from None
+    except Exception as e:
+        log_error(f"{fail_message}: {e}")
+        return None
+
+
+def _queue(action_name: str, **values: Any) -> None:
+    from max_cli.core.catalog import get_action
+    from max_cli.core.catalog.runner import enqueue_action
+
+    try:
+        task = enqueue_action(get_action(f"video.{action_name}"), values)
+    except ValidationError as e:
+        log_error(str(e))
+        raise typer.Exit(1) from None
+    console.print(f"[green]Queued:[/green] {values['target'].name} (ID: {task.id})")
+    console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+
+
+def _report(result: Optional["ActionResult"]) -> None:
+    if result:
+        log_success(result.message)
 
 
 @app.command("compress")
@@ -49,80 +96,47 @@ def compress_video(
     Compress video files to H.264 MP4.
     """
     _get_engine()
-
-    crf = crf_for_level(level)
-
     if queue:
-        from max_cli.core.engines.task_manager import get_task_manager
-        from max_cli.core.engines.task_queue import TaskItem, TaskType
-
-        dm = get_task_manager()
-        if not output:
-            output = sibling_path(target, "_compressed", "mp4")
-        task = TaskItem(
-            type=TaskType.VIDEO_COMPRESS,
-            title=f"Compress {target.name}",
-            description=f"CRF={crf}, preset={DEFAULT_VIDEO_PRESET}",
-            payload={
-                "input_path": str(target),
-                "output_path": str(output),
-                "crf": crf,
-                "preset": DEFAULT_VIDEO_PRESET,
-            },
-        )
-        dm.add(task)
-        console.print(f"[green]Queued:[/green] {target.name} (ID: {task.id})")
-        console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+        _queue("compress", target=target, output=output, level=level)
         return
-
-    if not output:
-        output = sibling_path(target, "_compressed", "mp4")
 
     console.print(
         f"[cyan]Compressing video (Level: {level})... This may take time.[/cyan]"
     )
-
-    with console.status("[bold green]Encoding... (CPU working hard)[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.compress_video(target, output, crf=crf, preset=DEFAULT_VIDEO_PRESET)
-
-            orig_size = target.stat().st_size
-            new_size = output.stat().st_size
-            reduction = ((orig_size - new_size) / orig_size) * 100
-
-            log_success(f"Video saved: {output}")
-            console.print(
-                f"Size: {format_size(orig_size)} -> [bold green]{format_size(new_size)}[/bold green] (-{reduction:.1f}%)"
-            )
-
-        except Exception as e:
-            log_error(f"Compression failed: {e}")
+    result = _run(
+        video_ops.compress,
+        "Compression failed",
+        "[bold green]Encoding... (CPU working hard)[/bold green]",
+        target=target,
+        output=output,
+        level=level,
+    )
+    if not result:
+        return
+    log_success(result.message)
+    input_size = result.details["input_size"]
+    output_size = result.details["output_size"]
+    if input_size and output_size is not None:
+        reduction = (input_size - output_size) / input_size * 100
+        console.print(
+            f"Size: {format_size(input_size)} -> "
+            f"[bold green]{format_size(output_size)}[/bold green] (-{reduction:.1f}%)"
+        )
 
 
 @app.command("convert")
 @app.command("cv", hidden=True)
 def convert_format(
     target: Path = typer.Argument(..., help="Input video file."),
-    fmt: str = typer.Option(
+    format: str = typer.Option(
         "mp4", "--format", "-f", help="Target format (mp4, mkv, avi)."
     ),
 ):
     """
     Convert video containers (e.g., MKV -> MP4).
     """
-    _get_engine()
-
-    output = target.parent / f"{target.stem}.{fmt}"
-
-    console.print(f"[cyan]Converting {target.suffix} -> .{fmt}...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        eng.convert_format(target, output)
-        log_success(f"Converted file: {output}")
-    except Exception as e:
-        log_error(f"Conversion failed: {e}")
+    console.print(f"[cyan]Converting {target.suffix} -> .{format}...[/cyan]")
+    _report(_run(video_ops.convert, "Conversion failed", target=target, format=format))
 
 
 @app.command("to-audio")
@@ -143,38 +157,21 @@ def video_to_audio(
     """
     Convert a video file into a standalone audio file.
     """
-    _get_engine()
-
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    # Resolve Bitrate
-    bitrate = bitrate_for_quality(
-        VIDEO_TO_AUDIO_BITRATES, quality, DEFAULT_VIDEO_TO_AUDIO_QUALITY
+    console.print(f"[cyan]Converting video to {format.upper()}...[/cyan]")
+    result = _run(
+        video_ops.to_audio,
+        "Conversion failed",
+        "[bold green]Ripping audio track...[/bold green]",
+        target=target,
+        format=format,
+        quality=quality,
+        output=output,
     )
-
-    # Resolve Output Path
-    target_ext = f".{format.lower().lstrip('.')}"
-    if not output:
-        output = target.parent / f"{target.stem}{target_ext}"
-    else:
-        # Ensure the user-provided output has the right extension
-        if output.suffix.lower() != target_ext:
-            output = output.with_suffix(target_ext)
-
-    console.print(f"[cyan]Converting video to {format.upper()} ({bitrate})...[/cyan]")
-
-    with console.status("[bold green]Ripping audio track...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.extract_audio(target, output, bitrate=bitrate)
-
-            final_size = output.stat().st_size
-            log_success(f"Audio extraction complete: [bold]{output.name}[/bold]")
-            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
-        except Exception as e:
-            log_error(f"Conversion failed: {e}")
+    if result:
+        log_success(result.message)
+        console.print(
+            f"File Size: [green]{format_size(result.details['output_size'] or 0)}[/green]"
+        )
 
 
 @app.command("gif")
@@ -187,20 +184,18 @@ def create_gif(
     """
     Convert a video clip into a high-quality GIF.
     """
-    _get_engine()
-
-    if not output:
-        output = target.parent / f"{target.stem}.gif"
-
     console.print(f"[cyan]Generating GIF (FPS={fps}, Width={width})...[/cyan]")
-
-    with console.status("[bold green]Rendering palette & GIF...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.video_to_gif(target, output, fps, width)
-            log_success(f"GIF saved: {output}")
-        except Exception as e:
-            log_error(f"GIF creation failed: {e}")
+    _report(
+        _run(
+            video_ops.gif,
+            "GIF creation failed",
+            "[bold green]Rendering palette & GIF...[/bold green]",
+            target=target,
+            output=output,
+            width=width,
+            fps=fps,
+        )
+    )
 
 
 @app.command("cut")
@@ -209,8 +204,8 @@ def cut_video(
     start: str = typer.Option(
         ..., "--start", "-s", help="Start time (e.g. '00:01:00' or '60')."
     ),
-    end: str = typer.Option(None, "--end", "-e", help="End time."),
-    duration: str = typer.Option(
+    end: Optional[str] = typer.Option(None, "--end", "-e", help="End time."),
+    duration: Optional[str] = typer.Option(
         None, "--duration", "-d", help="Duration to keep (e.g. '10')."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
@@ -218,27 +213,19 @@ def cut_video(
     """
     Trim a video file. Provide --end OR --duration, or neither to cut to end of file.
     """
-    _get_engine()
-    audio_extensions = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
-    is_audio = target.suffix.lower() in audio_extensions
-
-    if not output:
-        output = (
-            target.parent / f"{target.stem}_cut.mp3"
-            if is_audio
-            else target.parent / f"{target.stem}_cut.mp4"
+    console.print(f"[cyan]Cutting from {start}...[/cyan]")
+    _report(
+        _run(
+            video_ops.cut,
+            "Cut failed",
+            "[bold green]Processing cut...[/bold green]",
+            target=target,
+            start=start,
+            end=end,
+            duration=duration,
+            output=output,
         )
-
-    console.print(
-        f"[cyan]Cutting {'audio' if is_audio else 'video'} from {start}...[/cyan]"
     )
-    with console.status("[bold green]Processing cut...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.trim_video(target, output, start, end, duration)
-            log_success(f"Clip saved: {output}")
-        except Exception as e:
-            log_error(f"Cut failed: {e}")
 
 
 @app.command("snap")
@@ -252,16 +239,9 @@ def snapshot(
     """
     Take a high-quality JPG screenshot at a specific time.
     """
-    _get_engine()
-    if not output:
-        output = target.parent / f"{target.stem}_thumb.jpg"
-
-    try:
-        eng = _get_engine()
-        eng.get_thumbnail(target, output, time)
-        log_success(f"Thumbnail saved: {output}")
-    except Exception as e:
-        log_error(f"Snapshot failed: {e}")
+    _report(
+        _run(video_ops.snap, "Snapshot failed", target=target, time=time, output=output)
+    )
 
 
 @app.command("louder")
@@ -273,21 +253,17 @@ def boost_volume(
     """
     Increase volume (Useful for quiet recordings).
     """
-    _get_engine()
-    if not output:
-        ext = target.suffix
-        output = target.parent / f"{target.stem}_boosted{ext}"
-
     console.print(f"[cyan]Boosting volume by {db}dB...[/cyan]")
-
-    # This is fast because we copy video stream and only re-encode audio
-    with console.status("[bold green]Adjusting audio...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.adjust_volume(target, output, db)
-            log_success(f"Louder file saved: {output}")
-        except Exception as e:
-            log_error(f"Volume adjustment failed: {e}")
+    _report(
+        _run(
+            video_ops.louder,
+            "Volume adjustment failed",
+            "[bold green]Adjusting audio...[/bold green]",
+            target=target,
+            db=db,
+            output=output,
+        )
+    )
 
 
 @app.command("mute")
@@ -298,18 +274,8 @@ def mute_track(
     """
     Remove audio track from video.
     """
-    _get_engine()
-    if not output:
-        output = target.parent / f"{target.stem}_mute.mp4"
-
     console.print("[cyan]Removing audio track...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        eng.mute_video(target, output)
-        log_success(f"Muted video saved: {output}")
-    except Exception as e:
-        log_error(f"Mute failed: {e}")
+    _report(_run(video_ops.mute, "Mute failed", target=target, output=output))
 
 
 @app.command("concat")
@@ -331,37 +297,20 @@ def concat_videos(
 
     Use a text file with 'file /path/to/video.mp4' lines, or a glob pattern.
     """
-    _get_engine()
-
-    if method not in CONCAT_METHODS:
-        log_error(
-            f"Unknown method '{method}'. Use one of: {', '.join(CONCAT_METHODS)}."
-        )
-        raise typer.Exit(1)
-
-    from max_cli.core.engines.video_engine import resolve_concat_inputs
-
-    try:
-        input_files = resolve_concat_inputs(target)
-    except ValueError as e:
-        log_error(str(e))
-        raise typer.Exit(1) from None
-
-    if not output:
-        ext = input_files[0].suffix if input_files else ".mp4"
-        output = target.parent / f"concatenated{ext}"
-
-    console.print(f"[cyan]Concatenating {len(input_files)} videos...[/cyan]")
     console.print(f"[dim]Method: {method}[/dim]")
-
-    with console.status("[bold green]Merging videos...[/bold green]"):
-        try:
-            concat_method = CONCAT_METHODS[method]
-            eng = _get_engine()
-            eng.concatenate_videos(input_files, output, method=concat_method)
-            log_success(f"Videos merged: {output}")
-        except Exception as e:
-            log_error(f"Concatenation failed: {e}")
+    result = _run(
+        video_ops.concat,
+        "Concatenation failed",
+        "[bold green]Merging videos...[/bold green]",
+        target=target,
+        output=output,
+        method=method,
+    )
+    if result:
+        console.print(
+            f"[cyan]Concatenated {result.details['input_count']} videos.[/cyan]"
+        )
+        log_success(result.message)
 
 
 @app.command("brightness")
@@ -378,21 +327,20 @@ def adjust_brightness_cmd(
     """
     Adjust video brightness and contrast.
     """
-    _get_engine()
-    if not output:
-        output = target.parent / f"{target.stem}_adjusted.mp4"
-
     console.print(
         f"[cyan]Adjusting brightness={brightness}, contrast={contrast}...[/cyan]"
     )
-
-    with console.status("[bold green]Processing...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.adjust_brightness(target, output, brightness, contrast)
-            log_success(f"Video saved: {output}")
-        except Exception as e:
-            log_error(f"Adjustment failed: {e}")
+    _report(
+        _run(
+            video_ops.brightness,
+            "Adjustment failed",
+            "[bold green]Processing...[/bold green]",
+            target=target,
+            brightness=brightness,
+            contrast=contrast,
+            output=output,
+        )
+    )
 
 
 @app.command("color")
@@ -409,19 +357,17 @@ def color_grade_cmd(
     """
     Apply color grading presets to video.
     """
-    _get_engine()
-    if not output:
-        output = target.parent / f"{target.stem}_{preset}.mp4"
-
     console.print(f"[cyan]Applying {preset} color preset...[/cyan]")
-
-    with console.status("[bold green]Processing...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.apply_color_preset(target, output, preset)
-            log_success(f"Video saved: {output}")
-        except Exception as e:
-            log_error(f"Color grading failed: {e}")
+    _report(
+        _run(
+            video_ops.color,
+            "Color grading failed",
+            "[bold green]Processing...[/bold green]",
+            target=target,
+            preset=preset,
+            output=output,
+        )
+    )
 
 
 @app.command("stabilize")
@@ -432,21 +378,16 @@ def stabilize_cmd(
     """
     Stabilize shaky video footage.
     """
-    _get_engine()
-    if not output:
-        output = target.parent / f"{target.stem}_stabilized.mp4"
-
     console.print("[cyan]Analyzing video motion...[/cyan]")
-
-    with console.status(
-        "[bold green]Stabilizing (this may take a while)...[/bold green]"
-    ):
-        try:
-            eng = _get_engine()
-            eng.stabilize_video(target, output)
-            log_success(f"Stabilized video saved: {output}")
-        except Exception as e:
-            log_error(f"Stabilization failed: {e}")
+    _report(
+        _run(
+            video_ops.stabilize,
+            "Stabilization failed",
+            "[bold green]Stabilizing (this may take a while)...[/bold green]",
+            target=target,
+            output=output,
+        )
+    )
 
 
 @app.command("normalize")
@@ -460,26 +401,25 @@ def normalize_audio_cmd(
     """
     Normalize audio loudness to a target level.
     """
-    _get_engine()
-    if not output:
-        ext = target.suffix
-        output = target.parent / f"{target.stem}_normalized{ext}"
-
     console.print(f"[cyan]Normalizing audio to {level} LUFS...[/cyan]")
-
-    with console.status("[bold green]Processing...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.normalize_audio(target, output, level)
-            log_success(f"Normalized audio saved: {output}")
-        except Exception as e:
-            log_error(f"Normalization failed: {e}")
+    _report(
+        _run(
+            video_ops.normalize,
+            "Normalization failed",
+            "[bold green]Processing...[/bold green]",
+            target=target,
+            level=level,
+            output=output,
+        )
+    )
 
 
 @app.command("denoise")
 @app.command("dn", hidden=True)
 def denoise_audio_cmd(
-    target: Path = typer.Argument(..., help="Video or audio file with background noise."),
+    target: Path = typer.Argument(
+        ..., help="Video or audio file with background noise."
+    ),
     mode: str = typer.Option(
         "auto",
         "--mode",
@@ -507,38 +447,13 @@ def denoise_audio_cmd(
       max video denoise lecture.mp4 --mode hum --output clean_lecture.mp4
     """
     _get_engine()
-
-    if not output:
-        ext = target.suffix
-        output = target.parent / f"{target.stem}_denoised{ext}"
-
-    if mode != "auto":
-        valid_strength_modes = {"mild", "medium", "aggressive"}
-        if strength in valid_strength_modes:
-            strength = "medium"
-
     if queue:
-        from max_cli.core.engines.task_manager import get_task_manager
-        from max_cli.core.engines.task_queue import TaskItem, TaskType
-
-        dm = get_task_manager()
-        task = TaskItem(
-            type=TaskType.VIDEO_DENOISE,
-            title=f"Denoise {target.name}",
-            description=f"mode={mode}, strength={strength}",
-            payload={
-                "input_path": str(target),
-                "output_path": str(output),
-                "mode": mode,
-                "strength": strength,
-            },
-        )
-        dm.add(task)
-        console.print(f"[green]Queued:[/green] {target.name} (ID: {task.id})")
-        console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+        _queue("denoise", target=target, mode=mode, strength=strength, output=output)
         return
 
-    console.print(f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]")
+    console.print(
+        f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]"
+    )
 
     emitter = get_emitter()
     progress = Progress(
@@ -548,7 +463,6 @@ def denoise_audio_cmd(
         TimeRemainingColumn(compact=True),
         transient=True,
     )
-
     task_id = progress.add_task("Removing background noise...", total=100)
 
     def _on_progress(event):
@@ -558,21 +472,28 @@ def denoise_audio_cmd(
             progress.update(task_id, description=event.message)
 
     emitter.subscribe(_on_progress)
+    try:
+        with progress:
+            result = _run(
+                video_ops.denoise,
+                "Denoising failed",
+                target=target,
+                mode=mode,
+                strength=strength,
+                output=output,
+            )
+            if result:
+                progress.update(
+                    task_id, completed=100, description="[green]Complete[/green]"
+                )
+    finally:
+        emitter.unsubscribe(_on_progress)
 
-    with progress:
-        try:
-            eng = _get_engine()
-            eng.denoise_audio(target, output, mode=mode, strength=strength)
-            progress.update(task_id, completed=100, description="[green]Complete[/green]")
-
-            final_size = output.stat().st_size
-            log_success(f"Denoised audio saved: {output.name}")
-            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
-
-        except Exception as e:
-            log_error(f"Denoising failed: {e}")
-        finally:
-            emitter.unsubscribe(_on_progress)
+    if result:
+        log_success(result.message)
+        console.print(
+            f"File Size: [green]{format_size(result.details['output_size'] or 0)}[/green]"
+        )
 
 
 @app.command("audio-convert")
@@ -592,28 +513,18 @@ def convert_audio_cmd(
     """
     Convert audio between formats (e.g., WAV to MP3).
     """
-    _get_engine()
-
-    bitrate = bitrate_for_quality(
-        AUDIO_CONVERT_BITRATES, quality, DEFAULT_AUDIO_CONVERT_QUALITY
+    console.print(f"[cyan]Converting to {format.upper()}...[/cyan]")
+    _report(
+        _run(
+            video_ops.audio_convert,
+            "Conversion failed",
+            "[bold green]Converting audio...[/bold green]",
+            target=target,
+            format=format,
+            quality=quality,
+            output=output,
+        )
     )
-
-    target_ext = f".{format.lower().lstrip('.')}"
-    if not output:
-        output = target.parent / f"{target.stem}{target_ext}"
-    else:
-        if output.suffix.lower() != target_ext:
-            output = output.with_suffix(target_ext)
-
-    console.print(f"[cyan]Converting to {format.upper()} ({bitrate})...[/cyan]")
-
-    with console.status("[bold green]Converting audio...[/bold green]"):
-        try:
-            eng = _get_engine()
-            eng.convert_audio(target, output, bitrate=bitrate)
-            log_success(f"Audio converted: {output}")
-        except Exception as e:
-            log_error(f"Conversion failed: {e}")
 
 
 @app.command("record")
@@ -630,17 +541,18 @@ def screen_record_cmd(
 
     Press Ctrl+C to stop recording (if no duration specified).
     """
-    _get_engine()
-
     console.print("[cyan]Starting screen recording...[/cyan]")
     console.print("[yellow]Press Ctrl+C to stop[/yellow]")
-
-    try:
-        eng = _get_engine()
-        eng.screen_record(output, duration=duration, fps=fps, audio=audio)
-        log_success(f"Recording saved: {output}")
-    except Exception as e:
-        log_error(f"Recording failed: {e}")
+    _report(
+        _run(
+            video_ops.record,
+            "Recording failed",
+            output=output,
+            duration=duration,
+            fps=fps,
+            audio=audio,
+        )
+    )
 
 
 @app.command("stream")
@@ -661,21 +573,18 @@ def stream_video_cmd(
 
     Example: max video stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
     """
-    _get_engine()
-
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
     console.print(f"[cyan]Streaming to {rtmp_url}...[/cyan]")
     console.print("[yellow]Press Ctrl+C to stop streaming[/yellow]")
-
-    try:
-        eng = _get_engine()
-        eng.stream_to_rtmp(target, rtmp_url, bitrate=bitrate, preset=preset)
-        log_success("Streaming completed")
-    except Exception as e:
-        log_error(f"Streaming failed: {e}")
+    _report(
+        _run(
+            video_ops.stream,
+            "Streaming failed",
+            target=target,
+            rtmp_url=rtmp_url,
+            bitrate=bitrate,
+            preset=preset,
+        )
+    )
 
 
 @app.command("preview")
@@ -691,18 +600,7 @@ def live_preview_cmd(
 
     Open http://localhost:8080/live.m3u8 in a player to watch.
     """
-    _get_engine()
-
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
     console.print(f"[cyan]Starting live preview on port {port}...[/cyan]")
     console.print(f"[yellow]Open http://localhost:{port}/live.m3u8 to view[/yellow]")
     console.print("[dim]Press Ctrl+C to stop[/dim]")
-
-    try:
-        eng = _get_engine()
-        eng.live_preview(target, port=port, bitrate=bitrate)
-    except Exception as e:
-        log_error(f"Preview failed: {e}")
+    _run(video_ops.preview, "Preview failed", target=target, port=port, bitrate=bitrate)

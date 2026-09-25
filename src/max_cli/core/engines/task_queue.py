@@ -31,6 +31,8 @@ class TaskType(str, Enum):
     FILE_ORGANIZE = "file_organize"
     FILE_DUPLICATES = "file_duplicates"
     FILE_BACKUP = "file_backup"
+    # A catalog action; payload {"action": "video.compress", "args": {...}}.
+    ACTION = "action"
     CUSTOM = "custom"
 
 
@@ -85,6 +87,7 @@ EXECUTOR_MODULES: dict[TaskType, str] = {
     TaskType.PDF_COMPRESS: "max_cli.core.engines.pdf_engine",
     TaskType.FILE_ORGANIZE: "max_cli.core.engines.file_organizer",
     TaskType.FILE_DUPLICATES: "max_cli.core.engines.file_organizer",
+    TaskType.ACTION: "max_cli.core.catalog.runner",
 }
 
 

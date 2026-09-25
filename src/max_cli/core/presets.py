@@ -31,6 +31,11 @@ AUDIO_COMPRESS_BITRATES: dict[str, str] = {
 }
 DEFAULT_AUDIO_COMPRESS_QUALITY = "h"
 
+# --- video color and denoise choices ----------------------------------------
+COLOR_PRESETS = ("vivid", "vintage", "noir", "warm", "cool", "fade")
+DENOISE_MODES = ("auto", "hiss", "hum", "speech")
+DENOISE_STRENGTHS = ("mild", "medium", "aggressive")
+
 # --- video concat: user-facing method -> MediaEngine.concatenate_videos -----
 CONCAT_METHODS: dict[str, str] = {"fast": "concat", "safe": "filter"}
 DEFAULT_CONCAT_METHOD = "fast"

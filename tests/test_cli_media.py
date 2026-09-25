@@ -116,11 +116,11 @@ class TestCompress:
         assert "Queued: test.mp4" in result.output
         mock_engine.compress_video.assert_not_called()
         [task] = get_task_manager().get_all()
-        assert task.type == TaskType.VIDEO_COMPRESS
-        assert task.payload["crf"] == crf_for_level("max")
-        assert task.payload["output_path"] == str(
-            dummy_video.parent / "test_compressed.mp4"
-        )
+        assert task.type == TaskType.ACTION
+        assert task.payload == {
+            "action": "video.compress",
+            "args": {"target": str(dummy_video), "output": None, "level": "max"},
+        }
 
     def test_engine_error_is_reported(self, mock_engine, dummy_video):
         mock_engine.compress_video.side_effect = MaxError("encoder crashed")
@@ -216,7 +216,7 @@ class TestCutAndConcat:
             tmp_path / "concatenated.mp4",
             method=CONCAT_METHODS["fast"],
         )
-        assert "Concatenating 2 videos" in result.output
+        assert "Concatenated 2 videos" in result.output
 
     def test_concat_rejects_bad_target(self, mock_engine, dummy_video):
         result = runner.invoke(media_app, ["concat", str(dummy_video)])
@@ -251,9 +251,9 @@ class TestDenoise:
         assert result.exit_code == 0, result.output
         mock_engine.denoise_audio.assert_not_called()
         [task] = get_task_manager().get_all()
-        assert task.type == TaskType.VIDEO_DENOISE
-        assert task.payload["mode"] == "hum"
-        assert task.payload["strength"] == "medium"
+        assert task.type == TaskType.ACTION
+        assert task.payload["action"] == "video.denoise"
+        assert task.payload["args"]["mode"] == "hum"
 
 
 @pytest.mark.parametrize(
