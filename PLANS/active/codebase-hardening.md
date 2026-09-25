@@ -181,7 +181,7 @@ Baseline on 2026-09-24:
   - Value conversions live in a `_VALUE_CONVERTERS` table.
   - Output names come from `presets.sibling_path`.
   - Folder listing moved to the engines: `pdf_engine.find_pdfs` (natural order, skips `.`/`_` files), `audio_metadata_engine.find_audio_files` and `video_engine.resolve_concat_inputs`.
-- [x] `tests/interface/tui/test_preset_drift.py` compares every TUI field default with the CLI option of the same name. The one deliberate difference is `dry_run=True` in the dashboard's file commands, which preview before moving files.
+- [x] `tests/interface/tui/test_preset_drift.py` compares every TUI field default with the CLI option of the same name. Two deliberate differences: `dry_run=True` in the dashboard's file commands, which preview before moving files, and the dashboard's `artist-album` organize pattern, which the maintainer chose after a problem with plain `artist` (`presets.TUI_AUDIO_ORGANIZE_PATTERN`).
 - [x] Found while working:
   - The TUI concat command passed `target=` to `concatenate_videos`, which takes a list, so it always failed. It now takes a glob or a `.txt` list, like the CLI.
   - TUI defaults that changed to match the CLI:
@@ -189,7 +189,6 @@ Baseline on 2026-09-24:
     - Extract-audio quality: `m` to `h`. The bitrates also changed, for example `s` from 128k to 96k.
     - PDF compress quality: 75 to 80.
     - Image compress: quality now follows `DEFAULT_QUALITY` in settings (it was fixed at 85), and metadata stripping is on.
-    - Audio organize pattern: `artist-album` to `artist`.
     - Video compress preset: `medium` at every level, as in the CLI (it was fast/medium/slow).
 
 **Result:** pytest 405 passed, 1 skipped, 1 xfailed. mypy 41 (unchanged). Rule audit 6 (unchanged).

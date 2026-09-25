@@ -84,3 +84,10 @@ class TestEngineHelpers:
         for name in [".hidden.pdf", "_tmp.pdf", "a.PDF"]:
             (tmp_path / name).write_bytes(b"")
         assert [p.name for p in find_pdfs(tmp_path)] == ["a.PDF"]
+
+
+def test_dashboard_organizes_music_by_artist_and_album():
+    """Maintainer's choice: the TUI default stays "artist-album"."""
+    schema = CommandRegistry.get_command("audio", "organize")
+    pattern = next(f for f in schema["fields"] if f["name"] == "pattern")
+    assert pattern["default"] == "artist-album"

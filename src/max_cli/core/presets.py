@@ -42,6 +42,9 @@ PDF_COMPRESS_QUALITY = 80
 # --- images and audio metadata ----------------------------------------------
 STRIP_IMAGE_METADATA = True
 DEFAULT_AUDIO_ORGANIZE_PATTERN = "artist"
+# The dashboard sorts into Artist/Album folders; the maintainer chose this to
+# fix a real problem, so it deliberately differs from the CLI default.
+TUI_AUDIO_ORGANIZE_PATTERN = "artist-album"
 
 
 def crf_for_level(level: str) -> int:

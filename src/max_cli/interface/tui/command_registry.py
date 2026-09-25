@@ -557,7 +557,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                     "pattern",
                     "select",
                     "Naming Pattern",
-                    default=presets.DEFAULT_AUDIO_ORGANIZE_PATTERN,
+                    default=presets.TUI_AUDIO_ORGANIZE_PATTERN,
                     options=["artist", "album", "genre", "artist-album"],
                 ),
             ],
