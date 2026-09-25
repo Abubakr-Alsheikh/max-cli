@@ -226,3 +226,12 @@ class TestTaskManagerCancelAndExecution:
 
     def test_process_next_returns_false_when_idle(self):
         assert self.dm._process_next() is False
+
+
+def test_retry_leaves_a_running_task_alone(isolated_manager):
+    """retry used to reset a running task to pending, so it could run twice."""
+    task = isolated_manager.add(TaskItem(type=TaskType.CUSTOM, title="busy"))
+    task.status = TaskStatus.RUNNING
+
+    assert isolated_manager.retry(task.id) is None
+    assert task.status == TaskStatus.RUNNING

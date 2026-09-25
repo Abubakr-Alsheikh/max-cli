@@ -18,6 +18,7 @@ def _get_engine():
 @app.command("status")
 @app.command("s", hidden=True)
 def queue_status() -> None:
+    """List every task in the queue with its status and progress."""
     manager = _get_engine()
     stats = manager.get_stats()
     tasks = manager.get_all()
@@ -72,6 +73,7 @@ def queue_history(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of history items"),
     task_type: str = typer.Option(None, "--type", "-t", help="Filter by task type"),
 ) -> None:
+    """Show finished tasks, newest first."""
     try:
         tt = TaskType(task_type) if task_type else None
     except ValueError:
@@ -114,10 +116,11 @@ def queue_history(
 def queue_cancel(
     task_id: str = typer.Argument(..., help="Task ID to cancel"),
 ) -> None:
+    """Cancel a pending, paused or running task."""
     if _get_engine().cancel(task_id):
         console.print(f"[green]Cancelled task {task_id}[/green]")
     else:
-        console.print(f"[red]Task {task_id} not found or is running[/red]")
+        console.print(f"[red]Task {task_id} not found or already finished[/red]")
         raise typer.Exit(1)
 
 
@@ -126,11 +129,12 @@ def queue_cancel(
 def queue_retry(
     task_id: str = typer.Argument(..., help="Task ID to retry"),
 ) -> None:
+    """Put a failed or finished task back in the queue as pending."""
     task = _get_engine().retry(task_id)
     if task:
         console.print(f"[green]Retrying task {task_id}: {task.title}[/green]")
     else:
-        console.print(f"[red]Task {task_id} not found[/red]")
+        console.print(f"[red]Task {task_id} not found or still running[/red]")
         raise typer.Exit(1)
 
 
@@ -138,11 +142,13 @@ def queue_retry(
 @app.command("cl", hidden=True)
 def queue_clear(
     all_tasks: bool = typer.Option(False, "--all", "-a", help="Clear all tasks"),
+    # No -f short flag: everywhere else -f means --force.
     failed_only: bool = typer.Option(
-        False, "--failed", "-f", help="Clear failed tasks only"
+        False, "--failed", help="Clear failed tasks only"
     ),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ) -> None:
+    """Remove pending tasks (or all, or only failed ones) from the queue."""
     if not force:
         from rich.prompt import Confirm
 
@@ -169,6 +175,7 @@ def queue_process(
         0, "--max", "-n", help="Max tasks to process (0=all)"
     ),
 ) -> None:
+    """Run pending tasks now, in this terminal."""
     console.print("[bold]Processing queue...[/bold]")
     count = _get_engine().process_now(max_tasks=max_tasks)
     console.print(f"[green]Processed {count} tasks[/green]")
@@ -176,6 +183,7 @@ def queue_process(
 
 @app.command("stats")
 def queue_stats() -> None:
+    """Show task counts by status and by type."""
     stats = _get_engine().get_stats()
 
     panel_lines = [

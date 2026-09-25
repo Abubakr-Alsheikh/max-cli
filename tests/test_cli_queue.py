@@ -130,7 +130,7 @@ class TestCancelAndRetry:
     def test_cancel_unknown_task_fails(self):
         result = runner.invoke(queue_app, ["cancel", "nope1234"])
         assert result.exit_code == 1
-        assert "not found or is running" in result.output
+        assert "not found or already finished" in result.output
 
     def test_retry_moves_history_task_back_to_queue(self):
         task = _record_history("Old job")

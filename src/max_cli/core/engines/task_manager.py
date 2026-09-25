@@ -202,9 +202,12 @@ class TaskManager:
         return False
 
     def retry(self, task_id: str) -> Optional[TaskItem]:
+        """Reset a task to pending. Running tasks are left alone (returns None)."""
         with self._lock:
             for item in self._queue:
                 if item.id == task_id:
+                    if item.status == TaskStatus.RUNNING:
+                        return None
                     item.status = TaskStatus.PENDING
                     item.error = ""
                     item.progress = 0.0

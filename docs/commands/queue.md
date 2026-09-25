@@ -81,7 +81,7 @@ max queue cancel TASK_ID
 
 ## retry
 
-Reset a task to pending so the next `max queue process` runs it again. This works for failed tasks and for finished tasks in history.
+Reset a task to pending so the next `max queue process` runs it again. This works for failed tasks and for finished tasks in history. A running task is left alone.
 
 ```bash
 max queue retry TASK_ID
@@ -99,7 +99,5 @@ max queue clear [--all | --failed] [--force]
 
 - With no flag, Max removes pending tasks
 - `--all`, `-a` - Remove every task that isn't running
-- `--failed`, `-f` - Remove failed tasks only
+- `--failed` - Remove failed tasks only
 - `--force` - Skip the confirmation prompt
-
-Note that `-f` means `--failed` here, not `--force`.
