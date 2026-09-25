@@ -3,14 +3,14 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from max_cli.core.engines.ffmpeg_base import FFmpegEngine
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_concat_inputs(target: Path) -> List[Path]:
+def resolve_concat_inputs(target: Path) -> list[Path]:
     """Video paths to join, from a glob pattern or a `.txt` list.
 
     A pattern such as `clips/*.mp4` returns the matches, sorted. A `.txt`
@@ -42,7 +42,7 @@ class VideoEngine(FFmpegEngine):
 
     def compress_video(
         self, input_path: Path, output_path: Path, crf: int = 28, preset: str = "medium"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compress video using H.264 (safe compatibility).
         CRF: 0-51 (Lower is better quality). 23 is default, 28 is compressed.
@@ -78,7 +78,7 @@ class VideoEngine(FFmpegEngine):
             "message": f"Compressed: {input_path.name}",
         }
 
-    def convert_format(self, input_path: Path, output_path: Path) -> Dict[str, Any]:
+    def convert_format(self, input_path: Path, output_path: Path) -> dict[str, Any]:
         """
         Smart convert (e.g., MKV -> MP4).
         Tries to 'copy' streams if possible (instant), otherwise re-encodes.
@@ -122,7 +122,7 @@ class VideoEngine(FFmpegEngine):
 
     def video_to_gif(
         self, input_path: Path, output_path: Path, fps: int = 15, scale: int = 480
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Creates a high-quality GIF using a palette generator (prevents graininess).
         """
@@ -154,7 +154,7 @@ class VideoEngine(FFmpegEngine):
         start: str,
         end: Optional[str] = None,
         duration: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Cuts a video clip.
         start: Timestamp (e.g., "00:01:30" or "90")
@@ -236,7 +236,7 @@ class VideoEngine(FFmpegEngine):
         self._run(cmd)
 
     def concatenate_videos(
-        self, input_paths: List[Path], output_path: Path, method: str = "concat"
+        self, input_paths: list[Path], output_path: Path, method: str = "concat"
     ) -> None:
         """
         Merge multiple video files into one.
@@ -258,7 +258,7 @@ class VideoEngine(FFmpegEngine):
         else:
             self._concatenate_filter(input_paths, output_path)
 
-    def _concatenate_demuxer(self, input_paths: List[Path], output_path: Path) -> None:
+    def _concatenate_demuxer(self, input_paths: list[Path], output_path: Path) -> None:
         """Fast concatenation using concat demuxer (works when streams match)."""
         list_file = output_path.parent / f"{output_path.stem}_concat_list.txt"
 
@@ -289,7 +289,7 @@ class VideoEngine(FFmpegEngine):
             if list_file.exists():
                 list_file.unlink()
 
-    def _concatenate_filter(self, input_paths: List[Path], output_path: Path) -> None:
+    def _concatenate_filter(self, input_paths: list[Path], output_path: Path) -> None:
         """Filter-based concatenation (re-encodes, works with different codecs)."""
         filter_str = "".join(
             f"[{i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}];"

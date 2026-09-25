@@ -1,6 +1,6 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 from max_cli.common.events import (
     BatchProgressEvent,
@@ -16,13 +16,13 @@ R = TypeVar("R")
 
 
 def process_batch_parallel(
-    items: List[T],
+    items: list[T],
     processor: Callable[[T], R],
     max_workers: int = 4,
     emitter: Optional[EventEmitter] = None,
     action: str = "Processing",
-) -> List[Dict[str, Any]]:
-    results: List[Dict[str, Any]] = []
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
     total = len(items)
     processed_count = 0
     count_lock = threading.Lock()
@@ -90,12 +90,12 @@ def process_batch_parallel(
 
 
 def process_batch_sequential(
-    items: List[T],
+    items: list[T],
     processor: Callable[[T], R],
     emitter: Optional[EventEmitter] = None,
     action: str = "Processing",
-) -> List[Dict[str, Any]]:
-    results: List[Dict[str, Any]] = []
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
     total = len(items)
 
     for i, item in enumerate(items):

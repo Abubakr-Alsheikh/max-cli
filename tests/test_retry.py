@@ -1,4 +1,3 @@
-from typing import List
 from unittest.mock import patch
 
 import pytest
@@ -9,7 +8,7 @@ from max_cli.common.retry import retry
 class Flaky:
     """Callable that raises the queued exceptions, then returns 'ok'."""
 
-    def __init__(self, errors: List[Exception]) -> None:
+    def __init__(self, errors: list[Exception]) -> None:
         self.errors = list(errors)
         self.call_count = 0
 

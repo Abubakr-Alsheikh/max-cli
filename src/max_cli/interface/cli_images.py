@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import typer
 
@@ -19,7 +19,7 @@ def _get_engine():
     return ImageEngine()
 
 
-def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
+def _resolve_batch(target: Path) -> tuple[list[Path], Path]:
     engine = _get_engine()
     # Resolve first: Path(".").name is "", which made the folder "_optimized".
     target = target.resolve()
@@ -129,7 +129,7 @@ def strip_metadata(
 
 
 def _run_batch(
-    files: List[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
+    files: list[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
 ):
     from rich import box
     from rich.table import Table

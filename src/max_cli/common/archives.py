@@ -1,8 +1,9 @@
 """Safe tar extraction: no member may land outside the destination folder."""
 
 import tarfile
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Optional
 
 from max_cli.common.exceptions import ProcessingError
 
@@ -48,7 +49,7 @@ def safe_extract_tar(
     where available (Python 3.12+, 3.9.17+ security releases) as a second layer.
     """
     root = Path(dest).resolve()
-    selected: List[tarfile.TarInfo] = (
+    selected: list[tarfile.TarInfo] = (
         list(members) if members is not None else archive.getmembers()
     )
     for member in selected:

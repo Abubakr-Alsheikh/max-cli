@@ -51,7 +51,7 @@ def main() -> int:
     error_count, output = run_mypy()
     if "--update" in sys.argv:
         # Bytes, not write_text: on Windows write_text turns "\n" into CRLF.
-        BASELINE_FILE.write_bytes(f"{error_count}\n".encode("utf-8"))
+        BASELINE_FILE.write_bytes(f"{error_count}\n".encode())
         print(f"Baseline set to {error_count}.")
         return 0
 

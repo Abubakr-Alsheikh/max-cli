@@ -8,7 +8,7 @@ and every engine out of startup (hardening decision D5).
 
 import importlib
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 # Typer 0.27+ bundles its own click (typer._click), older versions use the
 # click package. Build everything from Typer's classes so both work, and
@@ -28,7 +28,7 @@ class LazyGroupSpec:
     on_load: Optional[Callable[[object], None]] = None
 
 
-LAZY_GROUPS: Dict[str, LazyGroupSpec] = {}
+LAZY_GROUPS: dict[str, LazyGroupSpec] = {}
 
 
 def lazy_group(name: str, spec: LazyGroupSpec) -> None:
@@ -58,7 +58,7 @@ class LazyTyperGroup(TyperGroup):
 
     _rendering_help = False
 
-    def list_commands(self, ctx: Any) -> List[str]:
+    def list_commands(self, ctx: Any) -> list[str]:
         eager = super().list_commands(ctx)
         return [name for name in LAZY_GROUPS if name not in eager] + eager
 

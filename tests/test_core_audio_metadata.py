@@ -8,7 +8,7 @@ reads all three, so the engine runs against the real library.
 import struct
 import wave
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -59,7 +59,7 @@ def make_mp3(path: Path) -> Path:
     return path
 
 
-def read_flac_tags(path: Path) -> Dict[str, List[str]]:
+def read_flac_tags(path: Path) -> dict[str, list[str]]:
     from mutagen.flac import FLAC
 
     tags = FLAC(path).tags
@@ -323,19 +323,19 @@ def test_auto_tag_handles_track_artist_title(engine, tmp_path):
 
 
 def _engine_with_metadata(
-    monkeypatch, metadata_by_name: Dict[str, Dict[str, Any]]
+    monkeypatch, metadata_by_name: dict[str, dict[str, Any]]
 ) -> AudioMetadataEngine:
     """Engine whose get_metadata returns canned tags keyed by file name."""
     engine = AudioMetadataEngine()
 
-    def fake_get_metadata(file_path: Path) -> Dict[str, Any]:
+    def fake_get_metadata(file_path: Path) -> dict[str, Any]:
         return dict(metadata_by_name.get(file_path.name, {}))
 
     monkeypatch.setattr(engine, "get_metadata", fake_get_metadata)
     return engine
 
 
-def _make_sources(source_dir: Path, names: List[str]) -> List[Path]:
+def _make_sources(source_dir: Path, names: list[str]) -> list[Path]:
     source_dir.mkdir(exist_ok=True)
     paths = []
     for name in names:
@@ -461,7 +461,7 @@ def test_organize_sanitizes_folder_and_file_names(monkeypatch, tmp_path):
 def test_organize_reports_missing_and_failing_files(monkeypatch, tmp_path):
     engine = AudioMetadataEngine()
 
-    def failing_get_metadata(file_path: Path) -> Dict[str, Any]:
+    def failing_get_metadata(file_path: Path) -> dict[str, Any]:
         raise ValueError("corrupt")
 
     monkeypatch.setattr(engine, "get_metadata", failing_get_metadata)

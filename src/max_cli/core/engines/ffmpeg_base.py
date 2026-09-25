@@ -4,7 +4,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from max_cli.common.ffmpeg_resolver import ConfirmDownload, DownloadProgress
@@ -54,11 +54,11 @@ class FFmpegEngine:
             "Install it via: 'brew install ffmpeg', 'sudo apt install ffmpeg', or Download from ffmpeg.org"
         )
 
-    def _run(self, cmd: List[str]):
+    def _run(self, cmd: list[str]):
         """Runs the subprocess command."""
         try:
             subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                cmd, check=True, capture_output=True
             )
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode().strip()

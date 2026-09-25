@@ -6,24 +6,24 @@ the dashboard's "max" level produce the same file. The drift test in
 """
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 # --- video compress ---------------------------------------------------------
-VIDEO_CRF_BY_LEVEL: Dict[str, int] = {"high": 23, "balanced": 28, "max": 35}
+VIDEO_CRF_BY_LEVEL: dict[str, int] = {"high": 23, "balanced": 28, "max": 35}
 DEFAULT_VIDEO_LEVEL = "balanced"
 DEFAULT_VIDEO_PRESET = "medium"
 
 # --- audio bitrates, keyed by the first letter of --quality -----------------
-VIDEO_TO_AUDIO_BITRATES: Dict[str, str] = {
+VIDEO_TO_AUDIO_BITRATES: dict[str, str] = {
     "s": "96k",
     "m": "128k",
     "h": "192k",
     "x": "320k",
 }
 DEFAULT_VIDEO_TO_AUDIO_QUALITY = "h"
-AUDIO_CONVERT_BITRATES: Dict[str, str] = {"s": "128k", "m": "192k", "h": "320k"}
+AUDIO_CONVERT_BITRATES: dict[str, str] = {"s": "128k", "m": "192k", "h": "320k"}
 DEFAULT_AUDIO_CONVERT_QUALITY = "h"
-AUDIO_COMPRESS_BITRATES: Dict[str, str] = {
+AUDIO_COMPRESS_BITRATES: dict[str, str] = {
     "s": "64k",
     "m": "96k",
     "h": "128k",
@@ -32,7 +32,7 @@ AUDIO_COMPRESS_BITRATES: Dict[str, str] = {
 DEFAULT_AUDIO_COMPRESS_QUALITY = "h"
 
 # --- video concat: user-facing method -> MediaEngine.concatenate_videos -----
-CONCAT_METHODS: Dict[str, str] = {"fast": "concat", "safe": "filter"}
+CONCAT_METHODS: dict[str, str] = {"fast": "concat", "safe": "filter"}
 DEFAULT_CONCAT_METHOD = "fast"
 
 # --- pdf --------------------------------------------------------------------
@@ -55,7 +55,7 @@ def crf_for_level(level: str) -> int:
 
 
 def bitrate_for_quality(
-    bitrates: Dict[str, str], quality: str, default_quality: str
+    bitrates: dict[str, str], quality: str, default_quality: str
 ) -> str:
     """Look up a bitrate by the first letter of `quality` ("high" -> "h")."""
     key = quality.lower()[:1]

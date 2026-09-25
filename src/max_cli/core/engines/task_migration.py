@@ -6,7 +6,7 @@ Before the task store became the only queue and history, `max grab` kept
 entries with these functions, and renames the file to `<name>.migrated`.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
 
@@ -36,7 +36,7 @@ _GRAB_STATUS = {
 }
 
 
-def grab_item_to_task(item: Dict[str, Any]) -> TaskItem:
+def grab_item_to_task(item: dict[str, Any]) -> TaskItem:
     """Convert one `grab_queue.json` / `grab_history.json` entry."""
     status = _GRAB_STATUS.get(item.get("status", "pending"), TaskStatus.FAILED)
     payload = {"url": item["url"]}
@@ -65,7 +65,7 @@ def grab_item_to_task(item: Dict[str, Any]) -> TaskItem:
     return task
 
 
-def download_entry_to_task(entry: Dict[str, Any]) -> TaskItem:
+def download_entry_to_task(entry: dict[str, Any]) -> TaskItem:
     """Convert one `download_history.json` entry (TUI download panel)."""
     status = (
         TaskStatus.COMPLETED
@@ -92,15 +92,15 @@ def download_entry_to_task(entry: Dict[str, Any]) -> TaskItem:
 
 
 def convert_grab_entries(
-    entries: List[Dict[str, Any]],
-) -> Tuple[List[TaskItem], List[TaskItem]]:
+    entries: list[dict[str, Any]],
+) -> tuple[list[TaskItem], list[TaskItem]]:
     """Split grab entries into (still queued, finished) tasks."""
-    queued: List[TaskItem] = []
-    finished: List[TaskItem] = []
+    queued: list[TaskItem] = []
+    finished: list[TaskItem] = []
     for task in (grab_item_to_task(entry) for entry in entries):
         (queued if task.status == TaskStatus.PENDING else finished).append(task)
     return queued, finished
 
 
-def convert_download_history(data: Dict[str, Any]) -> List[TaskItem]:
+def convert_download_history(data: dict[str, Any]) -> list[TaskItem]:
     return [download_entry_to_task(entry) for entry in data.get("downloads", [])]

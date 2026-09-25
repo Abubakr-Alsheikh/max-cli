@@ -4,7 +4,7 @@ The resolver in `common/ffmpeg_resolver.py` never talks to the user. CLI
 commands pass these callbacks to `MediaEngine` or `resolve_ffmpeg`.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from max_cli.common.logger import console
 
@@ -34,7 +34,7 @@ def show_ffmpeg_progress(downloaded: int, total: Optional[int]) -> None:
         console.print()
 
 
-def ffmpeg_prompt_callbacks() -> Dict[str, Any]:
+def ffmpeg_prompt_callbacks() -> dict[str, Any]:
     """Keyword arguments that let MediaEngine / resolve_ffmpeg ask the user."""
     return {
         "confirm_download": confirm_ffmpeg_download,

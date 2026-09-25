@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 
@@ -21,7 +21,7 @@ def _get_engine():
 @app.command("merge")
 @app.command("m", hidden=True)
 def merge_pdfs(
-    inputs: Optional[List[Path]] = typer.Argument(
+    inputs: Optional[list[Path]] = typer.Argument(
         None, help="List of files OR a single folder."
     ),
     output: Optional[Path] = typer.Option(
@@ -148,7 +148,7 @@ def compress_pdf(
 @app.command("bundle")
 @app.command("b", hidden=True)
 def bundle_pdfs(
-    inputs: Optional[List[Path]] = typer.Argument(
+    inputs: Optional[list[Path]] = typer.Argument(
         None, help="Files or Folder to bundle."
     ),
     output: Optional[Path] = typer.Option(
@@ -242,7 +242,7 @@ def bundle_pdfs(
     console.print(f"Pages: [bold]{stats['page_count']}[/bold]")
 
 
-def _resolve_files(inputs: List[Path]) -> List[Path]:
+def _resolve_files(inputs: list[Path]) -> list[Path]:
     """Helper to turn input arguments into a sorted list of PDF paths."""
     files = []
 
@@ -502,7 +502,7 @@ def extract_form(
 @app.command("form-fill")
 def fill_form(
     target: Path = typer.Argument(..., help="PDF form to fill."),
-    field: List[str] = typer.Option(
+    field: list[str] = typer.Option(
         ...,
         "-f",
         "--field",

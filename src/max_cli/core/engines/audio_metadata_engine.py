@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
@@ -76,7 +76,7 @@ def _set_tag(audio: Any, field: str, value: str) -> None:
     )
 
 
-def find_audio_files(folder: Path) -> List[Path]:
+def find_audio_files(folder: Path) -> list[Path]:
     """Supported audio files directly inside `folder`, sorted by name."""
     return sorted(
         path
@@ -91,7 +91,7 @@ class AudioMetadataEngine:
     Supports MP3, FLAC, M4A/AAC, OGG, and WAV files.
     """
 
-    def get_metadata(self, file_path: Path) -> Dict[str, Any]:
+    def get_metadata(self, file_path: Path) -> dict[str, Any]:
         """
         Retrieve all metadata from an audio file.
         Returns all raw frame keys plus convenience names for known fields.
@@ -112,7 +112,7 @@ class AudioMetadataEngine:
         if audio is None:
             raise ValueError(f"Unable to read metadata from: {file_path}")
 
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
 
         ID3_CONVENIENCE = {
             "TIT2": "title",
@@ -236,7 +236,7 @@ class AudioMetadataEngine:
 
     def batch_set_metadata(
         self,
-        file_paths: List[Path],
+        file_paths: list[Path],
         title: Optional[str] = None,
         artist: Optional[str] = None,
         album: Optional[str] = None,
@@ -247,12 +247,12 @@ class AudioMetadataEngine:
         discnumber: Optional[str] = None,
         composer: Optional[str] = None,
         comment: Optional[str] = None,
-    ) -> List[Path]:
+    ) -> list[Path]:
         """
         Set the same metadata on multiple audio files.
         Useful for organizing a batch of files under the same album/artist.
         """
-        results: List[Path] = []
+        results: list[Path] = []
 
         for path in file_paths:
             try:
@@ -308,12 +308,12 @@ class AudioMetadataEngine:
 
     def organize(
         self,
-        source_paths: List[Path],
+        source_paths: list[Path],
         target_dir: Path,
         pattern: str = "artist",
         transaction_log: Optional["TransactionLog"] = None,
         filter_value: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Organize audio files into folders by metadata.
 
@@ -326,9 +326,9 @@ class AudioMetadataEngine:
         Returns:
             Dict with 'moved', 'skipped', 'errors' counts and details
         """
-        moved: List[str] = []
-        skipped: List[str] = []
-        errors: List[str] = []
+        moved: list[str] = []
+        skipped: list[str] = []
+        errors: list[str] = []
 
         for file_path in source_paths:
             try:
