@@ -8,10 +8,12 @@ and every engine out of startup (hardening decision D5).
 
 import importlib
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-import click
-from typer.core import TyperGroup
+# Typer 0.27+ bundles its own click (typer._click), older versions use the
+# click package. Build everything from Typer's classes so both work, and
+# type click objects as Any because the two click versions differ.
+from typer.core import TyperCommand, TyperGroup
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,7 @@ def lazy_group(name: str, spec: LazyGroupSpec) -> None:
     LAZY_GROUPS[name] = spec
 
 
-def load_group(name: str) -> click.Command:
+def load_group(name: str) -> Any:
     """Import a lazy group's module and build its click command."""
     import typer
 
@@ -56,23 +58,23 @@ class LazyTyperGroup(TyperGroup):
 
     _rendering_help = False
 
-    def list_commands(self, ctx: click.Context) -> List[str]:
+    def list_commands(self, ctx: Any) -> List[str]:
         eager = super().list_commands(ctx)
         return [name for name in LAZY_GROUPS if name not in eager] + eager
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> Optional[click.Command]:
-        command = super().get_command(ctx, cmd_name)
+    def get_command(self, ctx: Any, cmd_name: str) -> Optional[Any]:
+        command: Any = super().get_command(ctx, cmd_name)
         if command is not None or cmd_name not in LAZY_GROUPS:
             return command
         if self._rendering_help:
             # The help screen needs only the name and one line of help.
             spec = LAZY_GROUPS[cmd_name]
-            return click.Command(cmd_name, help=spec.help, hidden=spec.hidden)
+            return TyperCommand(cmd_name, help=spec.help, hidden=spec.hidden)
         command = load_group(cmd_name)
         self.add_command(command, cmd_name)
         return command
 
-    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    def format_help(self, ctx: Any, formatter: Any) -> None:
         self._rendering_help = True
         try:
             super().format_help(ctx, formatter)
