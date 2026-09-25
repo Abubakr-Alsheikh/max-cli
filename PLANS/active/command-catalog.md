@@ -119,7 +119,7 @@ Each group entry carries its feature name. Every view filters by the enabled fea
 
 Each step is one PR, with tests first.
 
-1. **Skeleton and a pilot group.**
+1. **Skeleton and a pilot group.** Done 2026-09-26, branch `feat/catalog-video-pilot`.
    - Add `core/catalog` (the types, the lazy group loader and the JSON Schema builder) and `core/operations/video.py`.
    - Port the `video` group: 15 thin commands, and 6 of them are broken in the dashboard today.
    - Add the CLI drift test for `video`, and make the `video` CLI call the operations.
@@ -145,3 +145,8 @@ Each step is one PR, with tests first.
 
 - 2026-09-26: Written from a survey of all CLI commands, the TUI registry and the executor.
 - 2026-09-26: The maintainer approved the design and answered Q1-Q3. Build step 1 (skeleton and `video`) started.
+- 2026-09-26, build step 1:
+  - Queueing uses one new task type, `TaskType.ACTION`, with payload `{"action": "video.compress", "args": {...}}`, instead of a task type per action. Any queueable catalog action can go on the queue without a new executor. `Action.task_type` in the design became `queueable: bool`.
+  - The old `VIDEO_COMPRESS` and `VIDEO_DENOISE` executors stay, so tasks already in a queue still run.
+  - The `Setting(...)` default marker waits until a ported group needs it (`grab`). `video` has no config-based defaults.
+  - Every video operation now checks that its input exists, so a missing file exits 1 with "File not found" before FFmpeg starts.
