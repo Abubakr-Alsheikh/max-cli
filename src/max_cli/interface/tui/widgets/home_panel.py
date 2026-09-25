@@ -146,10 +146,10 @@ class HomePanel(Vertical):
         )
 
     def _update_stats(self) -> None:
-        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_manager import TaskManager
 
-        daemon = DaemonManager()
-        q_stats = daemon.get_stats()
+        manager = TaskManager()
+        q_stats = manager.get_stats()
 
         activity = ActivityLog()
         a_stats = activity.get_stats()

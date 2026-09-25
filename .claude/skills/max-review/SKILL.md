@@ -24,7 +24,7 @@ Check every changed hunk against this list:
 | Open mode ignores `seek` | `open(p, "ba+")` in shred appended instead of overwriting | Overwrites use `"r+b"`, appends use `"a"` |
 | Escaped escape | `f"...\\n"` wrote a literal backslash-n into the concat list | Look for `\\n` in f-strings that feed files |
 | Status logic order | `cancel` set CANCELLED and then checked for PENDING | Read each state machine transition top to bottom |
-| Shared state outside the lock | `DaemonManager` mutated the queue outside `_lock` | Every read-modify-write of shared lists or dicts happens under the lock |
+| Shared state outside the lock | `TaskManager` (then `DaemonManager`) mutated the queue outside `_lock` | Every read-modify-write of shared lists or dicts happens under the lock |
 | Callbacks under a lock | `EventEmitter` called subscribers while holding a non-reentrant lock | Copy the subscriber list under the lock, then call outside it |
 | Unbounded queues or caches | events pushed into a `Queue` that nothing drained | Everything that grows must have a cap or a consumer |
 | Non-atomic state writes | queue, history, cache and transaction log use `write_text` directly | Write to a temp file, then `Path.replace()` |
@@ -38,7 +38,7 @@ Check every changed hunk against this list:
 
 ## 3. Architecture checks
 - Core engines import nothing from `interface/`, and nothing from Rich or `logger`.
-- No new second store for data that already has one. Queue and history live in `DaemonManager` / `task_queue`. Don't add a third history file.
+- No new second store for data that already has one. Queue and history live in `TaskManager` / `task_queue`. Don't add a third history file.
 - Interface files hold no business logic. File discovery, globbing, URL cleaning and downloads all belong in engines.
 - New files under 500 lines. If a file grows past that, propose a split instead of growing it further.
 

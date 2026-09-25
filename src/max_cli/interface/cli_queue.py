@@ -10,17 +10,17 @@ app = typer.Typer(help="Manage background task queue")
 
 
 def _get_engine():
-    from max_cli.core.engines.daemon_manager import DaemonManager
+    from max_cli.core.engines.task_manager import TaskManager
 
-    return DaemonManager()
+    return TaskManager()
 
 
 @app.command("status")
 @app.command("s", hidden=True)
 def queue_status() -> None:
-    daemon = _get_engine()
-    stats = daemon.get_stats()
-    tasks = daemon.get_all()
+    manager = _get_engine()
+    stats = manager.get_stats()
+    tasks = manager.get_all()
 
     if not tasks:
         console.print("[dim]Queue is empty.[/dim]")
@@ -144,15 +144,15 @@ def queue_clear(
             console.print("[dim]Cancelled.[/dim]")
             return
 
-    daemon = _get_engine()
+    manager = _get_engine()
     if all_tasks:
-        count = daemon.clear()
+        count = manager.clear()
         console.print(f"[green]Cleared {count} tasks[/green]")
     elif failed_only:
-        count = daemon.clear(status=TaskStatus.FAILED)
+        count = manager.clear(status=TaskStatus.FAILED)
         console.print(f"[green]Cleared {count} failed tasks[/green]")
     else:
-        count = daemon.clear(status=TaskStatus.PENDING)
+        count = manager.clear(status=TaskStatus.PENDING)
         console.print(f"[green]Cleared {count} pending tasks[/green]")
 
 

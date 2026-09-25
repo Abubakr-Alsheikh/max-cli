@@ -12,7 +12,7 @@ import pytest
 
 from max_cli.common.cache import Cache
 from max_cli.common.transaction_log import TransactionLog
-from max_cli.core.engines.daemon_manager import DaemonManager
+from max_cli.core.engines.task_manager import TaskManager
 from max_cli.core.engines.queue_manager import QueueManager
 from max_cli.core.engines.task_queue import TaskItem, TaskType
 from max_cli.plugins.manager import PluginManager
@@ -29,17 +29,17 @@ def _no_temp_files(folder: Path) -> bool:
     return not any(p.name.endswith(".tmp") for p in folder.iterdir())
 
 
-def test_daemon_queue_survives_crash(tmp_path, monkeypatch):
+def test_task_queue_survives_crash(tmp_path, monkeypatch):
     queue_dir = tmp_path / "tasks"
-    monkeypatch.setattr(DaemonManager, "QUEUE_DIR", queue_dir)
-    monkeypatch.setattr(DaemonManager, "QUEUE_FILE", queue_dir / "queue.json")
-    monkeypatch.setattr(DaemonManager, "HISTORY_FILE", queue_dir / "history.json")
-    daemon = DaemonManager()
-    daemon.add(TaskItem(type=TaskType.CUSTOM, title="first"))
+    monkeypatch.setattr(TaskManager, "QUEUE_DIR", queue_dir)
+    monkeypatch.setattr(TaskManager, "QUEUE_FILE", queue_dir / "queue.json")
+    monkeypatch.setattr(TaskManager, "HISTORY_FILE", queue_dir / "history.json")
+    manager = TaskManager()
+    manager.add(TaskItem(type=TaskType.CUSTOM, title="first"))
     before = (queue_dir / "queue.json").read_text(encoding="utf-8")
 
     _break_replace(monkeypatch)
-    daemon.add(TaskItem(type=TaskType.CUSTOM, title="second"))
+    manager.add(TaskItem(type=TaskType.CUSTOM, title="second"))
 
     assert (queue_dir / "queue.json").read_text(encoding="utf-8") == before
     assert [t["title"] for t in json.loads(before)] == ["first"]

@@ -28,19 +28,19 @@ class TestSystemPanel:
 
         with (
             patch(
-                "max_cli.interface.tui.widgets.system_panel.DaemonManager"
+                "max_cli.interface.tui.widgets.system_panel.TaskManager"
             ) as mock_dm,
             patch.object(Path, "exists", return_value=True),
             patch("shutil.disk_usage") as mock_disk,
         ):
-            mock_daemon = MagicMock()
-            mock_daemon.get_stats.return_value = {
+            mock_manager = MagicMock()
+            mock_manager.get_stats.return_value = {
                 "total": 0,
                 "running": 0,
                 "pending": 0,
             }
-            mock_daemon.get_history.return_value = []
-            mock_dm.return_value = mock_daemon
+            mock_manager.get_history.return_value = []
+            mock_dm.return_value = mock_manager
 
             mock_usage = MagicMock()
             mock_usage.used = 1073741824

@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
-from max_cli.common.logger import console
 from max_cli.core.engines.task_queue import (
     TaskItem,
     TaskStatus,
@@ -24,16 +23,21 @@ IDLE_POLL_SECONDS = 2
 BETWEEN_TASKS_SECONDS = 1
 
 
-class DaemonError(MaxError):
+class TaskManagerError(MaxError):
     pass
 
 
-class DaemonManager:
+class TaskManager:
+    """Persistent task queue and history, run by an in-process worker thread.
+
+    The worker is a daemon thread: it stops when the CLI process exits, and
+    pending tasks wait in queue.json until `max queue process` or another
+    command runs them.
+    """
+
     QUEUE_DIR = Path.home() / ".max_cli" / "tasks"
     QUEUE_FILE = QUEUE_DIR / "queue.json"
     HISTORY_FILE = QUEUE_DIR / "history.json"
-    DAEMON_PID_FILE = QUEUE_DIR / "daemon.pid"
-    DAEMON_LOG_FILE = QUEUE_DIR / "daemon.log"
 
     def __init__(self):
         self._queue: List[TaskItem] = []
@@ -54,7 +58,8 @@ class DaemonManager:
         try:
             data = json.loads(self.QUEUE_FILE.read_text(encoding="utf-8"))
             self._queue = [TaskItem.from_dict(item) for item in data]
-        except Exception:
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring unreadable task queue %s", self.QUEUE_FILE)
             self._queue = []
 
     def _save_queue(self) -> None:
@@ -62,8 +67,8 @@ class DaemonManager:
         try:
             data = [item.to_dict() for item in self._queue]
             atomic_write_json(self.QUEUE_FILE, data, default=str)
-        except Exception as e:
-            console.print(f"[red]Failed to save queue: {e}[/red]")
+        except OSError:
+            logger.exception("Failed to save task queue %s", self.QUEUE_FILE)
 
     def _load_history(self) -> None:
         if not self.HISTORY_FILE.exists():
@@ -71,7 +76,8 @@ class DaemonManager:
         try:
             data = json.loads(self.HISTORY_FILE.read_text(encoding="utf-8"))
             self._history = [TaskItem.from_dict(item) for item in data]
-        except Exception:
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring unreadable task history %s", self.HISTORY_FILE)
             self._history = []
 
     def _save_history(self) -> None:
@@ -79,8 +85,8 @@ class DaemonManager:
         try:
             data = [item.to_dict() for item in self._history]
             atomic_write_json(self.HISTORY_FILE, data, default=str)
-        except Exception as e:
-            console.print(f"[red]Failed to save history: {e}[/red]")
+        except OSError:
+            logger.exception("Failed to save task history %s", self.HISTORY_FILE)
 
     def add(self, task: TaskItem) -> TaskItem:
         with self._lock:
@@ -242,14 +248,14 @@ class DaemonManager:
                 stats["by_type"][t] = stats["by_type"].get(t, 0) + 1
         return stats
 
-    def start_daemon(self) -> None:
+    def start_worker(self) -> None:
         if self._running:
             return
         self._running = True
         self._worker_thread = threading.Thread(target=self._process_loop, daemon=True)
         self._worker_thread.start()
 
-    def stop_daemon(self) -> None:
+    def stop_worker(self) -> None:
         self._running = False
         if self._worker_thread:
             self._worker_thread.join(timeout=5)

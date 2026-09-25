@@ -12,14 +12,14 @@ from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
 
 
 @pytest.fixture
-def mock_daemon():
+def mock_manager():
     with (
-        patch("max_cli.interface.tui.widgets.queue_panel.DaemonManager") as mock_q,
-        patch("max_cli.interface.tui.widgets.system_panel.DaemonManager") as mock_s,
+        patch("max_cli.interface.tui.widgets.queue_panel.TaskManager") as mock_q,
+        patch("max_cli.interface.tui.widgets.system_panel.TaskManager") as mock_s,
     ):
-        daemon = MagicMock()
-        daemon.get_all.return_value = []
-        daemon.get_stats.return_value = {
+        manager = MagicMock()
+        manager.get_all.return_value = []
+        manager.get_stats.return_value = {
             "total": 0,
             "pending": 0,
             "running": 0,
@@ -27,11 +27,11 @@ def mock_daemon():
             "paused": 0,
             "by_type": {},
         }
-        daemon.get_history.return_value = []
-        daemon.get.return_value = None
-        mock_q.return_value = daemon
-        mock_s.return_value = daemon
-        yield daemon
+        manager.get_history.return_value = []
+        manager.get.return_value = None
+        mock_q.return_value = manager
+        mock_s.return_value = manager
+        yield manager
 
 
 @pytest.fixture
@@ -45,14 +45,14 @@ def mock_activity_log():
 
 class TestMaxDashboardApp:
     @pytest.mark.asyncio
-    async def test_app_starts(self, mock_daemon, mock_activity_log):
+    async def test_app_starts(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
 
         async with MaxDashboardApp().run_test() as pilot:
             assert pilot.app.query_one(Sidebar) is not None
 
     @pytest.mark.asyncio
-    async def test_queue_panel_renders_empty(self, mock_daemon, mock_activity_log):
+    async def test_queue_panel_renders_empty(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
 
         async with MaxDashboardApp().run_test() as pilot:
@@ -60,7 +60,7 @@ class TestMaxDashboardApp:
             assert table.row_count == 1
 
     @pytest.mark.asyncio
-    async def test_queue_panel_shows_tasks(self, mock_daemon, mock_activity_log):
+    async def test_queue_panel_shows_tasks(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
 
         mock_task = TaskItem(
@@ -70,7 +70,7 @@ class TestMaxDashboardApp:
             title="Test Download",
             progress=45.0,
         )
-        mock_daemon.get_all.return_value = [mock_task]
+        mock_manager.get_all.return_value = [mock_task]
 
         async with MaxDashboardApp().run_test() as pilot:
             panel = pilot.app.query_one("#queue-panel")
@@ -81,7 +81,7 @@ class TestMaxDashboardApp:
             assert table.row_count == 1
 
     @pytest.mark.asyncio
-    async def test_cancel_button_calls_daemon(self, mock_daemon, mock_activity_log):
+    async def test_cancel_button_calls_manager(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
 
         mock_task = TaskItem(
@@ -90,7 +90,7 @@ class TestMaxDashboardApp:
             status=TaskStatus.PENDING,
             title="Test",
         )
-        mock_daemon.get_all.return_value = [mock_task]
+        mock_manager.get_all.return_value = [mock_task]
 
         async with MaxDashboardApp().run_test() as pilot:
             panel = pilot.app.query_one("#queue-panel")
@@ -104,10 +104,10 @@ class TestMaxDashboardApp:
             btn.press()
             await pilot.pause()
 
-            mock_daemon.cancel.assert_called_once_with("abc123")
+            mock_manager.cancel.assert_called_once_with("abc123")
 
     @pytest.mark.asyncio
-    async def test_history_filter(self, mock_daemon, mock_activity_log):
+    async def test_history_filter(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
         from max_cli.interface.tui.activity_log import ActivityEntry
 
@@ -151,7 +151,7 @@ class TestMaxDashboardApp:
             assert table.row_count == 1
 
     @pytest.mark.asyncio
-    async def test_auto_refresh_timer(self, mock_daemon, mock_activity_log):
+    async def test_auto_refresh_timer(self, mock_manager, mock_activity_log):
         from max_cli.interface.tui.app import MaxDashboardApp
 
         async with MaxDashboardApp().run_test() as pilot:

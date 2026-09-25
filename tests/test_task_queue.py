@@ -1,6 +1,6 @@
 import pytest
 
-from max_cli.core.engines import daemon_manager as daemon_module
+from max_cli.core.engines import task_manager as task_manager_module
 from max_cli.core.engines.task_queue import (
     EXECUTOR_MODULES,
     TaskStatus,
@@ -10,17 +10,17 @@ from max_cli.core.engines.task_queue import (
     get_executor,
     list_registered_executors,
 )
-from max_cli.core.engines.daemon_manager import DaemonManager
+from max_cli.core.engines.task_manager import TaskManager
 
 
 @pytest.fixture
-def isolated_daemon(tmp_path, monkeypatch) -> DaemonManager:
-    """DaemonManager whose queue/history live in tmp_path, not ~/.max_cli."""
+def isolated_manager(tmp_path, monkeypatch) -> TaskManager:
+    """TaskManager whose queue/history live in tmp_path, not ~/.max_cli."""
     queue_dir = tmp_path / "tasks"
-    monkeypatch.setattr(DaemonManager, "QUEUE_DIR", queue_dir)
-    monkeypatch.setattr(DaemonManager, "QUEUE_FILE", queue_dir / "queue.json")
-    monkeypatch.setattr(DaemonManager, "HISTORY_FILE", queue_dir / "history.json")
-    return DaemonManager()
+    monkeypatch.setattr(TaskManager, "QUEUE_DIR", queue_dir)
+    monkeypatch.setattr(TaskManager, "QUEUE_FILE", queue_dir / "queue.json")
+    monkeypatch.setattr(TaskManager, "HISTORY_FILE", queue_dir / "history.json")
+    return TaskManager()
 
 
 class TestTaskItem:
@@ -76,10 +76,10 @@ class TestExecutorRegistry:
         assert isinstance(result["custom"], bool)
 
 
-class TestDaemonManager:
+class TestTaskManager:
     @pytest.fixture(autouse=True)
-    def _daemon(self, isolated_daemon):
-        self.dm = isolated_daemon
+    def _manager(self, isolated_manager):
+        self.dm = isolated_manager
 
     def test_add_and_get_all(self):
         task = TaskItem(type=TaskType.CUSTOM, title="Test")
@@ -135,15 +135,15 @@ class TestDaemonManager:
         assert self.dm.get_history() == []
 
 
-class TestDaemonCancelAndExecution:
+class TestTaskManagerCancelAndExecution:
     """Regression tests for hardening 1.3 (cancel) and 1.4 (locking, loop errors)."""
 
     @pytest.fixture(autouse=True)
-    def _daemon(self, isolated_daemon):
-        self.dm = isolated_daemon
+    def _manager(self, isolated_manager):
+        self.dm = isolated_manager
 
     def _use_executor(self, monkeypatch, executor) -> None:
-        monkeypatch.setattr(daemon_module, "get_executor", lambda task_type: executor)
+        monkeypatch.setattr(task_manager_module, "get_executor", lambda task_type: executor)
 
     def test_cancel_pending_removes_task_from_queue(self):
         task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="pending"))

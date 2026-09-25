@@ -3,7 +3,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Label, Static
 
-from max_cli.core.engines.daemon_manager import DaemonManager
+from max_cli.core.engines.task_manager import TaskManager
 from max_cli.core.engines.task_queue import TaskStatus
 
 
@@ -38,8 +38,8 @@ class QueuePanel(Vertical):
         self.refresh_data()
 
     def refresh_data(self) -> None:
-        daemon = DaemonManager()
-        tasks = daemon.get_all()
+        manager = TaskManager()
+        tasks = manager.get_all()
         table = self.query_one("#queue-table", DataTable)
 
         table.clear()
@@ -90,7 +90,7 @@ class QueuePanel(Vertical):
                 key=task.id,
             )
 
-        stats = daemon.get_stats()
+        stats = manager.get_stats()
         status_label = self.query_one("#queue-status", Label)
         status_label.update(
             f"  Pending: {stats.get('pending', 0)}  |  "
@@ -127,8 +127,8 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                daemon = DaemonManager()
-                daemon.cancel(str(task_id))
+                manager = TaskManager()
+                manager.cancel(str(task_id))
                 self.refresh_data()
 
     @on(Button.Pressed, "#btn-retry")
@@ -139,8 +139,8 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                daemon = DaemonManager()
-                daemon.retry(str(task_id))
+                manager = TaskManager()
+                manager.retry(str(task_id))
                 self.refresh_data()
 
     @on(Button.Pressed, "#btn-pause")
@@ -151,13 +151,13 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                daemon = DaemonManager()
-                daemon.pause(str(task_id))
+                manager = TaskManager()
+                manager.pause(str(task_id))
                 self.refresh_data()
 
     @on(Button.Pressed, "#btn-clear")
     def _on_clear(self) -> None:
-        daemon = DaemonManager()
+        manager = TaskManager()
         for status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
-            daemon.clear(status=status)
+            manager.clear(status=status)
         self.refresh_data()
