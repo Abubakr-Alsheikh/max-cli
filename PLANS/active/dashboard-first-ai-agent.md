@@ -1,6 +1,6 @@
 # Plan: Dashboard-First Max with an AI Agent
 
-**Status:** Draft
+**Status:** In Progress
 **Priority:** P1
 **Updated:** 2026-09-26
 
@@ -12,20 +12,20 @@ People who don't know the command line can use Max. You type `max` and the dashb
 
 Max started as a personal tool, and its commands are long and hard to remember for anyone else. The dashboard and the AI commands already exist, but they're separate side doors. This plan makes them the front door.
 
-## Decisions to make before building
+## Decisions (answered 2026-09-26)
 
-- [ ] **D1. Routing rule for `max <text>`.** Proposal:
-  - If the first word is a known command group (`video`, `pdf`, ...), run the command as today.
-  - Otherwise, send the text to the agent.
-  - A quoted phrase always goes to the agent: `max "images of my cats to jpg"`.
+- [x] **D1. Routing rule for `max <text>`.**
+  - The main form is a quoted request: `max "shrink every video in Downloads"`. The shell passes it as one argument that contains spaces, and the agent gets it.
+  - If the first word is a known command group (`video`, `pdf`, ...), the command runs as today.
+  - Any other first word also goes to the agent.
   - `max ai ...` stays as the explicit route.
-- [ ] **D2. When bare `max` opens the dashboard.** Proposal: only when stdin and stdout are an interactive terminal. In scripts, pipes and CI, bare `max` keeps printing help.
-- [ ] **D3. Textual as a core dependency.** Proposal: make `textual` (and `psutil`) required, not the `[tui]` extra, so bare `max` never fails with "install textual first". Changing `pyproject.toml` needs approval.
-- [ ] **D4. How far the agent may reach.** Proposal:
-  - The agent works under the folder you started in, plus folders you name.
+- [x] **D2. When bare `max` opens the dashboard.** Only when stdin and stdout are an interactive terminal. In scripts, pipes and CI, bare `max` keeps printing help. (Taken as the default; the maintainer didn't object.)
+- [x] **D3. Textual as a core dependency.** Approved: `textual` and `psutil` move from the `[tui]` extra to the required dependencies. Make the `pyproject.toml` change in Step 3.
+- [x] **D4. How far the agent may reach.**
+  - The agent works under the folder you started in, plus folders you name in the request.
   - Deletes, shreds and overwrites always need a yes.
   - It never runs raw shell commands.
-- [ ] **D5. Model support.** Proposal: keep the provider configurable (OpenAI-compatible APIs, Ollama). Multi-step tool use needs a capable model, so local models get a simpler single-step mode.
+- [x] **D5. Model support.** The provider stays configurable: any OpenAI-compatible API, plus Ollama. Capable models get multi-step tool use. Small local models get a simpler one-step mode.
 
 ## Tasks
 
@@ -39,6 +39,7 @@ Max started as a personal tool, and its commands are long and hard to remember f
 - [ ] Wire or remove the dead System buttons (`interactive-tui-expansion.md`).
 
 ### Step 2: One command catalog (single source of truth)
+The design and build order live in `command-catalog.md`.
 - [ ] Grow `interface/tui/command_registry.py` into one catalog in core that describes each action once. Each entry holds: its engine method, typed parameters with defaults from `core/presets.py`, whether it's destructive, and help text.
 - [ ] Generate from the catalog:
   - The dashboard forms (all parameters, see `dashboard-ui-redesign.md`).
@@ -90,4 +91,5 @@ Max started as a personal tool, and its commands are long and hard to remember f
 
 ## Decisions
 
-- 2026-09-26: Drafted from the maintainer's idea: "`max` opens the dashboard, `max <text>` goes to an AI agent." Needs D1-D5 answered before Step 3.
+- 2026-09-26: Drafted from the maintainer's idea: "`max` opens the dashboard, `max <text>` goes to an AI agent."
+- 2026-09-26: The maintainer answered D1-D5 (see above). Step 1 merged in PR #16.
