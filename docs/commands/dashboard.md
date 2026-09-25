@@ -1,10 +1,10 @@
 # TUI Dashboard
 
-Max includes an interactive terminal dashboard for monitoring queues, history, configuration, and system status.
+`max dashboard` opens an interactive terminal dashboard. You can download media, watch the task queue, browse files, edit settings and chat with the AI from one screen.
 
 ## Installation
 
-The TUI requires the `textual` library as an optional dependency:
+The dashboard needs the `tui` extra, which installs `textual` and `psutil`:
 
 ```bash
 pip install max-cli[tui]
@@ -13,62 +13,42 @@ pip install max-cli[tui]
 ## Usage
 
 ```bash
-# Launch dashboard
 max dashboard
-
-# Dev mode with hot-reload for development
-max dashboard --dev
 ```
 
-## Tabs
+## Sections
 
-### Queue
+A sidebar on the left switches between nine sections. Click a section, or move to it with `Tab` and press `Enter`.
 
-Live view of the download queue with real-time progress updates.
+| Section | What it does |
+|---------|--------------|
+| **Home** | Quick actions that open the matching section |
+| **Download** | Download form with progress and recent downloads |
+| **Queue** | Live task queue; refreshes every 2 seconds |
+| **History** | Finished tasks, with filters |
+| **Files** | File browser with quick actions |
+| **Analytics** | Live usage and system monitoring |
+| **Config** | View and edit your settings |
+| **System** | Disk usage of `~/.max_cli/` and system info |
+| **Chat** | AI chat with command suggestions |
 
-- Shows active, pending, completed, and failed tasks
-- Auto-refreshes every 2 seconds
-- Displays progress bars for active downloads
-
-### History
-
-Filterable view of recent operations.
-
-- Filter by status (success, failed, pending)
-- Filter by type (video, audio, file, grab)
-- Shows timestamps and duration
-
-### Config
-
-Editable configuration panel.
-
-- View and modify environment variables
-- Toggle settings on/off
-- Changes apply immediately
-
-### System
-
-Disk usage and system information.
-
-- Shows `~/.max_cli/` directory size
-- Cache usage breakdown
-- Platform and Python version info
+The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch between tabs |
-| `q` / `Esc` | Quit dashboard |
-| `r` | Refresh current panel |
-| `Arrow keys` | Navigate lists |
-| `Enter` | Select item / toggle setting |
+| `q` | Quit |
+| `r` | Refresh the sections |
+| `Ctrl+B` | Collapse or expand the sidebar |
+| `Tab` / `Shift+Tab` | Move between buttons and fields |
+| `Enter` | Press the focused button |
 
 ## Troubleshooting
 
-### "textual is not installed"
+### "The TUI dashboard requires the 'textual' library"
 
-If you run `max dashboard` without installing the TUI extra, you'll see a message with installation instructions:
+You ran `max dashboard` without the TUI extra. Install it:
 
 ```bash
 pip install max-cli[tui]
@@ -76,8 +56,4 @@ pip install max-cli[tui]
 
 ### Dashboard not refreshing
 
-Press `r` to manually refresh the current panel. The queue panel auto-refreshes every 2 seconds.
-
-### Dev mode
-
-Use `max dashboard --dev` during development to enable hot-reload. Changes to TUI source files will automatically refresh the dashboard without restarting.
+Press `r` to refresh. The visible section also refreshes every 2 seconds.

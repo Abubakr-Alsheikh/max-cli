@@ -19,17 +19,25 @@ max grab download
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--quality` | `-q` | Quality: s (480p), m (720p), h (1080p), x (4K) |
+| `--quality` | `-q` | Quality: `ss` (360p), `s` (480p), `m` (720p), `h` (1080p), `x` (4K) |
+| `--resolution` | `-r` | Exact height, such as 144, 240 or 720. Overrides `--quality` |
 | `--video` | `-v` | Force video download |
-| `--audio` | `-a` | Audio only (MP3) |
+| `--audio` | `-a` | Audio only |
+| `--subtitles` | `-s` | Download subtitles |
+| `--index` | `-i` | Playlist items to download, such as `1` or `1-5` |
+| `--no-playlist` | | Download one video, not the playlist |
+| `--no-meta` | `--nom` | Skip embedded metadata and thumbnails |
 | `--output` | `-o` | Output folder |
-| `--no-process` | | Add to queue without processing |
-| `--queue` | `-Q` | Add to queue |
+| `--queue` | `-Q` | Add to the queue instead of downloading now |
+| `--no-process` | | Add to the queue without processing it |
+| `--progress` / `--no-progress` | | Show or hide the progress bar (default: show) |
 | `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |
+
+`max net` is another name for the `max grab` group. Both run the same commands.
 
 ### YouTube Troubleshooting
 
-If downloads fail with `HTTP Error 403: Forbidden`, YouTube has likely blocked the default client. Fixes:
+If downloads fail with `HTTP Error 403: Forbidden`, YouTube is probably blocking the default client. Try these fixes:
 
 1. **Install a JavaScript runtime** (required by yt-dlp for YouTube extraction):
    ```bash
@@ -39,7 +47,7 @@ If downloads fail with `HTTP Error 403: Forbidden`, YouTube has likely blocked t
    ```bash
    max grab pot-setup
    ```
-   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies automatically. Once installed, `max grab` auto-detects it and uses the `android` client with token fetching — no extra flags needed.
+   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies. After that, `max grab download` detects the provider and uses the `android` client with token fetching. You don't need extra flags. Pass `--yes` (`-y`) to skip the confirmations.
 3. **Update yt-dlp** to the latest version:
    ```bash
    pip install -U yt-dlp
@@ -68,16 +76,19 @@ Benefits:
 ## Queue Commands
 
 ```bash
-# Show current download queue
+# Show the download queue
 max grab queue
+max grab queue --process    # Process pending downloads now
 
 # Show download history
 max grab history
 max grab history --limit 20
+max grab history --clear    # Delete the download history
 
-# Clear queue
+# Clear the queue
 max grab clear              # Clear pending downloads
 max grab clear --all        # Clear every queued download that isn't running
+max grab clear --force      # Skip the confirmation prompt
 
 # Show statistics
 max grab status
@@ -88,6 +99,8 @@ Downloads share one task store with `max queue` and the dashboard, so
 after upgrading moves the old `~/.max_cli/grab_queue.json`,
 `grab_history.json` and `download_history.json` into that store and renames
 each file to `*.migrated`.
+
+See [Queue](queue.md) for the commands that manage every task type.
 
 ## Configuration
 
@@ -109,6 +122,7 @@ Options include:
 
 | Flag | Video | Audio | Best For |
 |------|-------|-------|----------|
+| `-q ss` | 360p | 64kbps | Slow connections |
 | `-q s` | 480p | 64kbps | Data saving |
 | `-q m` | 720p | 128kbps | Phone |
 | `-q h` | 1080p | 192kbps | Desktop |

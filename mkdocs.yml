@@ -55,6 +55,8 @@ nav:
       - commands/pdf.md
       - commands/ai.md
       - commands/files.md
+      - commands/queue.md
+      - commands/tools.md
       - commands/config.md
       - commands/dashboard.md
   - API:

@@ -4,11 +4,12 @@ A high-performance, modular CLI framework for developers and power users. It pro
 
 ## Features
 
-- **Image Processing**: Compress, resize, convert, and optimize images
-- **PDF Operations**: Merge, split, compress, OCR, watermark, and more
-- **Media Tools**: Video compression, audio extraction, format conversion
-- **AI Integration**: Chat, file categorization, semantic search
-- **File Management**: Organize, deduplicate, backup, secure delete
+- **Image Processing**: Compress, resize, convert and strip metadata
+- **PDF Operations**: Merge, split, compress, OCR, watermark, forms and more
+- **Video and Audio**: Compression, audio extraction, noise removal, format conversion
+- **Downloads**: Media from YouTube and other sites, with a queue
+- **AI Integration**: Ask, chat, image analysis, semantic search, data extraction
+- **File Management**: Rename, sort, deduplicate, back up, secure delete and undo
 
 ## Quick Start
 
@@ -21,19 +22,19 @@ max --help
 
 # Image operations
 max images compress photo.jpg
-max images resize 800x600 image.png
+max images resize image.png -w 800
 
 # PDF operations
 max pdf compress document.pdf
 max pdf merge file1.pdf file2.pdf
 
-# Media operations
-max media compress video.mp4
-max media extract-audio video.mp4
+# Video operations
+max video compress video.mp4
+max video to-audio video.mp4
 
 # AI operations
 max ai chat
-max ai categorize ./files
+max ai search "invoices from March" ./documents
 ```
 
 ## Why Max CLI?

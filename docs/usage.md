@@ -4,19 +4,21 @@
 
 ```bash
 max --help
+max <group> --help
+max <group> <command> --help
 ```
 
 ## Image Operations
 
 ```bash
-# Compress image
-max images compress photo.jpg
+# Compress every image in a folder
+max images compress ./photos
 
-# Resize image
-max images resize 800x600 image.png
+# Resize to 800px wide
+max images resize image.png -w 800
 
-# Convert format
-max images convert image.jpg output.png
+# Convert to WebP
+max images convert photo.jpg --to webp
 
 # Strip metadata
 max images strip photo.jpg
@@ -25,39 +27,39 @@ max images strip photo.jpg
 ## PDF Operations
 
 ```bash
-# Compress PDF
+# Compress a PDF
 max pdf compress document.pdf
 
 # Merge PDFs
-max pdf merge file1.pdf file2.pdf
+max pdf merge file1.pdf file2.pdf -o merged.pdf
 
-# Split PDF
-max pdf split document.pdf
+# Keep pages 1-5
+max pdf split document.pdf -s 1 -e 5
 
-# OCR
+# OCR a scanned PDF
 max pdf ocr document.pdf
 
-# Watermark
-max pdf watermark document.pdf watermark.png
+# Watermark every page
+max pdf stamp document.pdf "CONFIDENTIAL"
 ```
 
-## Media Operations
+## Video Operations
 
 ```bash
-# Compress video
-max media compress video.mp4
+# Compress a video
+max video compress video.mp4
 
-# Extract audio
-max media extract-audio video.mp4
+# Extract the audio
+max video to-audio video.mp4
 
-# Convert format
-max media convert video.mp4 output.avi
+# Change the container
+max video convert video.mkv --format mp4
 
-# Trim video
-max media trim video.mp4 --start 0 --end 30
+# Keep the first 30 seconds
+max video cut video.mp4 --start 0 --end 30
 
-# Concatenate videos
-max media concat "*.mp4"
+# Join videos
+max video concat "*.mp4" -o joined.mp4
 ```
 
 ## AI Operations
@@ -66,21 +68,21 @@ max media concat "*.mp4"
 # Chat mode
 max ai chat
 
-# Categorize files
-max ai categorize ./files
+# Describe a task and let Max suggest the command
+max ai ask "Compress all PDFs in this folder"
 
 # Semantic search
 max ai search "query" ./directory
 
-# Generate image
-max ai generate "a beautiful sunset"
+# Generate an image
+max ai create "a beautiful sunset" -o sunset.png
 ```
 
 ## File Operations
 
 ```bash
-# Organize files
-max files organize ./photos
+# Sort files into folders with AI
+max files smart-sort ./downloads
 
 # Find duplicates
 max files duplicates ./downloads
@@ -88,8 +90,16 @@ max files duplicates ./downloads
 # Secure delete
 max files shred sensitive.txt
 
-# Backup
-max files backup ./directory
+# Back up a file
+max files backup report.docx
+```
+
+## Background Queue
+
+```bash
+max video compress movie.mp4 --queue
+max queue status
+max queue process
 ```
 
 ## Configuration
@@ -98,9 +108,9 @@ max files backup ./directory
 # Show config
 max config show
 
-# Set value
-max config set MAX_WORKERS 8
+# Check your settings
+max config validate
 
 # Export config
-max config export config.json
+max config export -o config.json
 ```
