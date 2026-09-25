@@ -22,6 +22,14 @@ def main():
     try:
         init_plugins(app)
         app()
+    except SystemExit as exit_signal:
+        # Commands often report a failure with log_error and then return, so
+        # click exits 0. Exit 1 instead, so scripts can detect the failure.
+        from max_cli.common.exit_status import error_reported
+
+        if exit_signal.code in (0, None) and error_reported():
+            sys.exit(1)
+        raise
     except MaxError as e:
         from max_cli.common.logger import console
 

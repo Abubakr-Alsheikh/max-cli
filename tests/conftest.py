@@ -53,7 +53,11 @@ def isolated_home(tmp_path_factory, monkeypatch):
             config_module, "GLOBAL_CONFIG_PATH", fake_home / ".max_config.env"
         )
     monkeypatch.setattr(cache, "_default_cache", None)
+    from max_cli.common import exit_status
+
+    exit_status.reset()
     yield fake_home
+    exit_status.reset()
     monkeypatch.setattr(cache, "_default_cache", None)
 
 
