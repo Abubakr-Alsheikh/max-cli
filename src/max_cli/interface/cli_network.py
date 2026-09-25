@@ -366,24 +366,25 @@ def _download_immediate(
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
 
     if should_check_playlist:
+        info: dict = {}
         with console.status("[dim]Checking URL...[/dim]"):
             try:
-                eng = _get_engine()
-                info = eng.get_info(url)
-                if "entries" in info:
-                    count = len(info["entries"])
-                    if not Confirm.ask(
-                        f"[yellow]Playlist detected ({count} items). Download ALL?[/yellow]"
-                    ):
-                        choice = Prompt.ask(
-                            "Enter [bold]index[/bold] (e.g. 1) or [bold]n[/bold] to cancel",
-                            default="n",
-                        )
-                        if choice.lower() == "n":
-                            raise typer.Exit()
-                        index = choice
-            except Exception:
-                pass
+                info = _get_engine().get_info(url)
+            except Exception as e:  # noqa: BLE001 - the download itself reports real errors
+                console.print(f"[dim]Could not check the playlist: {e}[/dim]")
+        # Prompt outside the try: typer.Exit is an Exception and must reach typer.
+        if "entries" in info:
+            count = len(info["entries"])
+            if not Confirm.ask(
+                f"[yellow]Playlist detected ({count} items). Download ALL?[/yellow]"
+            ):
+                choice = Prompt.ask(
+                    "Enter [bold]index[/bold] (e.g. 1) or [bold]n[/bold] to cancel",
+                    default="n",
+                )
+                if choice.lower() == "n":
+                    raise typer.Exit()
+                index = choice
 
     if audio_only:
         eng = _get_engine()

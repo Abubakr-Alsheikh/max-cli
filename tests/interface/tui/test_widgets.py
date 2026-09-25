@@ -116,3 +116,20 @@ class TestConfigPanel:
 
                 env_file = tmp_path / ".max_config.env"
                 assert env_file.exists()
+
+
+def test_system_panel_confirm_button_resets():
+    """_reset_confirm used to query "##btn-...", so the label never reset."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from max_cli.interface.tui.widgets.system_panel import SystemPanel
+
+    panel = SystemPanel()
+    button = SimpleNamespace(label="Confirm?")
+    with patch.object(SystemPanel, "query_one", return_value=button) as query:
+        panel._reset_confirm("#btn-reset-config", "Reset Config")
+
+    query.assert_called_once()
+    assert query.call_args.args[0] == "#btn-reset-config"
+    assert button.label == "Reset Config"

@@ -129,7 +129,11 @@ class TestAIEngine:
         mock_settings.OLLAMA_ENABLED = False
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = Exception("API Error")
+        import openai
+
+        mock_client.chat.completions.create.side_effect = openai.OpenAIError(
+            "API Error"
+        )
 
         mock_openai.return_value = mock_client
 

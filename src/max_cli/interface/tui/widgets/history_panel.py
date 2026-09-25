@@ -1,6 +1,7 @@
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 from max_cli.interface.tui.activity_log import ActivityLog
@@ -152,7 +153,7 @@ class HistoryPanel(Vertical):
     def _reset_confirm(self) -> None:
         try:
             btn = self.query_one("#btn-clear-history", Button)
-            if btn.label == "Confirm?":
-                btn.label = "Clear History"
-        except Exception:
-            pass
+        except NoMatches:
+            return  # panel was closed before the timer fired
+        if btn.label == "Confirm?":
+            btn.label = "Clear History"

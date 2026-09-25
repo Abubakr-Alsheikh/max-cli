@@ -6,6 +6,7 @@ from pathlib import Path
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Button, ProgressBar, Static
 
 from max_cli.common.utils import format_size
@@ -206,12 +207,14 @@ class SystemPanel(Vertical):
             )
 
     def _reset_confirm(self, btn_id: str, original_label: str) -> None:
+        # btn_id already starts with "#"; the old f"#{btn_id}" made "##btn-..."
+        # and the silent except hid that, so labels never reset.
         try:
-            btn = self.query_one(f"#{btn_id}", Button)
-            if btn.label == "Confirm?":
-                btn.label = original_label
-        except Exception:
-            pass
+            btn = self.query_one(btn_id, Button)
+        except NoMatches:
+            return  # panel was closed before the timer fired
+        if btn.label == "Confirm?":
+            btn.label = original_label
 
     @on(Button.Pressed, "#btn-refresh")
     def _on_refresh(self) -> None:

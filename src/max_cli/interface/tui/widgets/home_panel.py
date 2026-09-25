@@ -175,8 +175,8 @@ class HomePanel(Vertical):
             cache = get_default_cache()
             cache_size = cache.get_size()
             self.query_one("#stat-cache", Static).update(format_size(cache_size))
-        except Exception:
-            pass
+        except OSError:
+            self.query_one("#stat-cache", Static).update("-")
 
     def _load_recent_activity(self) -> None:
         activity = ActivityLog()

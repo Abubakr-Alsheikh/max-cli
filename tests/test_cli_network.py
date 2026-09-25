@@ -117,3 +117,30 @@ class TestGrabQueueUsesTaskStore:
 
         assert result.exit_code == 0, result.output
         assert manager.get_all() == []
+
+
+def test_declining_playlist_prompt_cancels_download():
+    """typer.Exit from the playlist prompt used to be swallowed by `except Exception`."""
+    import typer
+
+    from max_cli.interface import cli_network
+
+    engine = MagicMock(has_js=True)
+    engine.get_info.return_value = {"entries": [{}, {}]}
+    with patch.object(cli_network, "_get_engine", return_value=engine), patch.object(
+        cli_network.Confirm, "ask", return_value=False
+    ), patch.object(cli_network.Prompt, "ask", return_value="n"), pytest.raises(
+        typer.Exit
+    ):
+        cli_network._download_immediate(
+            "https://youtube.com/watch?v=a&list=b",
+            quality="h",
+            audio_only=False,
+            include_metadata=True,
+            index=None,
+            no_playlist=False,
+            output_path=MagicMock(),
+            show_progress=False,
+        )
+
+    engine.download_media.assert_not_called()

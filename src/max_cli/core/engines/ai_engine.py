@@ -1,6 +1,7 @@
 import json
+import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple, Type
 from max_cli.config import settings
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
@@ -8,6 +9,22 @@ from max_cli.common.utils import encode_image_to_base64
 from max_cli.common.cache import get_default_cache
 
 LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
+
+logger = logging.getLogger(__name__)
+
+
+def _ai_call_errors() -> Tuple[Type[BaseException], ...]:
+    """Errors from an AI request or from parsing its reply."""
+    import openai
+
+    return (
+        openai.OpenAIError,
+        json.JSONDecodeError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+    )
 
 
 class AIEngine:
@@ -56,7 +73,8 @@ class AIEngine:
             try:
                 data = json.loads(self._history_file.read_text(encoding="utf-8"))
                 self.history = data.get("history", [])
-            except Exception:
+            except (OSError, ValueError, AttributeError):
+                logger.warning("Ignoring unreadable chat history %s", self._history_file)
                 self.history = []
 
     def _save_history(self) -> None:
@@ -108,7 +126,8 @@ Return as a JSON array of strings."""
             )
             result = json.loads(response.choices[0].message.content)
             return result if isinstance(result, list) else []
-        except Exception:
+        except _ai_call_errors():
+            logger.warning("AI suggestions failed; using defaults", exc_info=True)
             return [
                 "Show me what you can do",
                 "Help me with files",
@@ -254,7 +273,8 @@ If the request is unrelated to the tools or ambiguous, return:
             result = json.loads(response.choices[0].message.content)
             cache.set(cache_key, result, ttl=3600)
             return result
-        except Exception:
+        except _ai_call_errors():
+            logger.warning("AI categorization failed; using 'Other'", exc_info=True)
             return {f: "Other" for f in file_list}
 
     def analyze_image_content(self, image_path: Path, prompt: str) -> str:
@@ -478,6 +498,10 @@ If the request is unrelated to the tools or ambiguous, return:
 
         results = []
 
+        skippable_errors: Tuple[Type[BaseException], ...] = (
+            OSError,
+            *_ai_call_errors(),
+        )
         for file_path in files:
             try:
                 if file_path.suffix.lower() in [
@@ -517,7 +541,8 @@ Does this file match the query? Reply with YES or NO followed by a brief explana
                         {"file": str(file_path), "match": True, "reasoning": answer}
                     )
 
-            except Exception:
+            except skippable_errors:
+                logger.warning("Skipped %s during AI search", file_path, exc_info=True)
                 continue
 
         return results
