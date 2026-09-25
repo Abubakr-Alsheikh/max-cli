@@ -51,6 +51,8 @@ max = "max_cli.main:main"
 [tool.ruff]
 line-length = 88
 target-version = "py39"
+# Vendored third-party skills keep their upstream style.
+extend-exclude = [".agents", ".claude/skills"]
 
 [tool.ruff.lint]
 # Explicit rule set: newer ruff releases change the default selection, which

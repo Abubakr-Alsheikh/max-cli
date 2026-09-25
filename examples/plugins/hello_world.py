@@ -14,9 +14,10 @@ To use this plugin:
 3. Run: max hello --name "Your Name"
 """
 
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 
 from max_cli.plugins.base import CLIPlugin, PluginContext
 

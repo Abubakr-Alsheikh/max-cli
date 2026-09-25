@@ -43,8 +43,8 @@ class NetworkEngine:
         import yt_dlp  # type: ignore[import-untyped]
 
         yt_dlp.YoutubeDL({"quiet": True})
-        from yt_dlp.extractor.youtube.pot._registry import (
-            _pot_providers,  # type: ignore[import-untyped]  # private yt-dlp module, no stubs
+        from yt_dlp.extractor.youtube.pot._registry import (  # type: ignore[import-untyped]  # private yt-dlp module, no stubs
+            _pot_providers,
         )
 
         return bool(_pot_providers.value)
