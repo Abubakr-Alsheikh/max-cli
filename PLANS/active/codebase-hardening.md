@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-5 done, 5b and D5 open)
+**Status:** In Progress (Phases 0-5b done; D5 and the exit-code decision open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -205,30 +205,34 @@ Baseline on 2026-09-24:
 
 **Result:** pytest 785 passed, 1 skipped, 19 xfailed (up from 406). 18 of the xfails are the bugs below; the 19th is the startup target (D5).
 
-## Phase 5b: Fix the bugs Phase 5 found (M)
+## Phase 5b: Fix the bugs Phase 5 found (Completed 2026-09-25, branch `fix/hardening-p5b-bugs`)
 
-Each bug has a strict xfail test that names its cause. Fix one bug per commit, then remove its marker.
+One commit per bug. Each fix turned its strict xfail test green, and the marker was removed.
 
-- [ ] `cli_config.py:7-14`: the documented `max config show/validate/save/...` exit with "Missing command". `add_typer` turns each single-command app into a group, so only `max config show show` works.
-- [ ] `plugins/manager.py:112-147`: `load_all` crashes on any plugin written like `examples/plugins/hello_world.py`. `discover_plugins` also returns the imported abstract `CLIPlugin`. One such user plugin breaks CLI startup.
-- [ ] `audio_metadata_engine.py:117-143`: `set_metadata`, `batch_set_metadata` and `auto_tag_from_filename` fail on MP3 and WAV, because files open without `easy=True`.
-- [ ] `audio_metadata_engine.py:70`: FLAC and OGG values come back as `"['Artist']"`, so `organize` creates `['Artist']` folders.
-- [ ] `audio_metadata_engine.py:143,181`: writing to a new `output_path` raises `MutagenError`.
-- [ ] `audio_metadata_engine.py:244-246`: the "Track - Artist - Title" filename pattern assigns the wrong fields.
-- [ ] `cli_files.py` `duplicates --delete` deletes without `Confirm.ask` or `--force` (AGENTS.md section 14).
-- [ ] `cli_pdf.py:499,520` `form-fill --field` is `str`, not `List[str]`, so it never works.
-- [ ] `cli_ai.py:354-377` `extract --schema` has the same `str`/`List[str]` bug.
-- [ ] `cli_pdf.py:37` `merge` with no PDFs raises a raw `ValueError`.
-- [ ] `cli_queue.py:74` `history --type bogus` raises a raw `ValueError`.
-- [ ] `cli_pdf.py:463`: Rich markup swallows `[ocr]` in the install tip.
-- [ ] `common/cache.py:153`: `@cached` drops `Path` arguments from the key, so different paths share one entry.
-- [ ] `plugins/manager.py:201`: `on_load` gets `plugin_dir=None` for hyphenated plugin names.
-- [ ] `plugins/manager.py:233`: unknown plugins report as enabled.
-- [ ] Not tested yet:
-  - Most error paths in the file, PDF, media, audio, AI and tools commands call `log_error` and exit 0, so scripts can't detect failures. Decide on one exit-code policy.
-  - `config validate` adds the `MAX_WORKERS` row twice.
-  - `retry(max_attempts=0)` raises `TypeError`.
-  - `image_processor.py:22,123` calls `getdata`, which Pillow 14 removes.
+- [x] `cli_config.py`: `max config show/validate/save/...` run without the nested name. The sub-apps are mounted without a name.
+- [x] `audio_metadata_engine.py` (one commit, four bugs):
+  - Tagging works on MP3 (easy mode) and WAV (ID3 frames).
+  - FLAC and OGG values read as `Artist`, not `['Artist']`.
+  - A new `output_path` gets a copy of the source before tagging.
+  - "01 - Artist - Title" filenames set the track, artist and title.
+- [x] `cli_files.py`: `duplicates --delete` asks first, and `--force` skips the question.
+- [x] `cli_pdf.py`:
+  - `form-fill --field` is `List[str]`.
+  - `merge` with no PDFs logs an error and exits 1.
+  - The OCR tip shows `[ocr]`.
+- [x] `cli_ai.py`: `extract --schema` is `List[str]`.
+- [x] `cli_queue.py`: `history --type bogus` names the valid types and exits 1.
+- [x] `common/cache.py`: `@cached` keys include resolved `Path` arguments.
+- [x] `config validate` lists `MAX_WORKERS` once.
+- [x] `retry(max_attempts=0)` raises `ValueError` up front.
+- [x] `image_processor`: metadata stripping uses `paste` in place of the deprecated `getdata`, and it keeps the palette of "P" images.
+- [D] Plugin bugs. Deferred 2026-09-25: the maintainer isn't focusing on plugins now. Their strict xfail tests stay in `tests/test_plugin_manager.py`.
+  - `load_all` crashes on plugins written like the example.
+  - `on_load` gets `plugin_dir=None` for hyphenated names.
+  - Unknown plugins report as enabled.
+- [ ] **Open decision: exit codes.** Most error paths in the file, PDF, media, audio, AI and tools commands call `log_error` and exit 0, so scripts can't detect failures. Proposal: exit 1 after every `log_error` in a command. It's a behavior change, so it needs the maintainer's approval.
+
+**Result:** pytest 795 passed, 1 skipped, 4 xfailed (the 3 plugin bugs and the D5 startup target). mypy 41. Pillow deprecation warnings dropped from 10 to 6.
 
 ## Phase 6: Docs and PLANS hygiene (S-M)
 
@@ -259,6 +263,7 @@ Each bug has a strict xfail test that names its cause. Fix one bug per commit, t
   - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
   - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
+- 2026-09-25: Phase 5b. The maintainer deferred the three plugin bugs. The macOS CI run on PR #6 also found that `files duplicates` kept a different copy per OS (directory order). That was fixed in PR #6 by sorting.
 - 2026-09-25: Phase 5. Three subagents wrote the tests in parallel, each in separate files. The bugs they found stay as strict xfails and moved to Phase 5b, so each fix gets its own reviewed commit.
 - 2026-09-25: Phase 4 follow-up. The maintainer kept `artist-album` as the dashboard's organize pattern because plain `artist` had caused a problem. The FLAC `['Artist']` folder bug in Phase 5b may be that problem.
 - 2026-09-25: Phase 4. Where the CLI and TUI disagreed, the CLI value became the preset, because CLI users see those values in `--help` and the docs.
