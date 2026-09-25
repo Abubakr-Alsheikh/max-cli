@@ -33,7 +33,7 @@ def _get_media_engine():
         return MediaEngine(auto_resolve=True, **ffmpeg_prompt_callbacks())
     except RuntimeError as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("compress")

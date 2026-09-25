@@ -183,7 +183,7 @@ class FileOrganizer:
         kept_paths: list[Path] = []
         errors: list[str] = []
 
-        for hash_val, paths in duplicates.items():
+        for paths in duplicates.values():
             keep = paths[0]
             kept_paths.append(keep)
 
@@ -344,7 +344,7 @@ class FileOrganizer:
             path.unlink()
             return True
         except OSError as e:
-            raise OSError(f"Secure delete failed: {e}")
+            raise OSError(f"Secure delete failed: {e}") from e
 
     def get_backup_dir(self) -> Path:
         """Get or create the backup directory."""

@@ -290,7 +290,7 @@ If the request is unrelated to the tools or ambiguous, return:
 
             return result
         except Exception as e:
-            raise MaxError(f"AI Interpretation Error: {e}")
+            raise MaxError(f"AI Interpretation Error: {e}") from e
 
     def categorize_files(self, file_list: List[str]) -> Dict[str, str]:
         """AI-powered semantic grouping of files."""
@@ -325,7 +325,7 @@ If the request is unrelated to the tools or ambiguous, return:
         try:
             base64_image = encode_image_to_base64(image_path)
         except Exception as e:
-            raise MaxError(f"Failed to process image: {e}")
+            raise MaxError(f"Failed to process image: {e}") from e
 
         messages = [
             {
@@ -347,7 +347,7 @@ If the request is unrelated to the tools or ambiguous, return:
             )
             return response.choices[0].message.content
         except Exception as e:
-            raise MaxError(f"AI Vision Error: {str(e)}")
+            raise MaxError(f"AI Vision Error: {str(e)}") from e
 
     def generate_image(self, prompt: str, model: Optional[str] = None) -> str:
         """
@@ -366,7 +366,7 @@ If the request is unrelated to the tools or ambiguous, return:
             content = response.choices[0].message.content
             return self._extract_image_url(content, response)
         except Exception as e:
-            raise MaxError(f"Image Generation Failed using {target_model}: {e}")
+            raise MaxError(f"Image Generation Failed using {target_model}: {e}") from e
 
     def edit_image(
         self, image_path: Path, prompt: str, model: Optional[str] = None
@@ -400,7 +400,7 @@ If the request is unrelated to the tools or ambiguous, return:
             content = response.choices[0].message.content
             return self._extract_image_url(content, response)
         except Exception as e:
-            raise MaxError(f"Image Editing Failed using {target_model}: {e}")
+            raise MaxError(f"Image Editing Failed using {target_model}: {e}") from e
 
     def _extract_image_url(self, content: str, raw_response: Any) -> str:
         """
@@ -609,4 +609,4 @@ Return a JSON object with the extracted data."""
             except json.JSONDecodeError:
                 return {"raw_text": result, "error": "Could not parse as JSON"}
         except Exception as e:
-            raise MaxError(f"Data extraction failed: {e}")
+            raise MaxError(f"Data extraction failed: {e}") from e

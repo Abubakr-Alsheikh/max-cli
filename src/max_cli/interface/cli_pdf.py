@@ -39,7 +39,7 @@ def merge_pdfs(
         files_to_merge = _resolve_files(inputs)
     except ValueError as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not output:
         # Smart default naming
@@ -185,7 +185,7 @@ def bundle_pdfs(
         files = _resolve_files(inputs)
     except Exception as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 2. Smart Output Logic
     # Determine a base name for the file
@@ -225,7 +225,7 @@ def bundle_pdfs(
             )
     except Exception as e:
         log_error(f"Bundle operation failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not no_compress and stats["output_size"] > stats["input_size"]:
         growth = stats["output_size"] - stats["input_size"]
@@ -305,7 +305,7 @@ def split_pdf(
         total_pages = eng.get_page_count(target)
     except Exception as e:
         log_error(f"Failed to read PDF: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if list_pages:
         console.print(f"[cyan]'{target.name}' has [bold]{total_pages}[/bold] pages.")

@@ -51,7 +51,7 @@ def order_files(
         files = org.scan_directory(folder)
     except Exception as e:
         log_error(str(e))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     if not files:
         console.print("[yellow]Folder is empty. Nothing to do.[/yellow]")
@@ -194,7 +194,7 @@ def find_duplicates(
             f"[yellow]Found {total_dupes} duplicate(s) in {len(duplicates)} group(s):[/yellow]\n"
         )
 
-        for hash_val, paths in duplicates.items():
+        for paths in duplicates.values():
             console.print("[bold]Duplicate group:[/bold]")
             for p in paths:
                 console.print(f"  {p}")
@@ -482,7 +482,7 @@ def undo_last():
             "[yellow]Some files may have been partially restored. "
             "Check the transaction log for details.[/yellow]"
         )
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @app.command("history")

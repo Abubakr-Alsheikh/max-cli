@@ -82,10 +82,10 @@ class Plugin(ABC):
         """Validate plugin requirements. Returns (is_valid, error_message)."""
         return True, None
 
-    def on_load(self, context: PluginContext) -> None:
+    def on_load(self, context: PluginContext) -> None:  # noqa: B027 - optional hook
         """Called when plugin is loaded."""
 
-    def on_unload(self) -> None:
+    def on_unload(self) -> None:  # noqa: B027 - optional hook
         """Called when plugin is unloaded."""
 
     @abstractmethod
@@ -93,7 +93,7 @@ class Plugin(ABC):
         """Register commands with the CLI app."""
         pass
 
-    def unregister(self, app: typer.Typer) -> None:
+    def unregister(self, app: typer.Typer) -> None:  # noqa: B027 - optional hook
         """Unregister commands from the CLI app. Override if cleanup needed."""
         pass
 

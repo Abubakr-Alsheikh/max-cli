@@ -62,7 +62,7 @@ class FFmpegEngine:
             )
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode().strip()
-            raise RuntimeError(f"FFmpeg Error: {error_msg}")
+            raise RuntimeError(f"FFmpeg Error: {error_msg}") from e
 
     def _get_duration(self, input_path: Path) -> Optional[float]:
         """Media duration in seconds, or None when ffprobe cannot tell.

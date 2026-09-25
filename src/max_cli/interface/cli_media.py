@@ -32,7 +32,7 @@ def _get_engine():
         return MediaEngine(auto_resolve=True, **ffmpeg_prompt_callbacks())
     except RuntimeError as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command("compress")
@@ -345,7 +345,7 @@ def concat_videos(
         input_files = resolve_concat_inputs(target)
     except ValueError as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not output:
         ext = input_files[0].suffix if input_files else ".mp4"

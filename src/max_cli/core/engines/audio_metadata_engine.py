@@ -271,7 +271,7 @@ class AudioMetadataEngine:
                 )
                 results.append(result)
             except Exception as e:
-                raise RuntimeError(f"Failed to set metadata on {path}: {e}")
+                raise RuntimeError(f"Failed to set metadata on {path}: {e}") from e
 
         return results
 

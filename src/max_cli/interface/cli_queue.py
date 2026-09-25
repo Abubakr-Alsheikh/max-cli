@@ -80,7 +80,7 @@ def queue_history(
         valid_types = ", ".join(t.value for t in TaskType)
         console.print(f"[red]Unknown task type '{task_type}'.[/red]")
         console.print(f"[dim]Valid types: {valid_types}[/dim]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     history = _get_engine().get_history(limit=limit, task_type=tt)
 
     if not history:

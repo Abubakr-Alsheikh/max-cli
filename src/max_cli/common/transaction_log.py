@@ -142,7 +142,7 @@ class TransactionLog:
             except OSError as e:
                 raise TransactionError(
                     f"Undo failed for {op_type} ({original or new}): {e}"
-                )
+                ) from e
 
         self.undo_status = "undone"
         self.save()
@@ -162,7 +162,7 @@ class TransactionLog:
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
-            raise TransactionError(f"Corrupt transaction file: {e}")
+            raise TransactionError(f"Corrupt transaction file: {e}") from e
 
         txn = cls(command=data["command"], storage_dir=store)
         txn.group_id = data["group_id"]
