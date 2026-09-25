@@ -15,7 +15,7 @@ Reconciled against the code on 2026-09-25 (hardening Phase 6).
 | [file-undo-transaction-log.md](./file-undo-transaction-log.md) | In Progress | P2 | 11 mypy errors in `common/transaction_log.py` |
 | [user-workflows-aliases.md](./user-workflows-aliases.md) | Draft | P1 | Not started |
 | [dashboard-first-ai-agent.md](./dashboard-first-ai-agent.md) | In Progress | P1 | Roadmap: bare `max` opens the dashboard, `max "<request>"` goes to an AI agent. D1-D5 answered; Step 1 done |
-| [command-catalog.md](./command-catalog.md) | Design (review) | P1 | Roadmap Step 2: one catalog in core feeds the CLI, dashboard forms and agent tools |
+| [command-catalog.md](./command-catalog.md) | In Progress | P1 | Roadmap Step 2: one catalog in core feeds the CLI, dashboard forms and agent tools |
 | [dashboard-ui-redesign.md](./dashboard-ui-redesign.md) | Draft (idea) | P1 | Scrolling on every page, a TUI design standard, full command options in forms |
 | [cli-dashboard-sync.md](./cli-dashboard-sync.md) | Draft (idea) | P1 | CLI and dashboard share one live activity record |
 | [paths-from-anywhere.md](./paths-from-anywhere.md) | Draft (idea) | P1 | Run commands on any file or folder; file picker in the dashboard |

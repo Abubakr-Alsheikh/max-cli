@@ -1,6 +1,6 @@
 # Plan: One Command Catalog
 
-**Status:** Design, waiting for the maintainer's review
+**Status:** In Progress (design approved)
 **Priority:** P1
 **Updated:** 2026-09-26
 **Parent:** `dashboard-first-ai-agent.md`, Step 2
@@ -135,12 +135,13 @@ Each step is one PR, with tests first.
 5. **Agent tool views:** `list_groups`, `load_group` and JSON Schema. Test that the first prompt holds only the group list, and measure the tokens. This step feeds roadmap Step 4.
 6. **Clean up.** Delete `command_registry.py` and `command_executor.py`, and fix the three small bugs above if an earlier step hasn't already.
 
-## Questions for the maintainer
+## Questions for the maintainer (answered 2026-09-26)
 
-- [ ] **Q1.** Check the Typer commands against the catalog (proposed), or generate them from it? Checking is smaller and keeps each CLI command readable. Generating removes the duplicate but touches every command at once.
-- [ ] **Q2.** `video` as the pilot group (proposed)? It's the largest set of thin commands and fixes 6 broken dashboard forms at once.
-- [ ] **Q3.** Should the dashboard get a form for every catalog action (a "Tools" page with a group picker), or only on the pages that exist now? Proposed: a "Tools" page, since it replaces the removed Tools panel with generated forms.
+- [x] **Q1.** Check the Typer commands against the catalog with a drift test. Don't generate them yet.
+- [x] **Q2.** `video` is the pilot group.
+- [x] **Q3.** A new dashboard "Tools" page with a group picker shows a generated form for every enabled action. Existing pages reuse the same form widget.
 
 ## Decisions
 
-- 2026-09-26: Written from a survey of all CLI commands, the TUI registry and the executor. Waiting for review before code.
+- 2026-09-26: Written from a survey of all CLI commands, the TUI registry and the executor.
+- 2026-09-26: The maintainer approved the design and answered Q1-Q3. Build step 1 (skeleton and `video`) started.
