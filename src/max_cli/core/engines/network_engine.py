@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import urllib.parse
 import urllib.request
 
 
@@ -311,6 +312,23 @@ class NetworkEngine:
             "output_path": str(output_path),
             "message": f"Downloaded: {url[:50]}",
         }
+
+
+def strip_playlist_params(url: str) -> str:
+    """Drop `list`/`index` from a URL that names one video (`v=...`).
+
+    Keeps `v` and the `t` timestamp. Returns the URL unchanged otherwise.
+    """
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query)
+    if "v" not in query or "list" not in query:
+        return url
+    kept_query = {"v": query["v"]}
+    if "t" in query:
+        kept_query["t"] = query["t"]
+    return urllib.parse.urlunparse(
+        parsed._replace(query=urllib.parse.urlencode(kept_query, doseq=True))
+    )
 
 
 def make_download_task(url: str, **options: Any) -> "TaskItem":

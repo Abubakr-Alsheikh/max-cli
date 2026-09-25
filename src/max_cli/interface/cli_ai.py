@@ -189,6 +189,8 @@ def _handle_image_result(url: str, output_path: Optional[Path], default_name: st
     """Helper to display URL and download image."""
     import requests
 
+    from max_cli.core.engines.ai_engine import download_image
+
     console.print("\n[green]Image Ready![/green]")
     console.print(f"🔗 [link={url}]View Online[/link]")
 
@@ -197,13 +199,9 @@ def _handle_image_result(url: str, output_path: Optional[Path], default_name: st
 
     try:
         with console.status(f"[dim]Downloading to {final_path.name}...[/dim]"):
-            r = requests.get(url, stream=True)
-            r.raise_for_status()
-            with open(final_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            download_image(url, final_path)
         log_success(f"Saved to: [bold]{final_path}[/bold]")
-    except Exception as e:
+    except (requests.RequestException, OSError) as e:
         console.print(f"[yellow]Could not auto-download: {e}[/yellow]")
 
 
@@ -325,8 +323,9 @@ def semantic_search_cmd(
         log_error(f"Folder not found: {path}")
         raise typer.Exit(1)
 
-    exts = [f".{e.strip()}" for e in extensions.split(",")]
-    files = [f for f in path.rglob("*") if f.is_file() and f.suffix.lower() in exts]
+    from max_cli.core.engines.ai_engine import find_searchable_files
+
+    files = find_searchable_files(path, extensions.split(","))
 
     if not files:
         console.print("[yellow]No matching files found.[/yellow]")

@@ -1,5 +1,4 @@
 import typer
-import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -205,53 +204,28 @@ def bundle_pdfs(
         )
     console.print(f"[dim]Target: {output}[/dim]")
 
-    # Create a unique temp file to avoid collisions
-    temp_merged = output.parent / f".tmp_{base_name}_merged.pdf"
-
     try:
-        # Step 1: Merge
-        with console.status("Merging..."):
-            eng = _get_engine()
-            eng.merge_pdfs(files, temp_merged)
-
-        final_size = 0
-
-        if no_compress:
-            # Just move the merged file to output
-            temp_merged.rename(output)
-            final_size = output.stat().st_size
-        else:
-            # Step 2: Compress
-            with console.status("Compressing..."):
-                eng.compress_pdf(temp_merged, output, dpi, quality)
-
-            # Cleanup temp
-            if temp_merged.exists():
-                os.remove(temp_merged)
-
-            # Stats
-            final_size = output.stat().st_size
-            original_total_size = sum(f.stat().st_size for f in files)
-
-            if final_size > original_total_size:
-                growth = final_size - original_total_size
-                console.print(
-                    f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
-                )
-                console.print(
-                    "[dim]Note: Consider using lower quality or 'compress' command separately.[/dim]"
-                )
-
-        log_success("Bundle created successfully!")
-        console.print(f"Path: [bold]{output}[/bold]")
-        console.print(f"Size: {format_size(final_size)}")
-        console.print(f"Pages: [bold]{eng.get_page_count(output)}[/bold]")
-
+        with console.status("Merging and compressing..." if not no_compress else "Merging..."):
+            stats = _get_engine().bundle_pdfs(
+                files, output, compress=not no_compress, dpi=dpi, quality=quality
+            )
     except Exception as e:
-        if temp_merged.exists():
-            os.remove(temp_merged)
         log_error(f"Bundle operation failed: {e}")
         raise typer.Exit(1)
+
+    if not no_compress and stats["output_size"] > stats["input_size"]:
+        growth = stats["output_size"] - stats["input_size"]
+        console.print(
+            f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
+        )
+        console.print(
+            "[dim]Note: Consider using lower quality or 'compress' command separately.[/dim]"
+        )
+
+    log_success("Bundle created successfully!")
+    console.print(f"Path: [bold]{output}[/bold]")
+    console.print(f"Size: {format_size(stats['output_size'])}")
+    console.print(f"Pages: [bold]{stats['page_count']}[/bold]")
 
 
 def _resolve_files(inputs: List[Path]) -> List[Path]:

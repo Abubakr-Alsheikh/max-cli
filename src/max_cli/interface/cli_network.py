@@ -1,5 +1,4 @@
 import time
-import urllib.parse
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -96,22 +95,12 @@ def _clean_url(url: str, strip_playlist: bool) -> str:
     if not strip_playlist:
         return url
 
-    parsed = urllib.parse.urlparse(url)
-    query = urllib.parse.parse_qs(parsed.query)
+    from max_cli.core.engines.network_engine import strip_playlist_params
 
-    if "v" in query and "list" in query:
-        new_query = {"v": query["v"]}
-        if "t" in query:
-            new_query["t"] = query["t"]
-
-        new_parts = list(parsed)
-        new_parts[4] = urllib.parse.urlencode(new_query, doseq=True)
-        cleaned_url = urllib.parse.urlunparse(new_parts)
-
+    cleaned_url = strip_playlist_params(url)
+    if cleaned_url != url:
         console.print("[dim]Auto-cleaned URL: Removed playlist info.[/dim]")
-        return cleaned_url
-
-    return url
+    return cleaned_url
 
 
 @app.command("download")

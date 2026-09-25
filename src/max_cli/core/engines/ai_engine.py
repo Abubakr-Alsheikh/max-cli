@@ -9,8 +9,42 @@ from max_cli.common.utils import encode_image_to_base64
 from max_cli.common.cache import get_default_cache
 
 LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
+IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 60
+DOWNLOAD_CHUNK_SIZE = 8192
 
 logger = logging.getLogger(__name__)
+
+
+def find_searchable_files(folder: Path, extensions: List[str]) -> List[Path]:
+    """Files under `folder` (recursive) whose suffix is in `extensions`.
+
+    `extensions` are given without dots and matched case-insensitively.
+    """
+    suffixes = {f".{ext.strip().lower().lstrip('.')}" for ext in extensions if ext.strip()}
+    return [
+        path
+        for path in folder.rglob("*")
+        if path.is_file() and path.suffix.lower() in suffixes
+    ]
+
+
+def download_image(url: str, destination: Path) -> Path:
+    """Save the image at `url` to `destination` without leaving a partial file."""
+    import requests
+
+    temp_path = destination.with_name(f".{destination.name}.part")
+    try:
+        with requests.get(
+            url, stream=True, timeout=IMAGE_DOWNLOAD_TIMEOUT_SECONDS
+        ) as response:
+            response.raise_for_status()
+            with open(temp_path, "wb") as image_file:
+                for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                    image_file.write(chunk)
+        temp_path.replace(destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return destination
 
 
 def _ai_call_errors() -> Tuple[Type[BaseException], ...]:
