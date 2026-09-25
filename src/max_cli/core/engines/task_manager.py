@@ -389,6 +389,8 @@ class TaskManager:
         with self._lock:
             if task.status != TaskStatus.PENDING:
                 return  # cancelled or paused after it was picked
+            if not any(item is task for item in self._queue):
+                return  # refresh() replaced it; the fresh copy runs instead
             task.status = TaskStatus.RUNNING
             task.started_at = datetime.now().isoformat()
             task.retry_count += 1

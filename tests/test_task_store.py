@@ -240,3 +240,23 @@ class TestDownloadTasks:
         assert result["file_size"] == 5
         assert task.title == "Song"
         assert seen["playlist_items"] == "2"
+
+
+def test_task_replaced_by_refresh_is_not_run_twice(monkeypatch):
+    """refresh() swaps task objects; a stale pick must not run."""
+    manager = TaskManager()
+    ran = []
+    monkeypatch.setattr(
+        task_manager_module,
+        "get_executor",
+        lambda task_type: lambda task: ran.append(task.id) or {},
+    )
+    manager.add(TaskItem(type=TaskType.CUSTOM))
+    stale = manager.get_pending()[0]
+    manager.refresh()
+
+    manager._execute_task(stale)
+
+    assert ran == []
+    assert manager.process_now() == 1
+    assert len(ran) == 1
