@@ -11,7 +11,7 @@ import time
 import pytest
 
 IMPORT_COST_TARGET_SECONDS = 0.2  # AGENTS.md goal: `max --help` under 200ms
-IMPORT_COST_CEILING_SECONDS = 1.0  # regression guard; ~0.46s on 2026-09-25
+IMPORT_COST_CEILING_SECONDS = 1.0  # regression guard; ~0.09s on 2026-09-25 (D5)
 TIMING_RUNS = 5
 SUBPROCESS_TIMEOUT_SECONDS = 30
 
@@ -67,13 +67,6 @@ def test_import_cost_below_ceiling(import_cost_seconds: float):
     )
 
 
-@pytest.mark.xfail(
-    # Not strict: fast CI runners already meet the target while slower machines
-    # do not, so an unexpected pass must not fail the run. Phase 3 turns this
-    # into a plain assert once startup is under target everywhere.
-    strict=False,
-    reason="max_cli.config loads pydantic-settings at startup; hardening Phase 3",
-)
 def test_import_cost_meets_target(import_cost_seconds: float):
     assert import_cost_seconds < IMPORT_COST_TARGET_SECONDS, (
         f"Import cost {import_cost_seconds:.3f}s (target {IMPORT_COST_TARGET_SECONDS}s)"

@@ -3,10 +3,11 @@ import sys
 import typer
 
 from max_cli.common.exceptions import MaxError
+from max_cli.core.cli.lazy_group import LazyTyperGroup
 from max_cli.core.cli.registry import register, init_plugins
-from max_cli.common.logger import console
 
 app = typer.Typer(
+    cls=LazyTyperGroup,
     name="max",
     help="MAX: The High-Performance CLI Utility.",
     add_completion=True,
@@ -22,9 +23,13 @@ def main():
         init_plugins(app)
         app()
     except MaxError as e:
+        from max_cli.common.logger import console
+
         console.print(f"[bold red]X Error:[/bold red] {e}")
         sys.exit(1)
     except Exception as e:
+        from max_cli.common.logger import console
+
         console.print("[bold red]!! Critical Error (Unexpected)[/bold red]")
         console.print(f"An error occurred: {e}")
         console.print(
