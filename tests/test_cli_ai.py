@@ -420,15 +420,6 @@ class TestExtract:
         assert "Extracted Data:" in output_text
         assert '"total": "9.99"' in output_text
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "cli_ai.extract_data_cmd declares --schema as `str` and loops "
-            "`for s in schema`, so it walks characters: 'total:Total amount' "
-            "becomes {'t': '', 'o': '', ..., '': ''} instead of "
-            "{'total': 'Total amount'}; repeated -s flags also keep only the last."
-        ),
-    )
     def test_schema_field_reaches_engine(self, dummy_image: Path) -> None:
         engine = MagicMock()
         engine.extract_structured_data.return_value = {}
