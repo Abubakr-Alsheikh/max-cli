@@ -1,8 +1,9 @@
 # Plan: Audio Noise Removal for Video (`max video denoise`)
 
-> Status: Draft
-> Priority: P1 (Quality-of-life improvement)
-> Depends on: FFmpeg (anlmdn/afftdn filters — built into FFmpeg >= 4.4)
+**Status:** Completed
+**Priority:** P1 (Quality-of-life improvement)
+**Updated:** 2026-09-25
+**Depends on:** FFmpeg (anlmdn/afftdn filters — built into FFmpeg >= 4.4)
 
 ## Overview
 
@@ -10,13 +11,13 @@ Add a `max video denoise` command that removes background noise (hiss, hum, fan,
 
 ## Goals
 
-- [ ] **New `denoise` command** under `max video` (and `max audio`) to reduce/remove background noise.
-- [ ] **Three noise reduction modes**: `auto` (default — `anlmdn`), `hiss` (`afftdn` for constant background hiss), `hum` (`highpass` filter for low-frequency rumble).
-- [ ] **Strength parameter** for `auto` mode (mild/medium/aggressive).
-- [ ] **Profile learning** — optional `--profile` flag to learn noise profile from a silent section of the video, then apply that profile for more targeted removal.
-- [ ] **Drop-in output** — defaults to `input_stem_denoised.mp4`; `--output` to customize.
-- [ ] **Queue support** — follow existing `--queue` pattern for long-running denoising jobs.
-- [ ] **Tests** — unit tests for each noise removal method, mocking `subprocess.run`.
+- [x] **New `denoise` command** under `max video` (and `max audio`) to reduce/remove background noise. (`cli_media.py` and `cli_audio.py`; engine method `denoise_audio` now lives in `audio_engine.py`)
+- [x] **Three noise reduction modes**: `auto` (default — `anlmdn`), `hiss` (`afftdn` for constant background hiss), `hum` (`highpass` filter for low-frequency rumble). A fourth mode, `speech`, uses RNNoise (`arnndn`).
+- [x] **Strength parameter** for `auto` mode (mild/medium/aggressive).
+- [D] **Profile learning** — optional `--profile` flag to learn noise profile from a silent section of the video, then apply that profile for more targeted removal. No CLI flag exists; `denoise_audio` keeps `profile` as a reserved parameter. The plan's own Future Enhancements section lists this as out of scope, and `speech` mode covers voice-targeted removal.
+- [x] **Drop-in output** — defaults to `input_stem_denoised.mp4`; `--output` to customize.
+- [x] **Queue support** — follow existing `--queue` pattern for long-running denoising jobs. (`max video denoise --queue` adds a `VIDEO_DENOISE` task; the executor is registered in `media_engine.py`. `max audio denoise` has no `--queue` flag.)
+- [x] **Tests** — unit tests for each noise removal method, mocking `subprocess.run`. (`TestMediaEngineDenoise` in `tests/test_core_media.py`, plus `TestDenoise` in `tests/test_cli_media.py` and `tests/test_cli_audio.py`)
 
 ## Files to Modify
 
@@ -513,21 +514,21 @@ def test_denoise_command_help():
 
 ## Verification Checklist
 
-- [ ] `max video denoise video.mp4` produces `video_denoised.mp4` with cleaner audio and same video quality
-- [ ] `max video denoise video.mp4 --mode hiss` uses `afftdn` filter (verify via FFmpeg command analysis)
-- [ ] `max video denoise video.mp4 --mode hum` uses `highpass` filter
-- [ ] `max video denoise video.mp4 --strength mild` has lighter denoising effect
-- [ ] `max video denoise video.mp4 --strength aggressive` has stronger denoising effect
-- [ ] Invalid `--mode` shows clear error message, not stacktrace
-- [ ] Invalid `--strength` shows clear error message, not stacktrace
-- [ ] `max video denoise video.mp4 -o custom.mp4` writes to `custom.mp4`
-- [ ] `max video denoise video.mp4 --queue` adds task to queue (verify with `max queue status`)
-- [ ] `max audio denoise audio.mp3` also works
-- [ ] `pytest tests/test_core_media.py -k "Denoise"` passes all tests
-- [ ] `ruff check src/max_cli/core/engines/media_engine.py src/max_cli/interface/cli_media.py src/max_cli/interface/cli_audio.py` passes cleanly
-- [ ] `mypy src/max_cli/core/engines/media_engine.py src/max_cli/interface/cli_media.py src/max_cli/interface/cli_audio.py` passes cleanly
-- [ ] `max --help` starts in under 200ms (no new module-level heavy imports)
-- [ ] Lazy loading preserved: all heavy imports remain inside methods, engines created via `_get_engine()`
+- [x] `max video denoise video.mp4` produces `video_denoised.mp4` with cleaner audio and same video quality
+- [x] `max video denoise video.mp4 --mode hiss` uses `afftdn` filter (verify via FFmpeg command analysis)
+- [x] `max video denoise video.mp4 --mode hum` uses `highpass` filter
+- [x] `max video denoise video.mp4 --strength mild` has lighter denoising effect
+- [x] `max video denoise video.mp4 --strength aggressive` has stronger denoising effect
+- [x] Invalid `--mode` shows clear error message, not stacktrace
+- [x] Invalid `--strength` shows clear error message, not stacktrace
+- [x] `max video denoise video.mp4 -o custom.mp4` writes to `custom.mp4`
+- [x] `max video denoise video.mp4 --queue` adds task to queue (verify with `max queue status`)
+- [x] `max audio denoise audio.mp3` also works
+- [x] `pytest tests/test_core_media.py -k "Denoise"` passes all tests (12 engine tests; 20 across the three denoise test files)
+- [x] `ruff check src/max_cli/core/engines/media_engine.py src/max_cli/interface/cli_media.py src/max_cli/interface/cli_audio.py` passes cleanly (now: also clean on `audio_engine.py`)
+- [x] `mypy src/max_cli/core/engines/media_engine.py src/max_cli/interface/cli_media.py src/max_cli/interface/cli_audio.py` passes cleanly (now: checked on `audio_engine.py`)
+- [x] `max --help` starts in under 200ms (no new module-level heavy imports)
+- [x] Lazy loading preserved: all heavy imports remain inside methods, engines created via `_get_engine()`
 
 ## Future Enhancements (Out of Scope for MVP)
 
@@ -566,3 +567,10 @@ The above spec has been revised based on a code review of the initial draft. Bel
 | 7 | Queue executor omits `hum_cutoff` | 🟡 Minor | Added `hum_cutoff=payload.get("hum_cutoff", 80)` to executor |
 | 8 | `--strength` accepted but silently ignored in non-`auto` modes | 🟡 Minor | Added CLI-side fallback: resets strength to `"medium"` for non-auto modes |
 | 9 | Test suite missing `test_denoise_input_not_found` | 🟢 Info | Added `FileNotFoundError` test case |
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6. The feature shipped while this file still said Draft; every box is now ticked or deferred.
+- The hardening split moved `denoise_audio` from `media_engine.py` into `audio_engine.py`. The queue executor (`_video_denoise_executor`, registered for both `VIDEO_DENOISE` and `AUDIO_DENOISE`) stays in `media_engine.py`.
+- The shipped command adds a `speech` mode (FFmpeg `arnndn` with an RNNoise model the engine downloads on first use). This pulls one Future Enhancement into scope.
+- `denoise_audio` streams FFmpeg `-progress pipe:1` output and emits `ProgressEvent`s, so both commands show a progress bar.

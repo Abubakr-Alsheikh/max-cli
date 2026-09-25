@@ -1,8 +1,9 @@
 # Plan: Undo / Transaction Log
 
-> Status: Completed
-> Priority: P1
-> Related: User Experience & Laziness (Feature 2B)
+**Status:** In Progress
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** User Experience & Laziness (Feature 2B)
 
 ## Overview
 
@@ -32,16 +33,16 @@ This plan introduces a **Transaction Log** system that records every file-modify
 
 ## Goals
 
-- [ ] Create `TransactionLog` class in `src/max_cli/common/transaction_log.py` with JSON persistence to `~/.max_cli/transactions/`
-- [ ] Record all file operations (rename, move, delete, create) with full reversibility data
-- [ ] Add `max files undo` command to reverse the last transaction group
-- [ ] Add `max files history` command to list recent transaction groups
-- [ ] Update `FileOrganizer` methods to accept optional `transaction_log` parameter
-- [ ] Move `smart-sort` and `duplicates --delete` logic from interface layer into the engine, wired through the transaction log
-- [ ] Auto-backup before destructive operations (`shred`, `duplicates --delete`)
-- [ ] Auto-cleanup: max 50 transaction groups, 30-day retention
-- [ ] All operations must be **idempotent** — running undo twice should be safe
-- [ ] Cross-platform safe (use `pathlib.Path`, no hardcoded `/tmp/`)
+- [x] Create `TransactionLog` class in `src/max_cli/common/transaction_log.py` with JSON persistence to `~/.max_cli/transactions/`
+- [x] Record all file operations (rename, move, delete, create) with full reversibility data
+- [x] Add `max files undo` command to reverse the last transaction group
+- [x] Add `max files history` command to list recent transaction groups
+- [x] Update `FileOrganizer` methods to accept optional `transaction_log` parameter
+- [x] Move `smart-sort` and `duplicates --delete` logic from interface layer into the engine, wired through the transaction log (now: `FileOrganizer.smart_sort` and `delete_duplicates`)
+- [x] Auto-backup before destructive operations (`shred`, `duplicates --delete`)
+- [x] Auto-cleanup: max 50 transaction groups, 30-day retention
+- [x] All operations must be **idempotent** — running undo twice should be safe
+- [x] Cross-platform safe (use `pathlib.Path`, no hardcoded `/tmp/`)
 
 ## Implementation Details
 
@@ -1356,15 +1357,26 @@ All changes are **backward compatible**:
 
 ## Success Criteria
 
-- [ ] `TransactionLog` class passes all unit tests (creation, save, load, undo, list, cleanup)
-- [ ] `max files order` creates a transaction group; `max files undo` reverses it completely
-- [ ] `max files smart-sort` creates a transaction group; `max files undo` moves files back
-- [ ] `max files duplicates --delete` creates auto-backups; `max files undo` restores deleted files
-- [ ] `max files shred` creates auto-backup; `max files undo` restores from backup
-- [ ] `max files history` shows recent operations with correct metadata
-- [ ] Running `undo` twice does not crash (idempotent)
-- [ ] Transaction log auto-cleanup works (max 50 groups, 30-day retention)
-- [ ] No business logic remains in `cli_files.py` for `smart-sort` or `duplicates --delete`
-- [ ] All new code passes `ruff check`, `ruff format`, and `mypy`
-- [ ] Documentation updated (`README.md`, `docs/commands/files.md`)
-- [ ] `PLANS/active/README.md` updated to mark plan as completed
+- [x] `TransactionLog` class passes all unit tests (creation, save, load, undo, list, cleanup)
+- [x] `max files order` creates a transaction group; `max files undo` reverses it completely
+- [x] `max files smart-sort` creates a transaction group; `max files undo` moves files back
+- [x] `max files duplicates --delete` creates auto-backups; `max files undo` restores deleted files
+- [x] `max files shred` creates auto-backup; `max files undo` restores from backup
+- [x] `max files history` shows recent operations with correct metadata
+- [x] Running `undo` twice does not crash (idempotent)
+- [x] Transaction log auto-cleanup works (max 50 groups, 30-day retention)
+- [x] No business logic remains in `cli_files.py` for `smart-sort` or `duplicates --delete`
+- [ ] All new code passes `ruff check`, `ruff format`, and `mypy` (ruff passes; mypy reports 11 errors in `transaction_log.py`)
+- [x] Documentation updated (`README.md`, `docs/commands/files.md`)
+- [x] `PLANS/active/README.md` updated to mark plan as completed
+
+## Remaining
+
+- Fix the 11 mypy errors in `common/transaction_log.py`. All come from `Optional[Path]` values used without a `None` check in `undo()`. They count toward `mypy-baseline.txt`, so run `python scripts/mypy_baseline.py --update` after the fix.
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+  - Each transaction group is its own file, `~/.max_cli/transactions/<group_id>.json`, written with `atomic_write_json`. `docs/commands/files.md` still names a single `transactions.json`.
+  - `tests/test_file_organizer_transactions.py` was never created. `test_transaction_log.py` covers undo per operation type, and `test_cli_files.py` covers `order` then `undo`. A manual run on 2026-09-25 confirmed that undo reverses `smart_sort`, `delete_duplicates` and `secure_delete`, and that a second undo is a no-op.
+  - Phase 7 ships: `AudioMetadataEngine.organize()` accepts a `transaction_log`.

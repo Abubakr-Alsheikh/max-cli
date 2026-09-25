@@ -1,9 +1,10 @@
 # Plan: Global Task Queue (DaemonManager)
 
-> Status: Completed
-> Priority: P1
-> Related: Architecture & System Design (Feature 2)
-> Depends on: Event-Driven Progress System (recommended but not required)
+**Status:** In Progress
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** Architecture & System Design (Feature 2)
+**Depends on:** Event-Driven Progress System (recommended but not required)
 
 ## Overview
 
@@ -44,14 +45,14 @@ max queue cancel <id>
 
 ## Goals
 
-- [ ] Create a generic `TaskItem` model that can represent any type of task
-- [ ] Create `DaemonManager` that replaces and generalizes `QueueManager`
-- [ ] Support task types: `download`, `video_compress`, `audio_convert`, `ai_batch`, `pdf_merge`, `file_organize`, and custom
-- [ ] Add `--queue` flag to heavy commands across all CLI apps
-- [ ] Implement `max queue` command group: `status`, `cancel`, `clear`, `retry`, `history`
-- [ ] Support true background processing via a persistent daemon process
-- [ ] Maintain backward compatibility with existing `QueueManager` usage
-- [ ] Add tests for DaemonManager
+- [x] Create a generic `TaskItem` model that can represent any type of task
+- [x] Create `DaemonManager` that replaces and generalizes `QueueManager` (now: `TaskManager` in `core/engines/task_manager.py`; `QueueManager` is gone and `max grab` uses the same task store)
+- [ ] Support task types: `download`, `video_compress`, `audio_convert`, `ai_batch`, `pdf_merge`, `file_organize`, and custom (`audio_convert`, `ai_batch` and `custom` exist in `TaskType` but have no executor)
+- [ ] Add `--queue` flag to heavy commands across all CLI apps (only `video compress`, `video denoise` and `grab download` have it)
+- [x] Implement `max queue` command group: `status`, `cancel`, `clear`, `retry`, `history` (plus `process` and `stats`)
+- [D] Support true background processing via a persistent daemon process (hardening D3 chose an in-process worker thread and removed the PID and log files)
+- [x] Maintain backward compatibility with existing `QueueManager` usage (now: `max grab` commands work unchanged, and `task_migration.py` imports the old queue and history files)
+- [x] Add tests for DaemonManager (now: `test_task_queue.py`, `test_task_store.py`, `test_cli_queue.py`)
 
 ---
 
@@ -1136,9 +1137,21 @@ def test_queue_add_via_flag():
 
 ## Success Criteria
 
-- [ ] `DaemonManager` handles at least 3 different task types
-- [ ] `max queue status` shows all queued tasks with Rich formatting
-- [ ] `max video compress file.mp4 --queue` adds to queue instead of blocking
-- [ ] Old `QueueManager` still works (backward compatibility)
-- [ ] All tests pass
-- [ ] Background daemon survives CLI exit (if implemented)
+- [x] `DaemonManager` handles at least 3 different task types (now: `TaskManager`, 10 types with executors)
+- [x] `max queue status` shows all queued tasks with Rich formatting
+- [x] `max video compress file.mp4 --queue` adds to queue instead of blocking
+- [D] Old `QueueManager` still works (backward compatibility) (hardening D1 removed the class and merged its store into `TaskManager`)
+- [x] All tests pass
+- [D] Background daemon survives CLI exit (if implemented) (not implemented; see D3 in `codebase-hardening.md`)
+
+## Remaining
+
+- Executors for `audio_convert` and `ai_batch`. The dashboard queues unmapped commands as `custom`, which has no executor either.
+- A `--queue` flag on the CLI commands that already have executors: `video convert`, `video to-audio`, `pdf merge`, `pdf compress`, `files smart-sort` and `files duplicates`. The dashboard can queue these today.
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+  - Hardening Phase 3 renamed `DaemonManager` to `TaskManager`. The worker is a `daemon=True` thread inside the CLI process (D3 option A). A detached background process would need its own plan.
+  - `~/.max_cli/tasks/queue.json` and `history.json` hold every task: `max grab`, `max queue` and the dashboard share them.
+  - `max queue` has no page in `docs/commands/` or `README.md` yet. Hardening Phase 6 tracks that.

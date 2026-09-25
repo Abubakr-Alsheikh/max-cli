@@ -4,7 +4,7 @@ Manage audio files: read/write metadata, compress large recordings, and organize
 
 ## compress
 
-Compress an audio file by re-encoding to a lower bitrate. Perfect for shrinking oversized recordings (e.g., a 4-minute WAV at 80MB → ~3MB MP3).
+Compress an audio file by re-encoding to a lower bitrate. Use it to shrink large recordings. A 4-minute WAV at 80MB becomes an MP3 of about 3MB.
 
 ```bash
 max audio compress <file> [OPTIONS]
@@ -130,7 +130,7 @@ max audio batch <files...> [OPTIONS]
 - `--genre`, `-g` - Genre
 - `--date`, `-d` - Release date
 - `--track`, `-n` - Track number
-- `--start` - Starting track number for auto-increment
+- `--start` - First track number; Max numbers the files in order from here
 
 **Example:**
 ```bash
@@ -143,7 +143,7 @@ max audio batch "folder/*.mp3" --album "My Album" --start 1
 
 ## organize
 
-Organize audio files into folders based on their metadata. This is the default behavior to help organize your music library.
+Move audio files into folders based on their metadata. `max files undo` reverses the moves.
 
 ```bash
 max audio organize <files...> [OPTIONS]
@@ -151,13 +151,15 @@ max audio organize <files...> [OPTIONS]
 
 **Options:**
 - `--output`, `-o` - Target directory (default: same as source)
-- `--pattern`, `-p` - Folder structure: `artist`, `album`, `genre`, `artist-album` (default: `artist`)
+- `--pattern`, `-p` - Folder structure: `artist`, `album`, `genre`, `artist-album` or `contributing-artists` (default: `artist`)
+- `--filter`, `-f` - Only organize files inside a folder with this name, such as `--filter 'Electronic Gems'`
 
 **Patterns:**
 - `artist` - `Music/Artist Name/Song.mp3`
 - `album` - `Music/Album Name/Song.mp3`
 - `genre` - `Music/Rock/Song.mp3`
 - `artist-album` - `Music/Artist Name/Album Name/Song.mp3`
+- `contributing-artists` - `Music/Contributing Artist/Song.mp3` (uses the album artist tag, or the artist tag when that is empty)
 
 **Example:**
 ```bash

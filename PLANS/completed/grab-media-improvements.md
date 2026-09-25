@@ -1,7 +1,8 @@
 # Plan: Grab Media Improvements
 
-> Status: Completed
-> Priority: P0
+**Status:** Completed
+**Priority:** P0
+**Updated:** 2026-09-25
 
 ## Overview
 
@@ -111,7 +112,7 @@ src/max_cli/
 - [x] Add `-v` flag for video override
 
 ### T3: Queue System Core
-- [x] Create `QueueManager` class in queue_manager.py
+- [x] Create `QueueManager` class in queue_manager.py (now: removed; grab downloads are `TaskType.DOWNLOAD` tasks in the `TaskManager` store, `core/engines/task_manager.py`)
 - [x] Add queue persistence (JSON file)
 - [x] Implement background processing thread
 - [x] Add queue CLI commands: `queue`, `clear`, `status`
@@ -123,9 +124,9 @@ src/max_cli/
 - [x] Color-coded status (green=complete, yellow=downloading, red=failed)
 
 ### T5: Integration
-- [ ] Connect queue manager to CLI
-- [ ] Test queue persistence
-- [ ] Test background processing
+- [x] Connect queue manager to CLI (now: `cli_network.py` calls `get_task_manager()` for `download --queue`, `queue`, `clear` and `status`)
+- [x] Test queue persistence (now: `tests/test_task_store.py`, e.g. `test_refresh_sees_tasks_added_by_another_instance` and the old-store migration tests)
+- [x] Test background processing (now: `test_process_now_runs_only_the_requested_type` and `test_task_replaced_by_refresh_is_not_run_twice` in `tests/test_task_store.py`; `tests/test_cli_network.py` covers the queue commands)
 
 ---
 
@@ -136,3 +137,9 @@ src/max_cli/
 3. **Download history** - Keep log of all past downloads
 4. **Thumbnail preview** - Show video thumbnail in queue
 5. **Notifications** - Desktop notification on completion
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6. All boxes are ticked. The active index (`PLANS/active/README.md`) still lists this plan as Draft; the next index update should correct it.
+- The hardening work removed `QueueManager` and moved grab downloads into the shared task store. `DownloadHistory` (`core/engines/download_history.py`) reads download history from that store.
+- Suggested improvement 3 (download history) shipped: `max grab history` and `DownloadHistory` both read finished `DOWNLOAD` tasks from the task store.

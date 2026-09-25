@@ -8,7 +8,7 @@
 
 > **Your Lazy, Fast Terminal Assistant That Does the Work for You.**
 
-Max transforms complex tasks—like compressing videos, merging PDFs, or downloading from YouTube—into simple commands you can actually remember. Whether you're a casual user or a seasoned developer, Max speaks your language.
+Max turns multi-step jobs, like compressing a video, merging PDFs or downloading from YouTube, into short commands you can remember.
 
 ---
 
@@ -43,13 +43,19 @@ Max transforms complex tasks—like compressing videos, merging PDFs, or downloa
 | **Download history** | `max grab history` | `max grab history` |
 | **Fix YouTube 403 errors** | `max grab pot-setup` | `max grab pot-setup` |
 | **Merge PDFs** | `max pdf bundle` | `max pdf bundle contracts/` |
-| **Compress images** | `max img compress` | `max img compress photos/` |
-| **Resize images** | `max img resize` | `max img resize logo.png --width 800` |
+| **OCR scanned PDFs** | `max pdf ocr` | `max pdf ocr scan.pdf` |
+| **Fill PDF forms** | `max pdf form-fill` | `max pdf form-fill form.pdf -f name="John"` |
+| **Compress images** | `max images compress` | `max images compress photos/` |
+| **Resize images** | `max images resize` | `max images resize logo.png -w 800` |
 | **Ask AI anything** | `max ai ask` | `max ai ask "Merge and Compress those pdf files"` |
 | **Generate images** | `max ai create` | `max ai create "A cat on a bike"` |
+| **Search files by meaning** | `max ai search` | `max ai search "tax receipts" ./docs` |
 | **Organize files** | `max files smart-sort` | `max files smart-sort downloads/` |
+| **Find duplicates** | `max files duplicates` | `max files duplicates downloads/ -r` |
 | **Undo file ops** | `max files undo` | `max files undo` |
 | **File history** | `max files history` | `max files history -v` |
+| **Background jobs** | `max queue` | `max queue status` |
+| **QR code for a URL** | `max tools share` | `max tools share "http://192.168.1.20:8000"` |
 | **TUI Dashboard** | `max dashboard` | `max dashboard` |
 
 ---
@@ -141,13 +147,13 @@ OPENAI_API_KEY=ollama
 max --help
 
 # Download a video
-max grab "https://youtube.com/watch?v=..."
+max grab download "https://youtube.com/watch?v=..."
 
 # Compress a video
 max video compress mymovie.mp4
 
 # Compress images in a folder
-max img compress ./photos
+max images compress ./photos
 ```
 
 ---
@@ -159,20 +165,23 @@ max img compress ./photos
 #### Compress Video (Shrink File Size)
 
 ```bash
-# Simple compression
+# Default compression (balanced, CRF 28)
 max video compress video.mp4
 
-# High quality compression
-max video compress video.mp4 --preset high
+# Better quality, bigger file (CRF 23)
+max video compress video.mp4 --level high
 
-# Specific quality (1-100)
-max video compress video.mp4 -q 75
+# Smallest file (CRF 35)
+max video compress video.mp4 --level max
+
+# Add to the background queue instead of running now
+max video compress video.mp4 --queue
 ```
 
 #### Convert Video to Audio
 
 ```bash
-# To MP3 (default, high quality)
+# To MP3 (default quality h = 192k)
 max video to-audio lecture.mp4
 
 # To WAV (lossless, for editing)
@@ -188,8 +197,8 @@ max video to-audio lecture.mp4 -q x
 # Cut from 0:30 to 1:00
 max video cut movie.mp4 --start 0:30 --end 1:00
 
-# First 30 seconds only
-max video cut movie.mp4 --duration 30
+# First 30 seconds only (--start is required)
+max video cut movie.mp4 --start 0 --duration 30
 ```
 
 #### Other Video Commands
@@ -199,7 +208,8 @@ max video denoise recording.mp4      # Remove background noise
 max video gif clip.mp4               # Convert to GIF
 max video louder audio.mp4 --db 10   # Boost volume by 10dB
 max video snap video.mp4 --time 1:30 # Take screenshot at 1:30
-max video mute video.mp4              # Remove audio track
+max video mute video.mp4             # Remove audio track
+max video concat "*.mp4" -o all.mp4  # Join videos (--method fast|safe)
 ```
 
 ---
@@ -219,14 +229,24 @@ max pdf bundle file1.pdf file2.pdf
 #### Split PDF
 
 ```bash
-# Extract pages 1-5 and page 8
-max pdf split document.pdf -p 1-5,8
+# Keep pages 1-5
+max pdf split document.pdf -s 1 -e 5
+
+# Remove pages 5-10
+max pdf split document.pdf --remove -s 5 -e 10
+
+# Split into files of 10 pages each
+max pdf split document.pdf -c 10
 ```
 
 #### Compress PDF
 
 ```bash
+# Defaults: 150 DPI, JPEG quality 80
 max pdf compress large.pdf
+
+# Smaller file
+max pdf compress large.pdf --dpi 100 --quality 60
 ```
 
 #### Add Watermark
@@ -238,7 +258,42 @@ max pdf stamp document.pdf "CONFIDENTIAL"
 #### Password Protect
 
 ```bash
-max pdf lock document.pdf
+max pdf lock document.pdf --password "s3cret"
+```
+
+#### OCR (Scanned PDFs)
+
+Needs Tesseract and the `ocr` extra (`pip install max-cli[ocr]`).
+
+```bash
+# Writes document.txt
+max pdf ocr document.pdf
+
+# German and English
+max pdf ocr document.pdf --lang eng+deu
+```
+
+#### Forms
+
+```bash
+# Print the form fields
+max pdf form-data form.pdf
+
+# Fill fields (repeat -f)
+max pdf form-fill form.pdf -f name="John" -f email="john@example.com"
+
+# Make the fields uneditable
+max pdf form-flatten form_filled.pdf
+```
+
+#### Optimize and Compare
+
+```bash
+# Remove unused objects, compress images, linearize for the web
+max pdf optimize document.pdf
+
+# Show which pages differ between two PDFs
+max pdf compare old.pdf new.pdf
 ```
 
 ---
@@ -257,7 +312,7 @@ max grab download "https://youtube.com/watch?v=..." -a
 # Force video download (override default)
 max grab download "https://youtube.com/watch?v=..." -v
 
-# Choose quality: s=480p, m=720p, h=1080p, x=4K
+# Choose quality: ss=360p, s=480p, m=720p, h=1080p, x=4K
 max grab download "..." -q h
 
 # Interactive mode - add URLs and download in background
@@ -296,14 +351,17 @@ max grab queue
 # Show download history
 max grab history
 
-# Clear completed/failed downloads
+# Clear pending downloads (--all clears everything that isn't running)
 max grab clear
 ```
+
+Downloads share one task store with `max queue`, so `max queue status` lists them too.
 
 #### Quality Presets Explained
 
 | Flag | Video Quality | Audio Quality | Best For |
 |------|---------------|---------------|----------|
+| `-q ss` | 360p | 64kbps | Slow connections |
 | `-q s` | 480p | 64kbps | Saving data |
 | `-q m` | 720p | 128kbps | Phone viewing |
 | `-q h` | 1080p | 192kbps | Desktop viewing |
@@ -331,47 +389,47 @@ max config grab
 #### Compress Images
 
 ```bash
-# Compress all images in folder (75% quality)
-max img compress ./photos
+# Compress all images in a folder (quality from DEFAULT_QUALITY, 85 by default; results go to photos_optimized/)
+max images compress ./photos
 
-# Compress single image
-max img compress photo.jpg
+# Compress a single image with quality 70
+max images compress photo.jpg -q 70
 
 # Force JPEG output
-max img compress ./photos --jpeg
+max images compress ./photos --jpeg
 
-# Limit max dimension to 1080px
-max img compress ./photos --max 1080
+# Limit the longest side to 1080px
+max images compress ./photos -m 1080
 ```
 
 #### Resize Images
 
 ```bash
 # Resize to specific width
-max img resize image.png --width 800
+max images resize image.png -w 800
 
 # Resize to specific height
-max img resize image.png --height 600
+max images resize image.png -h 600
 
 # Scale down by percentage
-max img resize image.png --scale 50
+max images resize image.png -s 50
 ```
 
 #### Convert Format
 
 ```bash
 # Convert to WebP (modern, smaller)
-max img convert photo.jpg --to webp
+max images convert photo.jpg --to webp
 
 # Convert to PNG
-max img convert photo.png --to png
+max images convert photo.jpg --to png
 ```
 
 #### Remove Metadata (Privacy)
 
 ```bash
 # Strip EXIF data (GPS, camera info, etc)
-max img strip ./photos
+max images strip ./photos
 ```
 
 ---
@@ -418,6 +476,23 @@ max ai edit photo.jpg "Add a sunset background" -o new_photo.jpg
 max ai chat
 ```
 
+#### Search Files by Meaning
+
+```bash
+# Searches txt, md, py, json and yaml files by default (one AI request per file)
+max ai search "notes about the Q3 budget" ./notes
+
+# Pick the extensions
+max ai search "database settings" . --ext py,yaml
+```
+
+#### Extract Structured Data
+
+```bash
+# Pull fields out of a receipt and save them as JSON
+max ai extract receipt.jpg -s "total:Total amount" -s "date:Date" -o receipt.json
+```
+
 ---
 
 ### 📂 File Management
@@ -452,7 +527,44 @@ max files history
 max files history -v
 ```
 
-All file operations are automatically recorded. Destructive commands like `shred` and `duplicates --delete` create auto-backups before running.
+#### Find Duplicates
+
+```bash
+# List duplicate files (add -r to scan subfolders)
+max files duplicates ./downloads -r
+
+# Delete duplicates, keeping one copy. Max asks first.
+max files duplicates ./downloads -r --delete
+
+# Delete without asking
+max files duplicates ./downloads -r --delete --force
+```
+
+#### Secure Delete
+
+```bash
+# Overwrite 3 times, then delete. Max asks first.
+max files shred secrets.txt
+
+# 7 passes, no prompt
+max files shred secrets.txt -p 7 --force
+```
+
+#### Backups
+
+```bash
+# Copy a file into ~/.max_cli/backups/
+max files backup report.docx
+
+# List backups, or restore one
+max files backups
+max files backups --restore <backup-path>
+
+# Delete backups older than 30 days
+max files backup-cleanup --days 30
+```
+
+Max records `order`, `smart-sort`, `duplicates --delete`, `shred` and `audio organize` so `max files undo` can reverse them. Before `shred` and `duplicates --delete` delete anything, Max saves a backup.
 
 ---
 
@@ -466,19 +578,23 @@ pip install max-cli[tui]
 
 # Launch dashboard
 max dashboard
-
-# Dev mode with hot-reload
-max dashboard --dev
 ```
 
-**Dashboard Tabs:**
+**Dashboard Sections:**
 
-| Tab | Description |
-|-----|-------------|
-| **Queue** | Live download queue with progress |
-| **History** | Filterable operation history |
+| Section | Description |
+|---------|-------------|
+| **Home** | Quick actions |
+| **Download** | Download form with progress |
+| **Queue** | Live task queue with progress |
+| **History** | Filterable task history |
+| **Files** | File browser |
+| **Analytics** | Live usage and system monitoring |
 | **Config** | Editable configuration panel |
 | **System** | Disk usage and system info |
+| **Chat** | AI chat |
+
+Press `q` to quit, `r` to refresh and `Ctrl+B` to collapse the sidebar.
 
 If `textual` is not installed, `max dashboard` will show a friendly message with install instructions.
 
@@ -487,14 +603,44 @@ If `textual` is not installed, `max dashboard` will show a friendly message with
 ### 🔧 System Tools
 
 ```bash
-# Generate QR code from URL
-max share "https://example.com"
+# Show a QR code for a URL in the terminal
+max tools share "https://example.com"
 
 # Copy file contents to clipboard
-max copy file.txt
+max tools copy file.txt
 
-# Save clipboard image to file
-max paste screenshot.png
+# Save clipboard image to file (default: clipboard.png)
+max tools paste screenshot.png
+```
+
+---
+
+### ⏳ Background Queue
+
+Heavy commands can add a job to a queue instead of running it now. `max video compress` and `max video denoise` take `--queue` (`-q`); `max grab download` takes `--queue` (`-Q`).
+
+```bash
+# Queue a job
+max video compress movie.mp4 --queue
+
+# See what's waiting
+max queue status
+
+# Run pending jobs (--max N to stop after N)
+max queue process
+
+# Counts by status and type
+max queue stats
+
+# Finished tasks, optionally one type
+max queue history --type video_compress
+
+# Cancel or retry a task by ID
+max queue cancel <task-id>
+max queue retry <task-id>
+
+# Remove pending tasks (--failed for failed ones, --all for everything not running)
+max queue clear
 ```
 
 ---
@@ -545,10 +691,16 @@ Local settings override global settings.
 
 ```bash
 max config show             # View current configuration
+max config validate         # Check your settings
 max config grab             # Configure downloader defaults
 max config save             # Save local settings as global defaults
-max config setup-ffmpeg     # Auto-download and install FFmpeg
+max config reset            # Delete config files (--global or --local for one)
+max config export           # Save settings to max-config.json (-o to rename)
+max config import cfg.json  # Load settings from JSON
+max config setup-ffmpeg     # Download and install FFmpeg
 ```
+
+`max config export` includes your API key unless you pass `--include-defaults`. Don't share or commit the file.
 
 ---
 
@@ -560,7 +712,7 @@ Most commands work on folders too:
 
 ```bash
 # Compress ALL images in a folder
-max img compress ./videos
+max images compress ./photos
 
 # Merge ALL PDFs in a folder
 max pdf bundle ./documents
@@ -572,7 +724,7 @@ If you don't specify a path, Max uses the current folder:
 
 ```bash
 cd ./myphotos
-max img compress   # Compresses everything in myphotos
+max images compress   # Compresses everything in myphotos
 ```
 
 ### Chain Commands
@@ -592,7 +744,7 @@ max --help
 
 # See help for specific command
 max video --help
-max img --help
+max images --help
 max pdf --help
 ```
 
@@ -614,7 +766,7 @@ Run Command Prompt as Administrator, or use a virtual environment.
 
 ### Something else not working?
 
-- Check: `max --version`
+- Check your version: `pip show max-cli`
 - Get help: `max --help`
 - Report issues: [GitHub Issues](https://github.com/Abubakr-Alsheikh/max-cli/issues)
 

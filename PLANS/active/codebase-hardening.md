@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-5b done; D5 and the exit-code decision open)
+**Status:** In Progress (Phases 0-6 done; D5, the exit-code decision and ruff widening open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -234,15 +234,47 @@ One commit per bug. Each fix turned its strict xfail test green, and the marker 
 
 **Result:** pytest 795 passed, 1 skipped, 4 xfailed (the 3 plugin bugs and the D5 startup target). mypy 41. Pillow deprecation warnings dropped from 10 to 6.
 
-## Phase 6: Docs and PLANS hygiene (S-M)
+## Phase 6: Docs and PLANS hygiene (Completed 2026-09-25, branch `docs/hardening-p6-docs`)
 
-- [ ] Move the 8 plans marked "Completed" from `PLANS/active/` to `PLANS/completed/`, after reconciling their unticked boxes against the code (`max-plans`).
-- [ ] Correct the statuses that don't match the code: `audio-noise-removal` (denoise ships), `grab-media-improvements` (the index says Draft, the file says Completed), and `dashboard-home-analytics-redesign` (`AnalyticsPanel` exists).
-- [ ] `README.md`: fix `max share`, `max copy` and `max paste`, which should be `max tools share|copy|paste` (lines 491-497). Add `max queue`, `tools qr`, `pdf ocr/form-*/optimize/compare`, `ai search/extract` and `files duplicates/shred/backup`.
-- [ ] Add `docs/commands/queue.md` and `docs/commands/tools.md`, and register both in the `mkdocs.yml` nav.
-- [ ] `AGENTS.md`:
-  - Remove `ToolsPanel`, which doesn't exist, and add `AnalyticsPanel`.
+- [x] Reconciled every active plan against the code (`221ad83`).
+  - Six plans moved to `PLANS/completed/`.
+  - Five stay In Progress. The index lists what each has left.
+  - Two of the eight plans marked "Completed" were not done: `global-task-queue` and `file-undo-transaction-log`.
+- [x] Corrected statuses:
+  - `audio-noise-removal`: Completed.
+  - `grab-media-improvements`: Completed.
+  - `dashboard-home-analytics-redesign`: In Progress (mostly built).
+- [x] `README.md` and every `docs/commands/*.md` page now match `--help` (`59e39d7`). Many pages described commands that don't exist:
+  - `max media`
+  - `pdf watermark`
+  - `ai categorize`
+  - `files organize`
+  - `config set`
+  - `dashboard --dev`
+- [x] Added `docs/commands/queue.md` and `docs/commands/tools.md` to the `mkdocs.yml` nav. `mkdocs build --strict` passes.
+- [x] `AGENTS.md`:
+  - Replaced `ToolsPanel` with `AnalyticsPanel`.
+  - Documented the sidebar and its real keys (`q`, `r`, `ctrl+b`). Commit `652a38b` removed the 1-9 shortcuts on purpose.
   - [x] Update the queue/history section after Phase 3 (done in Phase 3).
+- [D] Ruff rule widening (`I`, `BLE`, `B`, `UP`/`FA`, `DTZ`, one family per PR), deferred from Phase 2. Each family changes `pyproject.toml` and touches many files, so each needs its own PR and the maintainer's go-ahead.
+
+**CLI issues the docs audit found (not fixed; for the maintainer to prioritize):**
+- **Security:** `max config export` writes `OPENAI_API_KEY` in plain text by default. `--include-defaults` leaves it out, which looks backwards.
+- `max files shred` warns that it destroys the file for good, then keeps an auto-backup in `~/.max_cli/backups/`. That defeats a secure delete.
+- Help examples are wrong:
+  - `max grab download --help` shows `max grab <url>`, which fails.
+  - `max video stream --help` shows `max media stream`.
+- `max net` duplicates `max grab`. Its help promises a speedtest that doesn't exist.
+- `max queue` commands have no help text.
+- `-f` means `--failed` in `queue clear` but `--force` everywhere else.
+- `queue retry` resets a running task. `queue cancel` says running tasks can't be cancelled, but they can.
+- The quality letters map to different bitrates in `audio-convert` and `to-audio`.
+- `concat --method` accepts any value and falls back to `safe`.
+- `ai search --ext` accepts types the engine skips without a word.
+- Commands that overwrite or clear without asking:
+  - `tools paste` overwrites an existing file.
+  - `grab history --clear` clears history.
+- `max images compress` with no path probably writes to `./_optimized`.
 
 ## Out of scope (tracked elsewhere)
 
@@ -263,6 +295,7 @@ One commit per bug. Each fix turned its strict xfail test green, and the marker 
   - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
   - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
+- 2026-09-25: Phase 6. Three subagents did the work in parallel: one on the docs and two on the plans. The docs agent read `--help` on a machine whose `~/.max_config.env` sets `DEFAULT_QUALITY=80`, so config-driven defaults in the docs were rewritten to name the setting and its shipped value.
 - 2026-09-25: Phase 5b. The maintainer deferred the three plugin bugs. The macOS CI run on PR #6 also found that `files duplicates` kept a different copy per OS (directory order). That was fixed in PR #6 by sorting.
 - 2026-09-25: Phase 5. Three subagents wrote the tests in parallel, each in separate files. The bugs they found stay as strict xfails and moved to Phase 5b, so each fix gets its own reviewed commit.
 - 2026-09-25: Phase 4 follow-up. The maintainer kept `artist-album` as the dashboard's organize pattern because plain `artist` had caused a problem. The FLAC `['Artist']` folder bug in Phase 5b may be that problem.

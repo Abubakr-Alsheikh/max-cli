@@ -8,7 +8,7 @@ Interactive wizard to configure AI providers and models.
 max config setup
 ```
 
-This wizard will guide you through:
+The wizard walks you through:
 
 - Choosing your AI provider (Google Gemini, OpenAI, Ollama, or custom)
 - Setting model preferences
@@ -25,19 +25,23 @@ This wizard will guide you through:
 
 ## show
 
-Show current configuration.
+Show which config files Max loads, and the AI models and endpoint it uses.
 
 ```bash
 max config show
 ```
 
-## set
+## save
 
-Set configuration value.
+Copy the `.env` file in the current folder to your global settings (`~/.max_config.env`). Max asks before it overwrites the global file.
 
 ```bash
-max config set <KEY> <VALUE>
+max config save [--force]
 ```
+
+**Options:**
+
+- `--force`, `-f` - Overwrite the global config without asking
 
 ## grab
 
@@ -47,7 +51,7 @@ Configure download preferences.
 max config grab
 ```
 
-Interactive wizard to set:
+The wizard asks for:
 - Default video/audio quality
 - Auto-strip playlist info
 - Embed metadata
@@ -57,15 +61,22 @@ Interactive wizard to set:
 
 ## reset
 
-Reset configuration to defaults.
+Delete your config files so Max falls back to its defaults. Max asks before it deletes each file.
 
 ```bash
 max config reset [--global | --local]
 ```
 
+**Options:**
+
+- `--global` - Delete only the global config (`~/.max_config.env`)
+- `--local` - Delete only the `.env` file in the current folder
+
+With neither flag, Max offers to delete both.
+
 ## validate
 
-Validate current configuration.
+Check your settings and list any value outside its allowed range.
 
 ```bash
 max config validate
@@ -73,27 +84,42 @@ max config validate
 
 ## export
 
-Export configuration to file.
+Save your settings to a JSON file.
 
 ```bash
-max config export <file.json>
+max config export [-o FILE] [--include-defaults]
 ```
+
+**Options:**
+
+- `-o` - Output file (default: `max-config.json`)
+- `--include-defaults` - Include settings you never changed
+
+> **Warning**: Without `--include-defaults`, the export includes your `OPENAI_API_KEY`. Don't share or commit that file.
 
 ## import
 
-Import configuration from file.
+Load settings from a JSON file. Max asks before it overwrites an existing config file.
 
 ```bash
-max config import <file.json>
+max config import FILE [--global | --local]
 ```
+
+**Options:**
+
+- `--global` / `--local` - Write to the global config or to `.env` in the current folder (default: `--global`)
 
 ## setup-ffmpeg
 
-Auto-download and install FFmpeg to `~/.max_cli/bin/`. Platform-specific binaries are downloaded and validated automatically.
+Download FFmpeg for your platform into `~/.max_cli/bin/` and check that it runs.
 
 ```bash
-max config setup-ffmpeg
+max config setup-ffmpeg [--force]
 ```
+
+**Options:**
+
+- `--force`, `-f` - Download FFmpeg again even if Max already has it
 
 This command:
 - Detects your OS and architecture

@@ -1,8 +1,9 @@
 # Plan: Interactive TUI Dashboard Expansion
 
-> Status: Completed
-> Priority: P1
-> Related: User Experience & Laziness (Feature 2C Phase 2)
+**Status:** In Progress
+**Priority:** P1
+**Updated:** 2026-09-25
+**Related:** User Experience & Laziness (Feature 2C Phase 2)
 
 ## Overview
 
@@ -2825,3 +2826,22 @@ def test_download_panel_form():
 10. **All unit tests pass** (`pytest tests/interface/tui/`)
 11. **Graceful degradation** when optional dependencies (textual, FFmpeg, AI keys) are missing
 12. **No blocking operations** — all long-running commands execute in background threads
+
+## Open Items
+
+Found when the success criteria above were checked against the code on 2026-09-25.
+
+- [x] Criteria 1, 2, 5, 6, 7, 10, 11: the sections render, the Download panel downloads and queues through a worker, the file browser navigates, the chat panel calls `AIEngine.interpret_intent`, Home shows stats and recent activity, `pytest tests/interface/tui/` passes, and `max dashboard` prints an install hint when `textual` is missing.
+- [D] Criterion 3, Tools panel: commit 652a38b removed `tools_panel.py`. `CommandExecutor` survives and the Download and Files panels call it.
+- [D] Criterion 9, keyboard shortcuts 1-9: commit 652a38b removed the number bindings. The `Sidebar` (commit 48cdcf8) and `Ctrl+B` replace them. The unbound `action_switch_*` methods remain in app.py.
+- [ ] Criterion 8, System cleanup: `Clear Cache` works, but the `Cleanup Backups` (`#btn-cleanup-backups`) and `Clean Transactions` (`#btn-clean-txn`) buttons in `system_panel.py` have no handlers.
+- [ ] Criterion 4, unified history: `ActivityLog` holds only actions started from the TUI. Nothing imports task-store history or transaction logs into it.
+- [ ] Criterion 12, no blocking work: `ChatPanel._process_request` and the Files panel quick actions call engines on the UI thread. Only the Download panel uses a worker.
+- [ ] Tests: no unit tests exist for `command_registry.py`, `command_executor.py` or `activity_log.py` (the Testing Strategy files `test_command_registry.py`, `test_activity_log.py`, `test_command_executor.py` were never written). `test_preset_drift.py` covers the registry defaults only.
+- [ ] Docs: README.md and `docs/commands/dashboard.md` still list the four original tabs and a `max dashboard --dev` flag that `dashboard.py` does not accept.
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6. Status moved from Completed to In Progress because of the open items above.
+- The dashboard has 9 sections: Home, Download, Queue, History, Files, Analytics, Config, System, Chat. Analytics came from dashboard-home-analytics-redesign.md.
+- Panels now read tasks through `get_task_manager()` (`core/engines/task_manager.py`), which replaced `DaemonManager`.

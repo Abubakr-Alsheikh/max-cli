@@ -1,8 +1,9 @@
 # Plan: TUI Dashboard Bugfix & UX Improvements
 
-> Status: Completed
-> Priority: P0
-> Related: Interactive TUI Expansion (Feature 2C Phase 2)
+**Status:** In Progress
+**Priority:** P0
+**Updated:** 2026-09-25
+**Related:** Interactive TUI Expansion (Feature 2C Phase 2)
 
 ## Overview
 
@@ -1217,23 +1218,23 @@ register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)
 
 ### Manual Testing Checklist
 
-- [ ] `max dashboard` starts without crashes
-- [ ] Home panel cards navigate to correct tabs
-- [ ] Tools panel: select command, fill form, execute — no crash
-- [ ] Tools panel: select a second command — no crash on form rebuild
-- [ ] Download panel: enter URL, download — appears in recent downloads
-- [ ] Queue panel: empty state shows clean message
-- [ ] Queue panel: add task → shows in queue
-- [ ] History panel: click row → shows activity details
-- [ ] History panel: clear history → works
-- [ ] Config panel: API keys saved correctly (not masked)
-- [ ] Config panel: search and clear search → all fields visible
-- [ ] Files panel: navigate directories → works
-- [ ] Files panel: quick actions → execute or show appropriate message
-- [ ] System panel: refresh → content doesn't grow
-- [ ] System panel: clear cache → works
-- [ ] Chat panel: send message → shows thinking indicator, then response
-- [ ] Keyboard shortcuts: 1-9 switch tabs
+- [x] `max dashboard` starts without crashes (`test_app_starts`)
+- [x] Home panel cards navigate to correct tabs (`on_home_panel_command_selected` in app.py maps grab, files and ai to their sections)
+- [D] Tools panel: select command, fill form, execute — no crash. Commit 652a38b removed the Tools panel.
+- [D] Tools panel: select a second command — no crash on form rebuild. Commit 652a38b removed the Tools panel.
+- [x] Download panel: enter URL, download — appears in recent downloads (now: the History table fed by `DownloadHistory`, which reads the task store)
+- [x] Queue panel: empty state shows clean message
+- [x] Queue panel: add task → shows in queue (reads `get_task_manager().get_all()`)
+- [x] History panel: click row → shows activity details (looks up `ActivityLog.get_entry`)
+- [x] History panel: clear history → works (two-press "Confirm?" button)
+- [x] Config panel: API keys saved correctly (not masked) (`_original_values` restores masked keys on save)
+- [ ] Config panel: search and clear search → all fields visible. `_on_search` reads `label.renderable`, which `Label` no longer has in Textual 8, so typing in the search box raises `AttributeError`.
+- [x] Files panel: navigate directories → works
+- [x] Files panel: quick actions → execute or show appropriate message
+- [x] System panel: refresh → content doesn't grow (`_update_disk_usage` builds the text fresh each time)
+- [x] System panel: clear cache → works
+- [ ] Chat panel: send message → shows thinking indicator, then response. The panel adds a "Thinking..." message, but `_process_request` calls the AI engine on the UI thread, so Textual never paints it before the reply arrives.
+- [D] Keyboard shortcuts: 1-9 switch tabs. Commit 652a38b removed the number bindings; the `Sidebar` and `Ctrl+B` replace them.
 
 ## Success Criteria
 
@@ -1261,3 +1262,11 @@ register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)
 5. Run full test suite: `pytest tests/`
 6. Run lint/typecheck: `ruff check . && ruff format . && mypy src/`
 7. Update `PLANS/active/interactive-tui-expansion.md` with completion status
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6. Status moved from Completed to In Progress because two checklist items fail.
+- Commit 652a38b removed the Tools panel and the 1-9 shortcuts, so issues 7, 49, 55 and 64 no longer apply.
+- Success criterion 7 fails: mypy reports 11 errors in `src/max_cli/interface/tui/`. Two of them are live bugs: `config_panel.py:145` (`Label.renderable`, the search crash above) and `files_panel.py:218`, where `_on_filter` sets `Row.visible`, an attribute Textual ignores, so the Files filter box does nothing.
+- Issue 9 survives in a new form: `DownloadPanel` logs downloads to `ActivityLog` with `category="grab"`, while the History "Downloads" filter, `ActivityLog.get_stats()` and the Home Downloads card all expect `"download"`.
+- The hardening work replaced `DaemonManager` with `TaskManager` and split `media_engine.py` into `video_engine.py`, `audio_engine.py` and `stream_engine.py`. File and line references in the issue tables above predate that split.

@@ -1,8 +1,9 @@
 # Plan: FFmpeg Auto-Resolution (The FFmpeg Problem)
 
-> Status: Completed
-> Priority: P0
-> Related: User Experience & Laziness (Feature 2A), Cross-Platform Compatibility (Section 17)
+**Status:** Completed
+**Priority:** P0
+**Updated:** 2026-09-25
+**Related:** User Experience & Laziness (Feature 2A), Cross-Platform Compatibility (Section 17)
 
 ## Overview
 
@@ -46,13 +47,13 @@ The `MediaEngine.__init__` resolves the FFmpeg path via `shutil.which("ffmpeg")`
 
 ## Goals
 
-- [ ] **G1**: Create `src/max_cli/common/ffmpeg_resolver.py` — auto-download module with platform detection, Rich prompts, and hash verification
-- [ ] **G2**: Fix `MediaEngine.__init__` to use a 3-tier resolution strategy (PATH → `~/.max_cli/bin/` → auto-download)
-- [ ] **G3**: Replace all 20+ hardcoded `"ffmpeg"` strings with `self.ffmpeg_path` (fix the dead-code bug)
-- [ ] **G4**: Fix `/tmp/hls` Windows incompatibility in `live_preview` using `tempfile` or `~/.max_cli/tmp/`
-- [ ] **G5**: Update `_check_engine()` in `cli_media.py` and `_check_media_engine()` in `cli_audio.py` to use resolved path
-- [ ] **G6**: Add tests that mock download and binary validation
-- [ ] **G7**: Cache the resolution result so we don't re-check on every command invocation
+- [x] **G1**: Create `src/max_cli/common/ffmpeg_resolver.py` — auto-download module with platform detection, Rich prompts, and hash verification (now: the prompt lives in `interface/ffmpeg_prompt.py`; no hash check, see Decisions)
+- [x] **G2**: Fix `MediaEngine.__init__` to use a 3-tier resolution strategy (PATH → `~/.max_cli/bin/` → auto-download) (now: `ffmpeg_base.py`)
+- [x] **G3**: Replace all 20+ hardcoded `"ffmpeg"` strings with `self.ffmpeg_path` (fix the dead-code bug) (now: across `video_engine`, `audio_engine` and `stream_engine`)
+- [x] **G4**: Fix `/tmp/hls` Windows incompatibility in `live_preview` using `tempfile` or `~/.max_cli/tmp/` (now: `stream_engine.py` uses `tempfile.gettempdir()`)
+- [x] **G5**: Update `_check_engine()` in `cli_media.py` and `_check_media_engine()` in `cli_audio.py` to use resolved path (now: `_get_engine()` and `_get_media_engine()`)
+- [x] **G6**: Add tests that mock download and binary validation
+- [x] **G7**: Cache the resolution result so we don't re-check on every command invocation
 
 ## Implementation Details
 
@@ -873,19 +874,19 @@ Try URLs in order; if all fail, show manual install instructions.
 
 ## Success Criteria
 
-- [ ] `max video compress test.mp4` works on a fresh machine with no FFmpeg installed (auto-download prompt appears)
-- [ ] `max video compress test.mp4` works with FFmpeg already in PATH (no download, instant start)
-- [ ] `max video compress test.mp4` works with FFmpeg in `~/.max_cli/bin/` (uses local binary)
-- [ ] All 20+ hardcoded `"ffmpeg"` strings replaced with `self.ffmpeg_path`
-- [ ] `/tmp/hls` replaced with cross-platform temp directory — `live_preview` works on Windows
-- [ ] `pytest tests/test_ffmpeg_resolver.py` passes (all 10+ tests)
-- [ ] `pytest tests/test_core_media.py` passes (existing tests unchanged)
-- [ ] `pytest tests/` full suite passes
-- [ ] `ruff check src/max_cli/common/ffmpeg_resolver.py` — zero lint errors
-- [ ] `mypy src/max_cli/common/ffmpeg_resolver.py` — zero type errors
-- [ ] `MAX_CLI_NON_INTERACTIVE=1 max video compress test.mp4` fails gracefully with install instructions (CI-safe)
-- [ ] Downloaded binary passes `_validate_binary()` check
-- [ ] Documentation updated: `README.md` mentions auto-download feature, `docs/commands/video.md` updated
+- [x] `max video compress test.mp4` works on a fresh machine with no FFmpeg installed (auto-download prompt appears)
+- [x] `max video compress test.mp4` works with FFmpeg already in PATH (no download, instant start)
+- [x] `max video compress test.mp4` works with FFmpeg in `~/.max_cli/bin/` (uses local binary)
+- [x] All 20+ hardcoded `"ffmpeg"` strings replaced with `self.ffmpeg_path`
+- [x] `/tmp/hls` replaced with cross-platform temp directory — `live_preview` works on Windows
+- [x] `pytest tests/test_ffmpeg_resolver.py` passes (all 10+ tests) (32 tests, plus 3 in `test_ffmpeg_prompt.py`)
+- [x] `pytest tests/test_core_media.py` passes (existing tests unchanged)
+- [x] `pytest tests/` full suite passes
+- [x] `ruff check src/max_cli/common/ffmpeg_resolver.py` — zero lint errors
+- [x] `mypy src/max_cli/common/ffmpeg_resolver.py` — zero type errors
+- [x] `MAX_CLI_NON_INTERACTIVE=1 max video compress test.mp4` fails gracefully with install instructions (CI-safe)
+- [x] Downloaded binary passes `_validate_binary()` check
+- [x] Documentation updated: `README.md` mentions auto-download feature, `docs/commands/video.md` updated (now: `docs/commands/media.md`)
 
 ---
 
@@ -921,3 +922,13 @@ Try URLs in order; if all fail, show manual install instructions.
 ---
 
 *Documentation has been synchronized.*
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+  - Hardening Phase 3 moved the Rich prompt out of core. The resolver takes `confirm_download` and `on_progress` callbacks, `interface/ffmpeg_prompt.py` supplies them, and without them the resolver raises `ResourceNotFoundError`.
+  - Hardening Phase 3 split `media_engine.py`: resolution lives in `ffmpeg_base.py`, and `MediaEngine` inherits the video, audio and stream engines.
+  - No SHA256 check. The download URLs point at rolling builds, so this plan left every pinned hash as `None`. `_validate_binary()` runs `ffmpeg -version` on the download instead, and `safe_extract_tar` rejects archive members that escape the bin directory.
+  - `max config setup-ffmpeg` (Phase 5) ships.
+  - The resolver tries one URL per platform. The URL fallback list and the disk-space check from the risks table were not built.
+  - The fresh-machine and Windows `live_preview` criteria rest on the mocked tests; nobody ran them by hand for this reconciliation.

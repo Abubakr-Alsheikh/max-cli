@@ -1,8 +1,9 @@
 # Plan: Interactive Dashboard (TUI)
 
-> Status: Completed
-> Priority: P2
-> Related: User Experience & Laziness (Feature 2C)
+**Status:** Completed
+**Priority:** P2
+**Updated:** 2026-09-25
+**Related:** User Experience & Laziness (Feature 2C)
 
 ## Overview
 
@@ -946,15 +947,22 @@ Once the TUI is mature, the individual `max queue status` / `max queue history` 
 
 ## Success Criteria
 
-- [ ] `pip install max-cli[tui]` installs `textual` without conflicts.
-- [ ] `max dashboard` launches the TUI with 4 tabs (Queue, History, Config, System).
-- [ ] Queue tab auto-refreshes every 2 seconds and shows live task status/progress.
-- [ ] Queue tab action buttons (Cancel, Retry, Pause, Clear) work correctly.
-- [ ] History tab filters tasks by text input in real time.
-- [ ] History tab row selection shows full task details.
-- [ ] Config tab displays all `Settings` fields and saves changes to `~/.max_config.env`.
-- [ ] System tab shows disk usage of `~/.max_cli/` and recent daemon log lines.
-- [ ] Running `max dashboard` without `textual` installed shows a clear install prompt.
-- [ ] All TUI tests pass with mocked `DaemonManager` (no real file I/O or network).
-- [ ] `ruff check`, `mypy`, and `pytest` all pass on the new code.
-- [ ] Documentation updated: `README.md` includes `max dashboard` usage examples.
+- [x] `pip install max-cli[tui]` installs `textual` without conflicts. (`tui` extra in pyproject.toml also pulls `psutil`.)
+- [x] `max dashboard` launches the TUI with 4 tabs (Queue, History, Config, System). (now: 9 sections behind a vertical `Sidebar`, not `TabbedContent`)
+- [x] Queue tab auto-refreshes every 2 seconds and shows live task status/progress. (`set_interval(2.0, ...)` in app.py)
+- [x] Queue tab action buttons (Cancel, Retry, Pause, Clear) work correctly. (now: call `get_task_manager()` instead of `DaemonManager`)
+- [x] History tab filters tasks by text input in real time. (now: filters `ActivityLog` entries, plus a category `Select`)
+- [x] History tab row selection shows full task details. (now: shows the `ActivityLog` entry)
+- [x] Config tab displays all `Settings` fields and saves changes to `~/.max_config.env`. (saves through `atomic_write_text`)
+- [x] System tab shows disk usage of `~/.max_cli/` and recent daemon log lines. (now: the recent list shows finished tasks from the task store; the daemon log is gone)
+- [x] Running `max dashboard` without `textual` installed shows a clear install prompt. (`test_dashboard_missing_textual`)
+- [x] All TUI tests pass with mocked `DaemonManager` (no real file I/O or network). (now: tests mock the `TaskManager`; `tests/interface/tui/` passes)
+- [D] `ruff check`, `mypy`, and `pytest` all pass on the new code. ruff and pytest pass. mypy reports 11 errors in `interface/tui/`; the repo-wide baseline (`scripts/mypy_baseline.py`) tracks them, and tui-bugfix-and-ux-improvements.md records the two that are real bugs.
+- [x] Documentation updated: `README.md` includes `max dashboard` usage examples. (The tab list there is stale; interactive-tui-expansion.md tracks the fix.)
+
+## Decisions
+
+- 2026-09-25: Reconciled against the code during hardening Phase 6.
+- The hardening work replaced `DaemonManager` with `TaskManager` (`core/engines/task_manager.py`). Every panel now calls `get_task_manager()`.
+- Commit 48cdcf8 replaced `Header` + `TabbedContent` with a `Sidebar` widget and a content container. `Ctrl+B` toggles the compact sidebar.
+- The Phase 2-4 follow-ups (`--headless`, `NotificationPanel`, `SearchPanel`) never started. Nothing depends on them.
