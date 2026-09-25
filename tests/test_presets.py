@@ -91,3 +91,9 @@ def test_dashboard_organizes_music_by_artist_and_album():
     schema = CommandRegistry.get_command("audio", "organize")
     pattern = next(f for f in schema["fields"] if f["name"] == "pattern")
     assert pattern["default"] == "artist-album"
+
+
+def test_tui_shred_passes_the_path_the_engine_expects(tmp_path):
+    """The dashboard sent `target=`, which secure_delete doesn't accept."""
+    params = _map("files", "shred", {"target": tmp_path / "secret.txt", "passes": 3})
+    assert params == {"path": tmp_path / "secret.txt", "passes": 3}

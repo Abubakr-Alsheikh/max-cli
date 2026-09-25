@@ -53,7 +53,7 @@ max files duplicates ./downloads -r --delete
 
 ## shred
 
-Overwrite a file with random data, then delete it. Max asks before it shreds.
+Overwrite a file with random data, then delete it. Max asks before it shreds. Max keeps no backup, so `max files undo` can't bring the file back.
 
 ```bash
 max files shred TARGET [--passes N] [--force]
@@ -134,7 +134,7 @@ This command:
 
 - Reverses the renames, moves and deletes from the last operation
 - Restores deleted files from the automatic backups
-- Works with `files order`, `files smart-sort`, `files duplicates --delete`, `files shred` and `audio organize`
+- Works with `files order`, `files smart-sort`, `files duplicates --delete` and `audio organize`. `files shred` can't be undone.
 
 ## history
 

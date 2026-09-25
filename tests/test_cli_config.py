@@ -168,6 +168,28 @@ class TestValidate:
 
 
 class TestExportImport:
+    def test_export_leaves_out_api_key_by_default(self, tmp_path: Path) -> None:
+        """The key used to land in max-config.json in plain text."""
+        output = tmp_path / "exported.json"
+        with patch.object(manage_module.settings, "OPENAI_API_KEY", "sk-secret"):
+            result = runner.invoke(config_app, ["export", "-o", str(output)])
+
+        assert result.exit_code == 0, result.output
+        assert "sk-secret" not in output.read_text(encoding="utf-8")
+
+    def test_export_include_secrets_writes_key_and_warns(self, tmp_path: Path) -> None:
+        output = tmp_path / "exported.json"
+        with patch.object(manage_module.settings, "OPENAI_API_KEY", "sk-secret"):
+            result = runner.invoke(
+                config_app, ["export", "-o", str(output), "--include-secrets"]
+            )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(output.read_text(encoding="utf-8"))["OPENAI_API_KEY"] == (
+            "sk-secret"
+        )
+        assert "API key" in _plain(result)
+
     def test_export_with_defaults(self, tmp_path: Path) -> None:
         output = tmp_path / "exported.json"
 

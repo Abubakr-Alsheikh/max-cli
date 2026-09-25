@@ -162,10 +162,10 @@ def download_media(
     Download media using saved preferences or overrides.
 
     Examples:
-        max grab                                    # Interactive mode
-        max grab https://youtube.com/watch?v=...   # Download directly
-        max grab -v https://...                    # Force video
-        max grab -a https://...                    # Audio only
+        max grab download                                   # Interactive mode
+        max grab download https://youtube.com/watch?v=...   # Download directly
+        max grab download -v https://...                    # Force video
+        max grab download -a https://...                    # Audio only
     """
     final_quality = quality if quality else settings.GRAB_QUALITY
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA
@@ -681,12 +681,18 @@ def queue_status():
 def show_history(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of items to show."),
     clear: bool = typer.Option(False, "--clear", "-c", help="Clear history."),
+    force: bool = typer.Option(
+        False, "-f", "--force", help="Clear without asking for confirmation."
+    ),
 ):
     """Show download history."""
     from max_cli.core.engines.task_queue import TaskType
 
     manager = _get_task_manager()
     if clear:
+        if not force and not Confirm.ask("Clear your whole download history?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return
         count = manager.clear_history(task_type=TaskType.DOWNLOAD)
         log_success(f"Cleared {count} items from history.")
         return

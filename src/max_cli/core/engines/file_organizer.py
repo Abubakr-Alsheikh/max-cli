@@ -289,7 +289,7 @@ class FileOrganizer:
         path: Path,
         passes: int = 3,
         transaction_log: Optional["TransactionLog"] = None,
-        auto_backup: bool = True,
+        auto_backup: bool = False,
     ) -> bool:
         """
         Securely delete a file by overwriting with random data.
@@ -298,7 +298,8 @@ class FileOrganizer:
             path: File to securely delete
             passes: Number of overwrite passes (default 3)
             transaction_log: Optional transaction log for recording operations
-            auto_backup: Automatically create backup before deletion (default True)
+            auto_backup: Keep a backup copy first. Off by default: a backup
+                defeats a secure delete, so only pass True for testing.
 
         Returns:
             True if successful

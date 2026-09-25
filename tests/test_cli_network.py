@@ -144,3 +144,18 @@ def test_declining_playlist_prompt_cancels_download():
         )
 
     engine.download_media.assert_not_called()
+
+
+def test_history_clear_asks_first():
+    """grab history --clear used to wipe history without asking."""
+    from max_cli.core.engines.download_history import DownloadHistory
+
+    DownloadHistory().record_download(url="https://youtu.be/x", title="Keep")
+
+    result = runner.invoke(network_app, ["history", "--clear"], input="n\n")
+
+    assert result.exit_code == 0, result.output
+    assert DownloadHistory().get_recent()
+    forced = runner.invoke(network_app, ["history", "--clear", "--force"])
+    assert forced.exit_code == 0, forced.output
+    assert DownloadHistory().get_recent() == []

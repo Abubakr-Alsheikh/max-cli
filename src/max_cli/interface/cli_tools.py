@@ -35,6 +35,9 @@ def paste_image(
     output: Path = typer.Argument(
         Path("clipboard.png"), help="Filename to save the image to."
     ),
+    force: bool = typer.Option(
+        False, "-f", "--force", help="Overwrite an existing file without asking."
+    ),
 ):
     """
     Save the image currently in your clipboard to a file.
@@ -43,6 +46,13 @@ def paste_image(
     # Ensure extension
     if not output.suffix:
         output = output.with_suffix(".png")
+
+    if output.exists() and not force:
+        from rich.prompt import Confirm
+
+        if not Confirm.ask(f"{output} already exists. Overwrite it?"):
+            console.print("[dim]Cancelled. The file was not changed.[/dim]")
+            return
 
     try:
         _get_engine().save_clipboard_image(output)

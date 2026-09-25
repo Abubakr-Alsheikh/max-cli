@@ -333,6 +333,12 @@ def concat_videos(
     """
     _get_engine()
 
+    if method not in CONCAT_METHODS:
+        log_error(
+            f"Unknown method '{method}'. Use one of: {', '.join(CONCAT_METHODS)}."
+        )
+        raise typer.Exit(1)
+
     from max_cli.core.engines.video_engine import resolve_concat_inputs
 
     try:
@@ -350,7 +356,7 @@ def concat_videos(
 
     with console.status("[bold green]Merging videos...[/bold green]"):
         try:
-            concat_method = CONCAT_METHODS.get(method, CONCAT_METHODS["safe"])
+            concat_method = CONCAT_METHODS[method]
             eng = _get_engine()
             eng.concatenate_videos(input_files, output, method=concat_method)
             log_success(f"Videos merged: {output}")
@@ -653,7 +659,7 @@ def stream_video_cmd(
     """
     Stream video to an RTMP server (Twitch, YouTube, etc.).
 
-    Example: max media stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
+    Example: max video stream video.mp4 -u rtmp://live.twitch.tv/app -b 6000k
     """
     _get_engine()
 

@@ -165,8 +165,13 @@ def export_config(
     include_defaults: bool = typer.Option(
         False, "--include-defaults", help="Include default values."
     ),
+    include_secrets: bool = typer.Option(
+        False,
+        "--include-secrets",
+        help="Also write API keys. Keep the file private if you use this.",
+    ),
 ):
-    """Export configuration to JSON file."""
+    """Export configuration to JSON file. API keys are left out by default."""
     config_dict = {}
 
     if include_defaults:
@@ -192,7 +197,6 @@ def export_config(
         }
     else:
         non_defaults = {
-            "OPENAI_API_KEY": settings.OPENAI_API_KEY,
             "OPENAI_BASE_URL": settings.OPENAI_BASE_URL,
             "AI_MODEL": settings.AI_MODEL,
             "AI_IMAGE_MODEL": settings.AI_IMAGE_MODEL,
@@ -207,6 +211,13 @@ def export_config(
         for k, v in non_defaults.items():
             if v is not None and v != "":
                 config_dict[k] = v
+
+    if include_secrets and settings.OPENAI_API_KEY:
+        config_dict["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+        console.print(
+            "[yellow]Warning: the export contains your API key in plain text. "
+            "Don't share or commit the file.[/yellow]"
+        )
 
     try:
         atomic_write_json(output, config_dict)

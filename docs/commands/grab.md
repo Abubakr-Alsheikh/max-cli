@@ -33,7 +33,7 @@ max grab download
 | `--progress` / `--no-progress` | | Show or hide the progress bar (default: show) |
 | `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |
 
-`max net` is another name for the `max grab` group. Both run the same commands.
+`max net` is an old, hidden name for the `max grab` group. It still works, but new scripts should use `max grab`.
 
 ### YouTube Troubleshooting
 
@@ -83,7 +83,7 @@ max grab queue --process    # Process pending downloads now
 # Show download history
 max grab history
 max grab history --limit 20
-max grab history --clear    # Delete the download history
+max grab history --clear    # Delete the download history (asks first; -f skips)
 
 # Clear the queue
 max grab clear              # Clear pending downloads

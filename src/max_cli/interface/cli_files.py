@@ -249,7 +249,10 @@ def secure_delete(
         raise typer.Exit(1)
 
     if not force:
-        console.print(f"[red]⚠ This will PERMANENTLY destroy: {target.name}[/red]")
+        console.print(
+            f"[red]⚠ This will PERMANENTLY destroy: {target.name}. "
+            "No backup is kept, and `max files undo` can't restore it.[/red]"
+        )
         if not Confirm.ask("Are you sure?"):
             console.print("[yellow]Aborted.[/yellow]")
             return
@@ -257,15 +260,9 @@ def secure_delete(
     console.print(f"[cyan]Shredding {target.name} ({passes} passes)...[/cyan]")
 
     try:
-        from max_cli.common.transaction_log import TransactionLog
-
-        txn = TransactionLog(command="files shred")
-
-        org = _get_organizer()
-        org.secure_delete(target, passes=passes, transaction_log=txn, auto_backup=True)
-        txn.save()
+        # No backup and no undo record: a secure delete must not leave a copy.
+        _get_organizer().secure_delete(target, passes=passes)
         log_success(f"File securely deleted: {target.name}")
-        console.print("[dim]Undo with: max files undo (restores from backup)[/dim]")
     except Exception as e:
         log_error(f"Secure delete failed: {e}")
 

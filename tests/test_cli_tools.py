@@ -136,3 +136,27 @@ class TestCopy:
         assert result.exception is None
         assert "Error:" in _plain(result)
         assert "File not found" in _plain(result)
+
+
+@patch(ENGINE_PATH)
+def test_paste_asks_before_overwriting(mock_get_engine, tmp_path):
+    """paste used to overwrite an existing file without asking."""
+    existing = tmp_path / "shot.png"
+    existing.write_bytes(b"keep me")
+
+    result = runner.invoke(tools_app, ["paste", str(existing)], input="n\n")
+
+    assert result.exit_code == 0, result.output
+    mock_get_engine.return_value.save_clipboard_image.assert_not_called()
+    assert existing.read_bytes() == b"keep me"
+
+
+@patch(ENGINE_PATH)
+def test_paste_force_overwrites(mock_get_engine, tmp_path):
+    existing = tmp_path / "shot.png"
+    existing.write_bytes(b"old")
+
+    result = runner.invoke(tools_app, ["paste", str(existing), "--force"])
+
+    assert result.exit_code == 0, result.output
+    mock_get_engine.return_value.save_clipboard_image.assert_called_once_with(existing)

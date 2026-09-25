@@ -323,9 +323,22 @@ def semantic_search_cmd(
         log_error(f"Folder not found: {path}")
         raise typer.Exit(1)
 
-    from max_cli.core.engines.ai_engine import find_searchable_files
+    from max_cli.core.engines.ai_engine import (
+        SEARCHABLE_SUFFIXES,
+        find_searchable_files,
+    )
 
-    files = find_searchable_files(path, extensions.split(","))
+    requested = [ext.strip().lower().lstrip(".") for ext in extensions.split(",")]
+    unreadable = [ext for ext in requested if ext and f".{ext}" not in SEARCHABLE_SUFFIXES]
+    if unreadable:
+        readable = ", ".join(sorted(s.lstrip(".") for s in SEARCHABLE_SUFFIXES))
+        console.print(
+            f"[yellow]Skipping {', '.join(unreadable)}: search reads only "
+            f"{readable}.[/yellow]"
+        )
+    files = find_searchable_files(
+        path, [ext for ext in requested if ext not in unreadable]
+    )
 
     if not files:
         console.print("[yellow]No matching files found.[/yellow]")

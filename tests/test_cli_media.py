@@ -299,3 +299,16 @@ def test_live_commands_require_existing_file(mock_engine, tmp_path, command):
     assert "File not found" in result.output
     mock_engine.stream_to_rtmp.assert_not_called()
     mock_engine.live_preview.assert_not_called()
+
+
+@patch(ENGINE_PATH)
+def test_concat_rejects_unknown_method(mock_get_engine, tmp_path):
+    """Unknown --method values used to fall back to "safe" without a word."""
+    (tmp_path / "a.mp4").write_bytes(b"")
+    result = runner.invoke(
+        media_app, ["concat", str(tmp_path / "*.mp4"), "--method", "quick"]
+    )
+
+    assert result.exit_code == 1
+    assert "Unknown method 'quick'" in result.output
+    mock_get_engine.return_value.concatenate_videos.assert_not_called()

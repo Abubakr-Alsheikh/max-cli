@@ -564,7 +564,7 @@ max files backups --restore <backup-path>
 max files backup-cleanup --days 30
 ```
 
-Max records `order`, `smart-sort`, `duplicates --delete`, `shred` and `audio organize` so `max files undo` can reverse them. Before `shred` and `duplicates --delete` delete anything, Max saves a backup.
+Max records `order`, `smart-sort`, `duplicates --delete` and `audio organize` so `max files undo` can reverse them. Before `duplicates --delete` deletes anything, Max saves a backup. `shred` keeps no copy and can't be undone.
 
 ---
 
@@ -700,7 +700,7 @@ max config import cfg.json  # Load settings from JSON
 max config setup-ffmpeg     # Download and install FFmpeg
 ```
 
-`max config export` includes your API key unless you pass `--include-defaults`. Don't share or commit the file.
+`max config export` leaves your API key out. Add `--include-secrets` to include it, and keep that file private.
 
 ---
 

@@ -20,6 +20,8 @@ def _get_engine():
 
 def _resolve_batch(target: Path) -> Tuple[List[Path], Path]:
     engine = _get_engine()
+    # Resolve first: Path(".").name is "", which made the folder "_optimized".
+    target = target.resolve()
     if target.is_file():
         return [target], target.parent
     files = [

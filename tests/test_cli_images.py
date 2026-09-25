@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from typer.testing import CliRunner
 from max_cli.interface.cli_images import app as images_app
 from PIL import Image
@@ -66,3 +68,16 @@ class TestCLIImagesParsing:
         """Test resize requires at least one dimension option."""
         result = runner.invoke(images_app, ["resize", "."])
         assert "Specify" in result.stdout or result.exit_code != 0
+
+
+def test_batch_output_folder_has_a_name_for_current_dir(tmp_path, monkeypatch):
+    """`max images compress` with no path wrote into ./_optimized."""
+    from max_cli.interface.cli_images import _resolve_batch
+
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    monkeypatch.chdir(photos)
+
+    _files, out_dir = _resolve_batch(Path("."))
+
+    assert out_dir == tmp_path / "photos_optimized"

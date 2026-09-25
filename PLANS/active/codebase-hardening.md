@@ -258,23 +258,22 @@ One commit per bug. Each fix turned its strict xfail test green, and the marker 
   - [x] Update the queue/history section after Phase 3 (done in Phase 3).
 - [D] Ruff rule widening (`I`, `BLE`, `B`, `UP`/`FA`, `DTZ`, one family per PR), deferred from Phase 2. Each family changes `pyproject.toml` and touches many files, so each needs its own PR and the maintainer's go-ahead.
 
-**CLI issues the docs audit found (not fixed; for the maintainer to prioritize):**
-- **Security:** `max config export` writes `OPENAI_API_KEY` in plain text by default. `--include-defaults` leaves it out, which looks backwards.
-- `max files shred` warns that it destroys the file for good, then keeps an auto-backup in `~/.max_cli/backups/`. That defeats a secure delete.
-- Help examples are wrong:
-  - `max grab download --help` shows `max grab <url>`, which fails.
-  - `max video stream --help` shows `max media stream`.
-- `max net` duplicates `max grab`. Its help promises a speedtest that doesn't exist.
-- `max queue` commands have no help text.
-- `-f` means `--failed` in `queue clear` but `--force` everywhere else.
-- `queue retry` resets a running task. `queue cancel` says running tasks can't be cancelled, but they can.
-- The quality letters map to different bitrates in `audio-convert` and `to-audio`.
-- `concat --method` accepts any value and falls back to `safe`.
-- `ai search --ext` accepts types the engine skips without a word.
-- Commands that overwrite or clear without asking:
-  - `tools paste` overwrites an existing file.
-  - `grab history --clear` clears history.
-- `max images compress` with no path probably writes to `./_optimized`.
+**CLI issues the docs audit found (fixed on branch `fix/cli-audit-issues`):**
+- [x] **Security:** `max config export` leaves `OPENAI_API_KEY` out. `--include-secrets` adds it and prints a warning.
+- [x] **Security:** `max files shred` keeps no backup and records no undo entry. The dashboard's Secure Delete also works now; it passed `target=` to an engine that takes `path`.
+- [x] Fixed the wrong help examples (`max grab <url>`, `max media stream`). `max net` is a hidden alias with no false speedtest claim.
+- [x] `max queue`:
+  - Every command has a help line.
+  - `retry` leaves running tasks alone.
+  - `cancel` failures say "not found or already finished".
+  - `clear --failed` lost its `-f` short flag. `-f` was not reused for `--force`, so an old script fails instead of clearing without a prompt.
+- [x] `concat --method` rejects unknown values.
+- [x] `ai search --ext` names the types it can't read.
+- [x] `tools paste` and `grab history --clear` ask first, and `-f`/`--force` skips the question.
+- [x] `max images compress` with no path writes to `<folder>_optimized`.
+- [ ] Left as is, on purpose:
+  - `audio-convert` and `to-audio` map the same quality letters to different bitrates. Aligning them would change the files people already produce, and the docs describe both.
+  - Some commands have `-o` without `--output`. That's cosmetic.
 
 ## Out of scope (tracked elsewhere)
 
