@@ -3,7 +3,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Label, Static
 
-from max_cli.core.engines.task_manager import TaskManager
+from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskStatus
 
 
@@ -38,7 +38,8 @@ class QueuePanel(Vertical):
         self.refresh_data()
 
     def refresh_data(self) -> None:
-        manager = TaskManager()
+        manager = get_task_manager()
+        manager.refresh()
         tasks = manager.get_all()
         table = self.query_one("#queue-table", DataTable)
 
@@ -127,7 +128,7 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                manager = TaskManager()
+                manager = get_task_manager()
                 manager.cancel(str(task_id))
                 self.refresh_data()
 
@@ -139,7 +140,7 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                manager = TaskManager()
+                manager = get_task_manager()
                 manager.retry(str(task_id))
                 self.refresh_data()
 
@@ -151,13 +152,13 @@ class QueuePanel(Vertical):
             row_data = table.get_row_at(row_idx)
             task_id = row_data[0] if row_data else None
             if task_id:
-                manager = TaskManager()
+                manager = get_task_manager()
                 manager.pause(str(task_id))
                 self.refresh_data()
 
     @on(Button.Pressed, "#btn-clear")
     def _on_clear(self) -> None:
-        manager = TaskManager()
+        manager = get_task_manager()
         for status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
             manager.clear(status=status)
         self.refresh_data()

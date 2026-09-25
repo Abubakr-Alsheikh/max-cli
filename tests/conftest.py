@@ -2,6 +2,26 @@ import pytest
 from PIL import Image
 
 
+@pytest.fixture(autouse=True)
+def isolated_task_store(tmp_path_factory, monkeypatch):
+    """Keep every TaskManager, and its legacy-file migration, out of ~/.max_cli."""
+    from max_cli.core.engines import task_manager
+
+    store_root = tmp_path_factory.mktemp("max_cli_home")
+    queue_dir = store_root / "tasks"
+    monkeypatch.setattr(task_manager.TaskManager, "QUEUE_DIR", queue_dir)
+    monkeypatch.setattr(
+        task_manager.TaskManager, "QUEUE_FILE", queue_dir / "queue.json"
+    )
+    monkeypatch.setattr(
+        task_manager.TaskManager, "HISTORY_FILE", queue_dir / "history.json"
+    )
+    monkeypatch.setattr(task_manager.TaskManager, "LEGACY_DIR", store_root)
+    task_manager.reset_task_manager()
+    yield store_root
+    task_manager.reset_task_manager()
+
+
 @pytest.fixture
 def temp_directory(tmp_path):
     """Provides a temporary directory for file operations."""

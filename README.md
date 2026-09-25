@@ -754,8 +754,8 @@ src/max_cli/
 │   │   ├── media_engine.py
 │   │   ├── network_engine.py
 │   │   ├── pdf_engine.py
-│   │   ├── queue_manager.py
-│   │   └── system_engine.py
+│   │   ├── system_engine.py
+│   │   └── task_manager.py  # Task queue and history (queue, grab, TUI)
 │   └── cli/              # CLI command registration
 │       ├── commands/     # Command modules
 │       ├── plugins.py    # Plugin lifecycle

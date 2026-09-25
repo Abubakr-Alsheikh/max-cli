@@ -22,7 +22,7 @@ from textual.widgets import (
 )
 from textual.worker import Worker, WorkerState
 
-from max_cli.common.download_history import DownloadHistory
+from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.config import settings
 
 _BITRATE_OPTIONS = {

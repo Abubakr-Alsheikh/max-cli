@@ -3,7 +3,7 @@ import urllib.parse
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import shutil
 import typer
@@ -18,6 +18,9 @@ from max_cli.core.engines.network_engine import POT_PROVIDER_PACKAGE
 from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer(help="Download media from various platforms.")
+
+INTERACTIVE_POLL_SECONDS = 0.5
+INTERACTIVE_WAIT_SECONDS = 30  # how long interactive mode waits for downloads
 
 
 class PlayerClient(str, Enum):
@@ -39,10 +42,51 @@ def _get_engine():
     return NetworkEngine()
 
 
-def _get_queue_manager():
-    from max_cli.core.engines.queue_manager import get_queue_manager
+def _get_task_manager():
+    from max_cli.core.engines.task_manager import get_task_manager
 
-    return get_queue_manager()
+    return get_task_manager()
+
+
+def _queue_download(url: str, **options) -> Optional[str]:
+    """Queue a download task. Returns its ID, or None if the URL is downloading."""
+    from max_cli.core.engines.network_engine import make_download_task
+    from max_cli.core.engines.task_queue import TaskStatus, TaskType
+
+    manager = _get_task_manager()
+    for task in manager.get_all(status=TaskStatus.RUNNING):
+        if task.type == TaskType.DOWNLOAD and task.payload.get("url") == url:
+            console.print(f"[yellow]Already downloading:[/yellow] {url}")
+            return None
+    task = manager.add(make_download_task(url, **options))
+    console.print(f"[dim]Added to queue:[/dim] {url}")
+    return task.id
+
+
+def _process_downloads() -> None:
+    from max_cli.core.engines.task_queue import TaskType
+
+    _get_task_manager().process_now(task_type=TaskType.DOWNLOAD)
+
+
+def _download_stats() -> dict:
+    from max_cli.core.engines.task_queue import TaskType
+
+    return _get_task_manager().get_stats(task_type=TaskType.DOWNLOAD)
+
+
+def _print_outcome(task_ids: List[str]) -> None:
+    """Print how many of `task_ids` completed and failed."""
+    from max_cli.core.engines.task_queue import TaskStatus
+
+    manager = _get_task_manager()
+    statuses = [getattr(manager.get(task_id), "status", None) for task_id in task_ids]
+    completed = statuses.count(TaskStatus.COMPLETED)
+    failed = statuses.count(TaskStatus.FAILED)
+    if completed:
+        console.print(f"[green]Completed: {completed}[/green]")
+    if failed:
+        console.print(f"[red]Failed: {failed}[/red]")
 
 
 def _clean_url(url: str, strip_playlist: bool) -> str:
@@ -163,15 +207,13 @@ def download_media(
         # Track if we should keep processing
         processing = False  # Don't start yet
 
+        queued_ids: List[str] = []
+
         def process_forever():
-            """Process queue items continuously."""
-            qm = _get_queue_manager()
+            """Process queued downloads until the prompt loop ends."""
             while processing:
-                try:
-                    qm.process_now()
-                except Exception:
-                    pass
-                time.sleep(0.5)
+                _process_downloads()
+                time.sleep(INTERACTIVE_POLL_SECONDS)
 
         # Start processing after first URL is added
         process_thread = None
@@ -195,9 +237,8 @@ def download_media(
                 )
 
                 # Add to queue - background processor will handle it
-                qm = _get_queue_manager()
-                qm.add(
-                    url=clean_u,
+                task_id = _queue_download(
+                    clean_u,
                     quality=final_quality,
                     audio_only=is_audio,
                     output_path=target_output,
@@ -208,33 +249,29 @@ def download_media(
                     custom_height=resolution,
                     player_client=player_client_name,
                 )
-                console.print("[green]+ Added[/green]")
+                if task_id:
+                    queued_ids.append(task_id)
+                    console.print("[green]+ Added[/green]")
         except KeyboardInterrupt:
             pass
 
         # Wait for pending downloads to complete before exiting
-        qm = _get_queue_manager()
-        stats = qm.get_stats()
-        pending = stats["pending"] + stats["downloading"]
+        stats = _download_stats()
+        pending = stats["pending"] + stats["running"]
         wait_count = 0
         if pending > 0:
             console.print(f"[dim]Waiting for {pending} download(s)...[/dim]")
-            while pending > 0 and wait_count < 30:
+            while pending > 0 and wait_count < INTERACTIVE_WAIT_SECONDS:
                 time.sleep(1)
-                stats = qm.get_stats()
-                pending = stats["pending"] + stats["downloading"]
+                stats = _download_stats()
+                pending = stats["pending"] + stats["running"]
                 wait_count += 1
 
         processing = False
         if process_thread:
             process_thread.join(timeout=2)
 
-        # Check final status
-        stats = qm.get_stats()
-        if stats["completed"] > 0:
-            console.print(f"[green]Completed: {stats['completed']}[/green]")
-        if stats["failed"] > 0:
-            console.print(f"[red]Failed: {stats['failed']}[/red]")
+        _print_outcome(queued_ids)
 
         raise typer.Exit()
     else:
@@ -260,14 +297,7 @@ def download_media(
 
             console.print("[dim]Processing queue in background...[/dim]")
 
-            def process_background():
-                qm = _get_queue_manager()
-                try:
-                    qm.process_now()
-                except Exception:
-                    pass
-
-            thread = threading.Thread(target=process_background, daemon=True)
+            thread = threading.Thread(target=_process_downloads, daemon=True)
             thread.start()
 
 
@@ -287,9 +317,8 @@ def _add_to_queue_or_download(
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if queue_enabled:
-        qm = _get_queue_manager()
-        qm.add(
-            url=url,
+        _queue_download(
+            url,
             quality=quality,
             audio_only=audio_only,
             output_path=output_path,
@@ -300,7 +329,6 @@ def _add_to_queue_or_download(
             custom_height=custom_height,
             player_client=player_client,
         )
-        log_success("Added to queue.")
     else:
         eng = _get_engine()
         q_info = eng.get_quality_info(quality, custom_height)
@@ -549,23 +577,22 @@ def show_queue(
     ),
 ):
     """Show the current download queue."""
-    qm = _get_queue_manager()
-    items = qm.get_all()
-    stats = qm.get_stats()
+    from max_cli.core.engines.task_queue import TaskStatus, TaskType
+
+    manager = _get_task_manager()
+    items = [task for task in manager.get_all() if task.type == TaskType.DOWNLOAD]
+    stats = _download_stats()
 
     console.print("\n[bold]Queue Status:[/bold]")
     console.print(
-        f"  Pending: {stats['pending']} | Downloading: {stats['downloading']} | Completed: {stats['completed']} | Failed: {stats['failed']}\n"
+        f"  Pending: {stats['pending']} | Downloading: {stats['running']} | Paused: {stats['paused']}\n"
     )
 
     if process:
         console.print("[dim]Processing queue...[/dim]")
-        qm.process_now()
-        stats = qm.get_stats()
-        if stats["completed"] > 0:
-            console.print(f"[green]Completed: {stats['completed']}[/green]")
-        if stats["failed"] > 0:
-            console.print(f"[red]Failed: {stats['failed']}[/red]")
+        pending_ids = [t.id for t in items if t.status == TaskStatus.PENDING]
+        _process_downloads()
+        _print_outcome(pending_ids)
         return
 
     if not items:
@@ -579,33 +606,19 @@ def show_queue(
     table.add_column("Progress", justify="right", width=25)
     table.add_column("Type", width=8)
 
-    for item in items:
+    for task in items:
         status_color = {
-            "pending": "yellow",
-            "downloading": "cyan",
-            "completed": "green",
-            "failed": "red",
-        }.get(item.status, "white")
-
-        url = item.url
-        if item.status == "downloading":
-            from max_cli.common.utils import format_size
-
-            if item.total_bytes > 0:
-                dl = format_size(item.downloaded_bytes)
-                total = format_size(item.total_bytes)
-                progress = f"{dl} / {total}"
-            else:
-                progress = f"{item.progress:.0f}%"
-        else:
-            progress = "-"
-
+            TaskStatus.PENDING: "yellow",
+            TaskStatus.RUNNING: "cyan",
+            TaskStatus.PAUSED: "blue",
+        }.get(task.status, "white")
+        progress = f"{task.progress:.0f}%" if task.status == TaskStatus.RUNNING else "-"
         table.add_row(
-            item.id,
-            f"[{status_color}]{item.status}[/{status_color}]",
-            url,
+            task.id,
+            f"[{status_color}]{task.status.value}[/{status_color}]",
+            task.payload.get("url", ""),
             progress,
-            "Audio" if item.audio_only else "Video",
+            "Audio" if task.payload.get("audio_only") else "Video",
         )
 
     console.print(table)
@@ -614,52 +627,54 @@ def show_queue(
 @app.command("clear")
 def clear_queue(
     all: bool = typer.Option(
-        False, "--all", "-a", help="Clear including completed/failed."
+        False, "--all", "-a", help="Clear all queued downloads, not only pending."
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation."),
 ):
     """Clear the download queue."""
+    from max_cli.core.engines.task_queue import TaskStatus, TaskType
+
+    manager = _get_task_manager()
     if all:
         if not force:
-            if not Confirm.ask(
-                "[red]Clear ALL items including completed/failed?[/red]"
-            ):
+            if not Confirm.ask("[red]Clear ALL queued downloads?[/red]"):
                 console.print("[yellow]Aborted.[/yellow]")
                 return
-        qm = _get_queue_manager()
-        count = qm.clear()
+        count = manager.clear(task_type=TaskType.DOWNLOAD)
         log_success(f"Cleared {count} items from queue.")
-    else:
-        qm = _get_queue_manager()
-        pending = qm.get_pending()
-        if not pending:
-            console.print("[dim]No pending items to clear.[/dim]")
+        return
+
+    pending = manager.get_pending(task_type=TaskType.DOWNLOAD)
+    if not pending:
+        console.print("[dim]No pending items to clear.[/dim]")
+        return
+
+    if not force:
+        if not Confirm.ask(f"[yellow]Clear {len(pending)} pending items?[/yellow]"):
+            console.print("[yellow]Aborted.[/yellow]")
             return
 
-        if not force:
-            if not Confirm.ask(f"[yellow]Clear {len(pending)} pending items?[/yellow]"):
-                console.print("[yellow]Aborted.[/yellow]")
-                return
-
-        qm.clear()
-        log_success(f"Cleared {len(pending)} pending items.")
+    count = manager.clear(status=TaskStatus.PENDING, task_type=TaskType.DOWNLOAD)
+    log_success(f"Cleared {count} pending items.")
 
 
 @app.command("status")
 def queue_status():
     """Show detailed queue statistics."""
-    qm = _get_queue_manager()
-    stats = qm.get_stats()
+    from max_cli.core.engines.download_history import DownloadHistory
+
+    stats = _download_stats()
+    history_stats = DownloadHistory(_get_task_manager()).get_stats()
 
     table = Table(title="Queue Statistics", box=box.ROUNDED)
     table.add_column("Status", style="cyan")
     table.add_column("Count", justify="right", style="bold")
 
-    table.add_row("Total", str(stats["total"]))
+    table.add_row("Queued", str(stats["total"]))
     table.add_row("Pending", str(stats["pending"]))
-    table.add_row("Downloading", str(stats["downloading"]))
-    table.add_row("Completed", f"[green]{stats['completed']}[/green]")
-    table.add_row("Failed", f"[red]{stats['failed']}[/red]")
+    table.add_row("Downloading", str(stats["running"]))
+    table.add_row("Completed", f"[green]{history_stats['completed']}[/green]")
+    table.add_row("Failed", f"[red]{history_stats['failed']}[/red]")
 
     console.print(table)
 
@@ -670,14 +685,15 @@ def show_history(
     clear: bool = typer.Option(False, "--clear", "-c", help="Clear history."),
 ):
     """Show download history."""
+    from max_cli.core.engines.task_queue import TaskType
+
+    manager = _get_task_manager()
     if clear:
-        qm = _get_queue_manager()
-        count = qm.clear_history()
+        count = manager.clear_history(task_type=TaskType.DOWNLOAD)
         log_success(f"Cleared {count} items from history.")
         return
 
-    qm = _get_queue_manager()
-    history = qm.get_history()[:limit]
+    history = manager.get_history(limit=limit, task_type=TaskType.DOWNLOAD)
 
     if not history:
         console.print("[dim]No download history.[/dim]")
@@ -692,24 +708,22 @@ def show_history(
     table.add_column("Quality", width=8)
     table.add_column("Date", width=20)
 
-    for item in history:
-        title = item.title if item.title else item.url
-        size = format_size(item.file_size) if item.file_size > 0 else "-"
-
-        # Format date
+    for task in history:
+        file_size = int(task.result.get("file_size") or 0)
         date = "-"
-        if item.completed_at:
+        if task.completed_at:
             try:
-                dt = datetime.fromisoformat(item.completed_at)
-                date = dt.strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                pass
+                date = datetime.fromisoformat(task.completed_at).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            except ValueError:
+                date = task.completed_at[:16]
 
         table.add_row(
-            title,
-            size,
-            "Audio" if item.audio_only else "Video",
-            item.quality.upper(),
+            task.title or task.payload.get("url", ""),
+            format_size(file_size) if file_size > 0 else "-",
+            "Audio" if task.payload.get("audio_only") else "Video",
+            str(task.payload.get("quality", "-")).upper(),
             date,
         )
 

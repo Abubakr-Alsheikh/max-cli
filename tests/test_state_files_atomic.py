@@ -6,14 +6,12 @@ moment an atomic write swaps files) and checks the first version survived.
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from max_cli.common.cache import Cache
 from max_cli.common.transaction_log import TransactionLog
 from max_cli.core.engines.task_manager import TaskManager
-from max_cli.core.engines.queue_manager import QueueManager
 from max_cli.core.engines.task_queue import TaskItem, TaskType
 from max_cli.plugins.manager import PluginManager
 
@@ -44,27 +42,6 @@ def test_task_queue_survives_crash(tmp_path, monkeypatch):
     assert (queue_dir / "queue.json").read_text(encoding="utf-8") == before
     assert [t["title"] for t in json.loads(before)] == ["first"]
     assert _no_temp_files(queue_dir)
-
-
-def test_grab_queue_survives_crash(tmp_path, monkeypatch):
-    queue_file = tmp_path / "grab_queue.json"
-    monkeypatch.setattr(QueueManager, "QUEUE_FILE", queue_file)
-    monkeypatch.setattr(QueueManager, "HISTORY_FILE", tmp_path / "grab_history.json")
-    manager = QueueManager()
-    first = MagicMock()
-    first.to_dict.return_value = {"url": "https://example.com/1"}
-    manager._queue = [first]
-    manager._save_queue()
-    before = queue_file.read_text(encoding="utf-8")
-
-    _break_replace(monkeypatch)
-    second = MagicMock()
-    second.to_dict.return_value = {"url": "https://example.com/2"}
-    manager._queue = [first, second]
-    manager._save_queue()
-
-    assert queue_file.read_text(encoding="utf-8") == before
-    assert _no_temp_files(tmp_path)
 
 
 def test_cache_entry_survives_crash(tmp_path, monkeypatch):

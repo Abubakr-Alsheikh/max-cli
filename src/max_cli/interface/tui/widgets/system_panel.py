@@ -9,7 +9,7 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Button, ProgressBar, Static
 
 from max_cli.common.utils import format_size
-from max_cli.core.engines.task_manager import TaskManager
+from max_cli.core.engines.task_manager import get_task_manager
 
 RECENT_TASK_LIMIT = 20
 
@@ -96,7 +96,8 @@ class SystemPanel(Vertical):
             progress_bar.update(progress=0)
             lines.append("  Max CLI directory not found.")
 
-        manager = TaskManager()
+        manager = get_task_manager()
+        manager.refresh()
         stats = manager.get_stats()
         history = manager.get_history(limit=1)
         last_task = history[0] if history else None
@@ -140,7 +141,7 @@ class SystemPanel(Vertical):
 
     def _update_recent_log(self) -> None:
         log_widget = self.query_one("#system-log", Static)
-        recent_tasks = TaskManager().get_history(limit=RECENT_TASK_LIMIT)
+        recent_tasks = get_task_manager().get_history(limit=RECENT_TASK_LIMIT)
 
         if not recent_tasks:
             log_widget.update("  No finished tasks yet.")
@@ -179,7 +180,7 @@ class SystemPanel(Vertical):
     def _on_clear_queues(self) -> None:
         btn = self.query_one("#btn-clear-queues", Button)
         if btn.label == "Confirm?":
-            manager = TaskManager()
+            manager = get_task_manager()
             manager.clear()
             btn.label = "Clear Queues"
             self.notify("All queues cleared", severity="information")

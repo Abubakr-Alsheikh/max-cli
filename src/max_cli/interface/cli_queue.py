@@ -10,9 +10,9 @@ app = typer.Typer(help="Manage background task queue")
 
 
 def _get_engine():
-    from max_cli.core.engines.task_manager import TaskManager
+    from max_cli.core.engines.task_manager import get_task_manager
 
-    return TaskManager()
+    return get_task_manager()
 
 
 @app.command("status")

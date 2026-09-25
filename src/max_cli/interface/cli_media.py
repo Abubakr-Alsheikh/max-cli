@@ -43,10 +43,10 @@ def compress_video(
     }
 
     if queue:
-        from max_cli.core.engines.task_manager import TaskManager
+        from max_cli.core.engines.task_manager import get_task_manager
         from max_cli.core.engines.task_queue import TaskItem, TaskType
 
-        dm = TaskManager()
+        dm = get_task_manager()
         if not output:
             output = target.parent / f"{target.stem}_compressed.mp4"
         task = TaskItem(
@@ -515,10 +515,10 @@ def denoise_audio_cmd(
             strength = "medium"
 
     if queue:
-        from max_cli.core.engines.task_manager import TaskManager
+        from max_cli.core.engines.task_manager import get_task_manager
         from max_cli.core.engines.task_queue import TaskItem, TaskType
 
-        dm = TaskManager()
+        dm = get_task_manager()
         task = TaskItem(
             type=TaskType.VIDEO_DENOISE,
             title=f"Denoise {target.name}",

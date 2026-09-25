@@ -77,3 +77,43 @@ class TestCLINetwork:
         result = runner.invoke(network_app, ["pot-setup"])
         assert result.exit_code == 1
         assert "Deno not found" in result.stdout
+
+class TestGrabQueueUsesTaskStore:
+    """`max grab queue/history/clear` read the shared task store (D1)."""
+
+    def test_queue_lists_download_tasks_only(self):
+        from max_cli.core.engines.network_engine import make_download_task
+        from max_cli.core.engines.task_manager import get_task_manager
+        from max_cli.core.engines.task_queue import TaskItem, TaskType
+
+        manager = get_task_manager()
+        manager.add(make_download_task("https://youtu.be/queued"))
+        manager.add(TaskItem(type=TaskType.CUSTOM, title="not a download"))
+
+        result = runner.invoke(network_app, ["queue"])
+
+        assert result.exit_code == 0, result.output
+        assert "https://youtu.be/queued" in result.stdout
+        assert "not a download" not in result.stdout
+
+    def test_history_shows_recorded_downloads(self):
+        from max_cli.core.engines.download_history import DownloadHistory
+
+        DownloadHistory().record_download(url="https://youtu.be/x", title="Clip X")
+
+        result = runner.invoke(network_app, ["history"])
+
+        assert result.exit_code == 0, result.output
+        assert "Clip X" in result.stdout
+
+    def test_clear_all_removes_queued_downloads(self):
+        from max_cli.core.engines.network_engine import make_download_task
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        manager = get_task_manager()
+        manager.add(make_download_task("https://youtu.be/queued"))
+
+        result = runner.invoke(network_app, ["clear", "--all", "--force"])
+
+        assert result.exit_code == 0, result.output
+        assert manager.get_all() == []

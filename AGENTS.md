@@ -63,7 +63,7 @@ PLANS/                         # Project Management (Active/Deferred tasks)
 ### Naming Conventions
 
 - **Modules/Files**: `snake_case.py`
-- **Classes/Engines**: `PascalCase` (e.g., `ImageEngine`, `QueueManager`)
+- **Classes/Engines**: `PascalCase` (e.g., `ImageEngine`, `TaskManager`)
 - **Functions/Methods**: `snake_case` (Private methods prefixed with `_`)
 - **Constants**: `UPPER_SNAKE_CASE`
 
@@ -214,7 +214,9 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - Schema: `src/max_cli/core/engines/task_queue.py` (TaskItem, TaskType, executor registry)
   - Manager: `src/max_cli/core/engines/task_manager.py` (queue operations and an in-process worker thread; tasks stop when the CLI exits and wait in `queue.json` for the next run)
   - Interface: `src/max_cli/interface/cli_queue.py` (`max queue` command group)
-  - Executors: `src/max_cli/core/engines/media_engine.py` (registers video task executors)
+  - Executors: each engine module registers its executors when imported. `task_queue.EXECUTOR_MODULES` maps every task type to that module, and `get_executor` imports it on first use. Add new task types there.
+  - One store: `~/.max_cli/tasks/queue.json` and `history.json` hold every task type, including `max grab` downloads. Don't add another queue or history file. Use `get_task_manager()` to share one instance per process; two instances overwrite each other's saves.
+  - Migration: `task_migration.py` folds the old `grab_queue.json`, `grab_history.json` and `download_history.json` into the store once, then renames them to `*.migrated`.
   - *Shows: Heavy commands support `--queue` flag, tasks are executed via registered executors, results persisted to history.*
 
 - **FFmpeg Auto-Resolution Pattern**:
@@ -356,7 +358,7 @@ Max CLI must work seamlessly on Linux, macOS, and Windows. AI agents often defau
 Max CLI interfaces with external APIs (OpenAI, Google Gemini). Hitting these APIs unnecessarily causes rate-limit errors and wastes user credits.
 
 - **Use the Built-in Cache**: If you are adding a feature that fetches static metadata, categorizes files, or performs an expensive operation, you MUST wrap it using the `@cached` decorator from `max_cli.common.cache` or explicitly use `get_default_cache()`.
-- **Background Queue Awareness**: For long-running network tasks (like `yt-dlp` downloads), never block the main thread. Ensure integration with `max_cli.core.engines.queue_manager.QueueManager` to allow background processing.
+- **Background Queue Awareness**: For long-running network tasks (like `yt-dlp` downloads), never block the main thread. Queue them as tasks through `get_task_manager()` from `max_cli.core.engines.task_manager`. Downloads use `make_download_task()` from `network_engine`, and their history is read through `DownloadHistory` in `core/engines/download_history.py`.
 
 ## 19. The "Halt and Catch Fire" Rule (Anti-Looping)
 

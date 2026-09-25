@@ -14,8 +14,8 @@ from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
 @pytest.fixture
 def mock_manager():
     with (
-        patch("max_cli.interface.tui.widgets.queue_panel.TaskManager") as mock_q,
-        patch("max_cli.interface.tui.widgets.system_panel.TaskManager") as mock_s,
+        patch("max_cli.interface.tui.widgets.queue_panel.get_task_manager") as mock_q,
+        patch("max_cli.interface.tui.widgets.system_panel.get_task_manager") as mock_s,
     ):
         manager = MagicMock()
         manager.get_all.return_value = []

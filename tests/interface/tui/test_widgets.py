@@ -28,7 +28,7 @@ class TestSystemPanel:
 
         with (
             patch(
-                "max_cli.interface.tui.widgets.system_panel.TaskManager"
+                "max_cli.interface.tui.widgets.system_panel.get_task_manager"
             ) as mock_dm,
             patch.object(Path, "exists", return_value=True),
             patch("shutil.disk_usage") as mock_disk,

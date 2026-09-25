@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict, Any, Callable, Union
+from typing import Optional, Dict, Any, Callable, List, Union
 import shutil
 import subprocess
 import tarfile
@@ -15,6 +15,7 @@ QUALITY_MAP: Dict[str, Dict[str, Union[str, int]]] = {
     "x": {"height": 2160, "bitrate": 320, "label": "4K"},
 }
 
+DEFAULT_DOWNLOAD_DIR = Path.home() / "Max Downloads"
 POT_PROVIDER_PACKAGE = "bgutil-ytdlp-pot-provider"
 POT_PROVIDER_VERSION = "1.3.1"
 POT_SERVER_DIR = Path.home() / "bgutil-ytdlp-pot-provider"
@@ -322,31 +323,64 @@ class NetworkEngine:
         }
 
 
+def make_download_task(url: str, **options: Any) -> "TaskItem":
+    """Build a queued DOWNLOAD task. `options` are download_media keywords."""
+    from max_cli.core.engines.task_migration import DOWNLOAD_OPTION_KEYS
+
+    payload: Dict[str, Any] = {"url": url}
+    for key in DOWNLOAD_OPTION_KEYS:
+        if key in options:
+            value = options[key]
+            payload[key] = str(value) if isinstance(value, Path) else value
+    return TaskItem(
+        type=TaskType.DOWNLOAD,
+        title=url,
+        description=url,
+        payload=payload,
+        output_path=payload.get("output_path"),
+    )
+
+
 def _download_executor(task: "TaskItem") -> Dict[str, Any]:
     engine = NetworkEngine()
     payload = task.payload
     url = payload["url"]
-    out = Path(payload.get("output_path", Path.home() / "Max Downloads"))
-    quality = payload.get("quality", "h")
-    audio_only = payload.get("audio_only", False)
-    subs = payload.get("subtitles", False)
-    meta = payload.get("include_metadata", True)
-    custom_h = payload.get("custom_height")
-    player_client = payload.get("player_client")
+    out = Path(payload.get("output_path") or DEFAULT_DOWNLOAD_DIR)
+    finished_files: List[str] = []
+
+    def track_progress(status: Dict[str, Any]) -> None:
+        if status.get("status") == "downloading":
+            total = status.get("total_bytes") or status.get("total_bytes_estimate") or 0
+            if total:
+                task.progress = status.get("downloaded_bytes", 0) / total * 100
+        elif status.get("status") == "finished":
+            title = (status.get("info_dict") or {}).get("title")
+            if title and task.title == url:
+                task.title = title
+            filename = status.get("filename")
+            if filename and filename not in finished_files:
+                finished_files.append(filename)
 
     engine.download_media(
         url=url,
         output_path=out,
-        quality=quality,
-        audio_only=audio_only,
-        subtitles=subs,
-        include_metadata=meta,
-        custom_height=custom_h,
-        player_client=player_client,
+        quality=payload.get("quality", "h"),
+        audio_only=payload.get("audio_only", False),
+        include_metadata=payload.get("include_metadata", True),
+        playlist_items=payload.get("playlist_items"),
+        no_playlist=payload.get("no_playlist", False),
+        progress_hook=track_progress,
+        subtitles=payload.get("subtitles", False),
+        custom_height=payload.get("custom_height"),
+        player_client=payload.get("player_client"),
     )
+    # Post-processing (merge, audio extraction) can rename or remove the
+    # files yt-dlp reported, so keep only the ones still on disk.
+    output_files = [name for name in finished_files if Path(name).is_file()]
     return {
         "output_path": str(out),
-        "output_files": [str(out)],
+        "output_files": output_files,
+        "file_size": sum(Path(name).stat().st_size for name in output_files),
         "message": f"Downloaded: {url[:50]}",
     }
 
