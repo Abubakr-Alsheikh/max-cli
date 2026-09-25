@@ -13,7 +13,7 @@ These rules win over anything below. Source: `AGENTS.md`.
 
 - Save to `.claude/handoffs/YYYY-MM-DD-<topic>.md` (keep the upstream location). Never write outside the repo.
 - Add a **Repository State** section: current branch, `main` HEAD, open or merged PRs, uncommitted and untracked files (and whose they are), stash entries.
-- Add a **Plan Status** section: link `PLANS/active/codebase-hardening.md` (or whichever plan is active), and name the phase and the open decisions. Link to plans, commits and PRs instead of copying their contents.
+- Add a **Plan Status** section: link the active plan in `PLANS/active/`, and name the phase and the open decisions. Link to plans, commits and PRs instead of copying their contents.
 - Add **Quality Gates**: the last pytest, ruff and mypy results and the mypy baseline, so the next session can check it starts green.
 - **Step 2 (ask the user):** skip it when the user already said what the handoff is for. Record their words as the goal instead.
 - Never include secrets, tokens or `.env` values.

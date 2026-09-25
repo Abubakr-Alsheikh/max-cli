@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-6, D5 and exit codes done; ruff widening open)
+**Status:** Completed
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -259,7 +259,14 @@ One commit per bug. Each fix turned its strict xfail test green, and the marker 
   - Replaced `ToolsPanel` with `AnalyticsPanel`.
   - Documented the sidebar and its real keys (`q`, `r`, `ctrl+b`). Commit `652a38b` removed the 1-9 shortcuts on purpose.
   - [x] Update the queue/history section after Phase 3 (done in Phase 3).
-- [D] Ruff rule widening (`I`, `BLE`, `B`, `UP`/`FA`, `DTZ`, one family per PR), deferred from Phase 2. Each family changes `pyproject.toml` and touches many files, so each needs its own PR and the maintainer's go-ahead.
+- [x] Ruff rule widening (2026-09-25, one PR per family):
+  - `I` import sorting (PR #12).
+  - `B` bugbear (PR #13): 33 raises now chain their cause. `typer.Option`/`Argument` are declared immutable.
+  - `UP` pyupgrade for py39: builtin generics and `collections.abc` imports.
+  - Vendored skills under `.agents/` and `.claude/skills/` are excluded from ruff.
+  - [D] `BLE` (98 hits): nearly all are top-level command handlers that already report with `log_error`. The project's own silent-except audit rule covers the real risk and stays at 0.
+  - [D] `FA`: `from __future__ import annotations` turns annotations into strings, which Typer has to resolve at runtime. That is fragile on Python 3.9 for option types.
+  - [D] `DTZ` (23 hits): timezone-aware timestamps would change the format of stored task and history files. It needs a migration plan first.
 
 **CLI issues the docs audit found (fixed on branch `fix/cli-audit-issues`):**
 - [x] **Security:** `max config export` leaves `OPENAI_API_KEY` out. `--include-secrets` adds it and prints a warning.

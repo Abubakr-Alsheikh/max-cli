@@ -8,7 +8,6 @@ Reconciled against the code on 2026-09-25 (hardening Phase 6).
 
 | Plan | Status | Priority | What's left |
 |------|--------|----------|-------------|
-| [codebase-hardening.md](./codebase-hardening.md) | In Progress | P0 | Ruff widening |
 | [tui-bugfix-and-ux-improvements.md](./tui-bugfix-and-ux-improvements.md) | In Progress | P0 | Config search crash, chat blocks the UI, files filter, grab/download category mismatch |
 | [dashboard-home-analytics-redesign.md](./dashboard-home-analytics-redesign.md) | In Progress | P1 | Downloads stat card reads 0, panel tests, docs |
 | [interactive-tui-expansion.md](./interactive-tui-expansion.md) | In Progress | P1 | Unwired System buttons, blocking Chat/Files actions, registry/executor tests, dashboard docs |
