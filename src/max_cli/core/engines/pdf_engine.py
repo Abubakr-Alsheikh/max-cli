@@ -43,7 +43,7 @@ class PDFEngine:
                     result_pdf.insert_pdf(src)
                     total_pages += src.page_count
             except Exception as e:
-                raise RuntimeError(f"Failed to merge '{path.name}': {e}")
+                raise RuntimeError(f"Failed to merge '{path.name}': {e}") from e
 
         result_pdf.save(output_path, garbage=4, deflate=True)
         result_pdf.close()
@@ -67,8 +67,8 @@ class PDFEngine:
 
         try:
             doc = fitz.open(input_path)
-        except Exception:
-            raise ValueError(f"Could not open PDF: {input_path.name}")
+        except Exception as exc:
+            raise ValueError(f"Could not open PDF: {input_path.name}") from exc
 
         page_count = len(doc)
         img_list = []
@@ -102,7 +102,7 @@ class PDFEngine:
                 optimize=True,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to save compressed PDF: {e}")
+            raise RuntimeError(f"Failed to save compressed PDF: {e}") from e
 
         return page_count
 
@@ -377,11 +377,11 @@ class PDFEngine:
 
         try:
             import pytesseract
-        except ImportError:
+        except ImportError as exc:
             raise RuntimeError(
                 "pytesseract is not installed. Install with: pip install max-cli[ocr]\n"
                 "Also requires Tesseract OCR installed on your system."
-            )
+            ) from exc
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")

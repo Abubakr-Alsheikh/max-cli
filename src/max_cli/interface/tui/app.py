@@ -456,7 +456,7 @@ class MaxDashboardApp(App):
             self.query_one("#home-panel").display = True
 
     def _refresh_active_panel(self) -> None:
-        for panel_id, section in [
+        for panel_id, _section in [
             ("#queue-panel", "queue"),
             ("#history-panel", "history"),
             ("#system-panel", "system"),

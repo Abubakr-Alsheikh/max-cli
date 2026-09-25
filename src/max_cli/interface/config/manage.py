@@ -243,7 +243,7 @@ def import_config(
         data = json.loads(input.read_text(encoding="utf-8"))
     except Exception as e:
         log_error(f"Invalid JSON: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     target = GLOBAL_CONFIG_PATH if global_config else Path(".env")
 

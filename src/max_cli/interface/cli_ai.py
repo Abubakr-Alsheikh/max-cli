@@ -45,7 +45,7 @@ def ask_ai(
             result = eng.interpret_intent(prompt, MAIN_APP_REF)
         except Exception as e:
             log_error(str(e))
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # Handle AI Rejection
     if "error" in result:
@@ -135,7 +135,7 @@ def analyze_image(
 
         except Exception as e:
             log_error(str(e))
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
 
 @app.command("create")

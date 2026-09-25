@@ -23,7 +23,7 @@ def dashboard(
             "[yellow]The TUI dashboard requires the 'textual' library.[/yellow]\n"
             "Install it with: [bold]pip install max-cli\\[tui][/bold]"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     max_app = MaxDashboardApp()
     max_app.run()

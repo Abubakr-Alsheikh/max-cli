@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from max_cli.core.cli.lazy_group import LAZY_GROUPS, LazyGroupSpec, lazy_group
 
@@ -6,9 +6,9 @@ if TYPE_CHECKING:
     from typer import Typer
 
 
-def _link_ai_to_full_app(cli_ai_module: object) -> None:
+def _link_ai_to_full_app(cli_ai_module: Any) -> None:
     """`max ai ask` builds its command list from a fully registered app."""
-    setattr(cli_ai_module, "MAIN_APP_REF", build_full_app())
+    cli_ai_module.MAIN_APP_REF = build_full_app()
 
 
 # Name -> where the group lives. Order is the order `max --help` lists them.

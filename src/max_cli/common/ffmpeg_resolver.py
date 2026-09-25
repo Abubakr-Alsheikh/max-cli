@@ -140,7 +140,7 @@ class FFmpegResolver:
             raise ResourceNotFoundError(
                 f"Failed to download FFmpeg: {e}\n"
                 "Please install manually from https://ffmpeg.org/download.html"
-            )
+            ) from e
 
         if not self._validate_binary(self.local_path):
             self.local_path.unlink()

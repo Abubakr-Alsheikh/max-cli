@@ -50,9 +50,9 @@ class SystemEngine:
             # Attempt to read as text
             text = input_path.read_text(encoding="utf-8")
             pyperclip.copy(text)
-        except UnicodeDecodeError:
+        except UnicodeDecodeError as exc:
             raise ValueError(
                 "File appears to be binary (not text). Cannot copy to clipboard."
-            )
+            ) from exc
         except pyperclip.PyperclipException as e:
-            raise RuntimeError(f"Clipboard error: {e}")
+            raise RuntimeError(f"Clipboard error: {e}") from e

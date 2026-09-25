@@ -308,7 +308,7 @@ class NetworkEngine:
                 ydl.download([url])
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e).replace("ERROR: ", "")
-                raise RuntimeError(f"Download failed: {msg}")
+                raise RuntimeError(f"Download failed: {msg}") from e
         return {
             "output_path": str(output_path),
             "message": f"Downloaded: {url[:50]}",

@@ -32,4 +32,4 @@ def setup_ffmpeg(
         log_success(f"FFmpeg ready at: {path}")
     except Exception as e:
         log_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
