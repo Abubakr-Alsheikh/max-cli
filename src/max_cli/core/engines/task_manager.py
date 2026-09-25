@@ -16,7 +16,6 @@ from max_cli.core.engines.task_queue import (
     get_executor,
 )
 
-
 logger = logging.getLogger(__name__)
 
 HISTORY_LIMIT = 200

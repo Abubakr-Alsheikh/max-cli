@@ -9,7 +9,6 @@ from textual.widgets import Button, Input, Label, Static
 from max_cli.common.atomic import atomic_write_text
 from max_cli.config import Settings
 
-
 CONFIG_SECTIONS = {
     "AI": [
         "OPENAI_API_KEY",

@@ -4,7 +4,7 @@ import typer
 
 from max_cli.common.exceptions import MaxError
 from max_cli.core.cli.lazy_group import LazyTyperGroup
-from max_cli.core.cli.registry import register, init_plugins
+from max_cli.core.cli.registry import init_plugins, register
 
 app = typer.Typer(
     cls=LazyTyperGroup,

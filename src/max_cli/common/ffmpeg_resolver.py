@@ -9,8 +9,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
-from max_cli.common.atomic import atomic_write_text
 from max_cli.common.archives import safe_extract_tar
+from max_cli.common.atomic import atomic_write_text
 from max_cli.common.exceptions import ResourceNotFoundError
 
 logger = logging.getLogger(__name__)

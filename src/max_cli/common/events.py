@@ -1,11 +1,11 @@
-from enum import Enum
-from typing import Any, Optional, Callable, Union
-from collections.abc import Generator
-from datetime import datetime
-from dataclasses import dataclass, field
 import logging
-import threading
 import queue
+import threading
+from collections.abc import Generator
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, Optional, Union
 
 logger = logging.getLogger(__name__)
 

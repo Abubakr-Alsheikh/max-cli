@@ -6,9 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from textual.widgets import DataTable
 
-from max_cli.interface.tui.widgets.sidebar import Sidebar
-
 from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
+from max_cli.interface.tui.widgets.sidebar import Sidebar
 
 
 @pytest.fixture
@@ -108,8 +107,8 @@ class TestMaxDashboardApp:
 
     @pytest.mark.asyncio
     async def test_history_filter(self, mock_manager, mock_activity_log):
-        from max_cli.interface.tui.app import MaxDashboardApp
         from max_cli.interface.tui.activity_log import ActivityEntry
+        from max_cli.interface.tui.app import MaxDashboardApp
 
         entries = [
             ActivityEntry(
@@ -191,6 +190,7 @@ class TestDashboardCommand:
             for key, module in saved_modules.items():
                 sys.modules[key] = module
             import importlib
+
             import max_cli.interface.tui.app
 
             importlib.reload(max_cli.interface.tui.app)

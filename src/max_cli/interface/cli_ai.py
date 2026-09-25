@@ -1,10 +1,11 @@
-import typer
-import subprocess
 import shlex
-from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+import subprocess
 from pathlib import Path
 from typing import List, Optional
+
+import typer
+from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.logger import console, log_error, log_success

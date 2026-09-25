@@ -1,6 +1,6 @@
 from textual import on
-from textual.events import Message
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.events import Message
 from textual.widgets import Button, Label, ProgressBar, Static
 
 from max_cli.interface.tui.activity_log import ActivityLog

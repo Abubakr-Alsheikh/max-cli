@@ -1,10 +1,11 @@
-import typer
 from pathlib import Path
-from rich.prompt import Prompt
+
+import typer
 from rich.panel import Panel
+from rich.prompt import Prompt
 
 from max_cli.common.atomic import atomic_write_text
-from max_cli.common.logger import console, log_success, log_error
+from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()
 

@@ -22,8 +22,8 @@ from textual.widgets import (
 )
 from textual.worker import Worker, WorkerState
 
-from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.config import settings
+from max_cli.core.engines.download_history import DownloadHistory
 
 _BITRATE_OPTIONS = {
     "64k": "ss",

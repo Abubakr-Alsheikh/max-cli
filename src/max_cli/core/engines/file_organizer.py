@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Dict, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
@@ -366,9 +366,8 @@ class FileOrganizer:
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
 
-        from datetime import datetime
-
         import shutil
+        from datetime import datetime
 
         backup_dir = self.get_backup_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -526,7 +525,11 @@ def _file_duplicates_executor(task: "TaskItem") -> Dict[str, Any]:
     }
 
 
-from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+from max_cli.core.engines.task_queue import (  # noqa: E402
+    TaskItem,
+    TaskType,
+    register_executor,
+)
 
 register_executor(TaskType.FILE_ORGANIZE, _file_organize_executor)
 register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)

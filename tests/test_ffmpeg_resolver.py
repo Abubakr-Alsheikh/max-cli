@@ -7,9 +7,9 @@ import pytest
 from max_cli.common.archives import UnsafeArchiveError
 from max_cli.common.exceptions import ResourceNotFoundError
 from max_cli.common.ffmpeg_resolver import (
-    FFmpegResolver,
     MAX_CLI_BIN_DIR,
     RESOLUTION_CACHE_FILE,
+    FFmpegResolver,
     resolve_ffmpeg,
 )
 

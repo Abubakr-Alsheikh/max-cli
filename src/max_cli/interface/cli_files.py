@@ -1,7 +1,8 @@
-import typer
 from pathlib import Path
-from rich.prompt import Confirm
+
+import typer
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.text import Text
 
 from max_cli.common.logger import console, log_error, log_success
@@ -278,6 +279,7 @@ def file_preview(
     Show file metadata and preview content.
     """
     from datetime import datetime
+
     from max_cli.common.utils import format_size
 
     if not target.exists():
@@ -387,6 +389,7 @@ def list_backups(
     List and manage backups.
     """
     from datetime import datetime
+
     from max_cli.common.utils import format_size
 
     if restore:
@@ -444,7 +447,7 @@ def cleanup_backups(
 @app.command("undo")
 def undo_last():
     """Undo the last file operation (rename, move, delete)."""
-    from max_cli.common.transaction_log import TransactionLog, TransactionError
+    from max_cli.common.transaction_log import TransactionError, TransactionLog
 
     latest = TransactionLog.get_latest_group()
     if not latest:

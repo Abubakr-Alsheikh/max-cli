@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from max_cli.core import presets
-from max_cli.core.engines.video_engine import resolve_concat_inputs
 from max_cli.core.engines.pdf_engine import find_pdfs
+from max_cli.core.engines.video_engine import resolve_concat_inputs
 from max_cli.interface.tui.command_executor import CommandExecutor
 from max_cli.interface.tui.command_registry import CommandRegistry
 

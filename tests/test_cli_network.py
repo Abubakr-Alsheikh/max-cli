@@ -1,7 +1,8 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
+
 from max_cli.interface.cli_network import app as network_app
 
 # Rich renders --help with ANSI codes and wraps to terminal width, which splits

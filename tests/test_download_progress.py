@@ -1,10 +1,11 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from max_cli.common.events import (
-    EventEmitter,
-    DownloadProgressEvent,
     DownloadCompleteEvent,
+    DownloadProgressEvent,
+    EventEmitter,
     EventType,
     get_emitter,
     reset_emitter,

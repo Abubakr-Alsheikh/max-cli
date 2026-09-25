@@ -8,10 +8,10 @@ from max_cli.core.cli import plugins
 
 def register(app: "Typer") -> None:
     """Register plugin management commands."""
+    import typer
+    from rich import box
     from rich.console import Console
     from rich.table import Table
-    from rich import box
-    import typer
 
     console = Console()
     plugins_app = typer.Typer(name="plugins", help="Manage plugins.")

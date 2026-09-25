@@ -6,7 +6,6 @@ from textual.widgets import Button, DataTable, Label, Static
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskStatus
 
-
 STATUS_ICONS = {
     TaskStatus.PENDING: "\u23f3",
     TaskStatus.RUNNING: "\u25b6",

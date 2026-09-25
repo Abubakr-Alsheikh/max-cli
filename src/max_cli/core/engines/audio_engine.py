@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from max_cli.common.events import ProgressEvent, get_emitter
-
 from max_cli.core.engines.ffmpeg_base import FFmpegEngine
 
 logger = logging.getLogger(__name__)

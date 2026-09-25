@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 
 def find_pdfs(folder: Path) -> List[Path]:
@@ -57,9 +57,10 @@ class PDFEngine:
         Compresses a PDF by rasterizing pages to JPEG and rebuilding the PDF.
         Returns the number of pages processed.
         """
+        import io
+
         import fitz
         from PIL import Image
-        import io
 
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
@@ -369,9 +370,10 @@ class PDFEngine:
         Returns:
             Extracted text
         """
+        import io
+
         import fitz
         from PIL import Image
-        import io
 
         try:
             import pytesseract
@@ -615,7 +617,11 @@ def _pdf_compress_executor(task: "TaskItem") -> Dict[str, Any]:
     }
 
 
-from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor  # noqa: E402
+from max_cli.core.engines.task_queue import (  # noqa: E402
+    TaskItem,
+    TaskType,
+    register_executor,
+)
 
 register_executor(TaskType.PDF_MERGE, _pdf_merge_executor)
 register_executor(TaskType.PDF_COMPRESS, _pdf_compress_executor)

@@ -1,11 +1,11 @@
 import json
 import os
 import time
-
-import pytest
 from pathlib import Path
 
-from max_cli.common.transaction_log import TransactionLog, TransactionError
+import pytest
+
+from max_cli.common.transaction_log import TransactionError, TransactionLog
 
 
 @pytest.fixture

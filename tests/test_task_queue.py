@@ -1,16 +1,16 @@
 import pytest
 
 from max_cli.core.engines import task_manager as task_manager_module
+from max_cli.core.engines.task_manager import TaskManager
 from max_cli.core.engines.task_queue import (
     EXECUTOR_MODULES,
+    TaskItem,
     TaskStatus,
     TaskType,
-    TaskItem,
-    register_executor,
     get_executor,
     list_registered_executors,
+    register_executor,
 )
-from max_cli.core.engines.task_manager import TaskManager
 
 
 @pytest.fixture

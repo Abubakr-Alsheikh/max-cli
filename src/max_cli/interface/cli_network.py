@@ -1,17 +1,17 @@
+import shutil
 import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-import shutil
 import typer
+from rich import box
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
-from rich import box
 
 from max_cli.common.events import get_emitter
-from max_cli.common.logger import console, log_success, log_error
+from max_cli.common.logger import console, log_error, log_success
 from max_cli.config import settings
 from max_cli.core.engines.network_engine import POT_PROVIDER_PACKAGE
 from max_cli.interface.event_subscriber import EventSubscriber

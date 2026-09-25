@@ -1,13 +1,14 @@
-import typer
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
-from max_cli.common.logger import console, log_success, log_error
+import typer
+
 from max_cli.common.concurrent import process_batch_parallel
 from max_cli.common.events import get_emitter
-from max_cli.interface.event_subscriber import EventSubscriber
+from max_cli.common.logger import console, log_error, log_success
 from max_cli.config import settings
 from max_cli.core.presets import STRIP_IMAGE_METADATA
+from max_cli.interface.event_subscriber import EventSubscriber
 
 app = typer.Typer()
 
@@ -130,8 +131,8 @@ def strip_metadata(
 def _run_batch(
     files: List[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
 ):
-    from rich.table import Table
     from rich import box
+    from rich.table import Table
 
     engine = _get_engine()
 

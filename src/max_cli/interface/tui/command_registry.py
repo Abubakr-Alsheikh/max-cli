@@ -1,10 +1,7 @@
-from typing import Any, Literal, Optional
-
-from typing import TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 from max_cli.config import settings
 from max_cli.core import presets
-
 
 FieldType = Literal[
     "str",
