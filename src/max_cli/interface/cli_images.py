@@ -7,6 +7,7 @@ from max_cli.common.concurrent import process_batch_parallel
 from max_cli.common.events import get_emitter
 from max_cli.interface.event_subscriber import EventSubscriber
 from max_cli.config import settings
+from max_cli.core.presets import STRIP_IMAGE_METADATA
 
 app = typer.Typer()
 
@@ -44,7 +45,9 @@ def compress_images(
     quantize: bool = typer.Option(
         False, "--quantize", help="Lossy PNG compression (256 colors)."
     ),
-    strip: bool = typer.Option(True, "--strip/--keep", help="Remove EXIF metadata."),
+    strip: bool = typer.Option(
+        STRIP_IMAGE_METADATA, "--strip/--keep", help="Remove EXIF metadata."
+    ),
     workers: int = typer.Option(
         settings.MAX_WORKERS, "-j", help="Number of parallel workers."
     ),

@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from max_cli.common.logger import console, log_error, log_success
-from max_cli.common.utils import natural_sort_key, format_size
+from max_cli.common.utils import format_size, natural_sort_key
+from max_cli.core.presets import PDF_COMPRESS_DPI, PDF_COMPRESS_QUALITY
 from max_cli.common.events import get_emitter
 from max_cli.interface.event_subscriber import EventSubscriber
 
@@ -60,10 +61,13 @@ def merge_pdfs(
 def compress_pdf(
     target: Path = typer.Argument(..., help="PDF file OR Folder to compress."),
     dpi: int = typer.Option(
-        150, "-d", "--dpi", help="DPI resolution (Lower = smaller file)."
+        PDF_COMPRESS_DPI, "-d", "--dpi", help="DPI resolution (Lower = smaller file)."
     ),
     quality: int = typer.Option(
-        80, "-q", "--quality", help="JPEG Quality 1-100 (Lower = smaller file)."
+        PDF_COMPRESS_QUALITY,
+        "-q",
+        "--quality",
+        help="JPEG Quality 1-100 (Lower = smaller file).",
     ),
 ):
     """
@@ -145,9 +149,14 @@ def bundle_pdfs(
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Final output path."
     ),
-    dpi: int = typer.Option(150, "-d", "--dpi", help="Compression DPI (default: 150)."),
+    dpi: int = typer.Option(
+        PDF_COMPRESS_DPI, "-d", "--dpi", help="Compression DPI (default: 150)."
+    ),
     quality: int = typer.Option(
-        80, "-q", "--quality", help="Compression Quality 1-100 (default: 80)."
+        PDF_COMPRESS_QUALITY,
+        "-q",
+        "--quality",
+        help="Compression Quality 1-100 (default: 80).",
     ),
     no_compress: bool = typer.Option(
         False, "--no-compress", help="Skip compression (merge only, no compress)."
@@ -234,15 +243,9 @@ def _resolve_files(inputs: List[Path]) -> List[Path]:
 
     # If the user passed a single directory
     if len(inputs) == 1 and inputs[0].is_dir():
-        folder = inputs[0]
-        # Recursively or flatly find PDFs? Standard is flat to avoid deep loops.
-        # We filter out files starting with '.' or '_' to avoid hidden/temp files.
-        raw = [
-            f
-            for f in folder.iterdir()
-            if f.suffix.lower() == ".pdf" and not f.name.startswith((".", "_"))
-        ]
-        files = sorted(raw, key=lambda f: natural_sort_key(f.name))
+        from max_cli.core.engines.pdf_engine import find_pdfs
+
+        files = find_pdfs(inputs[0])
 
     else:
         # Explicit list of files

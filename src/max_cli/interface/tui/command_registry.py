@@ -2,6 +2,9 @@ from typing import Any, Literal, Optional
 
 from typing import TypedDict
 
+from max_cli.config import settings
+from max_cli.core import presets
+
 
 FieldType = Literal[
     "str",
@@ -111,8 +114,8 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                     "level",
                     "select",
                     "Compression Level",
-                    default="balanced",
-                    options=["high", "balanced", "max"],
+                    default=presets.DEFAULT_VIDEO_LEVEL,
+                    options=list(presets.VIDEO_CRF_BY_LEVEL),
                 ),
                 _f("output", "path_output", "Output Video"),
                 _f("queue", "bool", "Add to Queue", default=False),
@@ -139,8 +142,8 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                     "quality",
                     "select",
                     "Quality",
-                    default="m",
-                    options=["s", "m", "h", "x"],
+                    default=presets.DEFAULT_VIDEO_TO_AUDIO_QUALITY,
+                    options=list(presets.VIDEO_TO_AUDIO_BITRATES),
                 ),
                 _f("output", "path_output", "Output Audio"),
             ],
@@ -210,8 +213,8 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                     "method",
                     "select",
                     "Method",
-                    default="concat",
-                    options=["concat", "filter"],
+                    default=presets.DEFAULT_CONCAT_METHOD,
+                    options=list(presets.CONCAT_METHODS),
                 ),
             ],
         },
@@ -316,7 +319,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
             "fields": [
                 _f("target", "path", "Input Image", required=True),
                 _f("output", "path_output", "Output Image"),
-                _f("quality", "int", "Quality", default=85),
+                _f("quality", "int", "Quality", default=settings.DEFAULT_QUALITY),
                 _f("scale", "int", "Scale (%)", help="Resize percentage"),
                 _f(
                     "max_dim",
@@ -326,7 +329,12 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                 ),
                 _f("force_jpeg", "bool", "Force JPEG", default=False),
                 _f("quantize", "bool", "Quantize Colors", default=False),
-                _f("strip", "bool", "Strip Metadata", default=False),
+                _f(
+                    "strip",
+                    "bool",
+                    "Strip Metadata",
+                    default=presets.STRIP_IMAGE_METADATA,
+                ),
             ],
         },
         "resize": {
@@ -472,8 +480,13 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
             "has_queue_option": False,
             "fields": [
                 _f("target", "path", "Input PDF", required=True),
-                _f("dpi", "int", "DPI", default=150),
-                _f("quality", "int", "JPEG Quality", default=75),
+                _f("dpi", "int", "DPI", default=presets.PDF_COMPRESS_DPI),
+                _f(
+                    "quality",
+                    "int",
+                    "JPEG Quality",
+                    default=presets.PDF_COMPRESS_QUALITY,
+                ),
             ],
         },
         "split": {
@@ -544,7 +557,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
                     "pattern",
                     "select",
                     "Naming Pattern",
-                    default="artist-album",
+                    default=presets.DEFAULT_AUDIO_ORGANIZE_PATTERN,
                     options=["artist", "album", "genre", "artist-album"],
                 ),
             ],

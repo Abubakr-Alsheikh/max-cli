@@ -11,6 +11,33 @@ from max_cli.core.engines.ffmpeg_base import FFmpegEngine
 logger = logging.getLogger(__name__)
 
 
+def resolve_concat_inputs(target: Path) -> List[Path]:
+    """Video paths to join, from a glob pattern or a `.txt` list.
+
+    A pattern such as `clips/*.mp4` returns the matches, sorted. A `.txt`
+    file lists one path per line, with or without ffmpeg's `file '...'` form.
+    Raises ValueError when `target` is neither or matches nothing.
+    """
+    if "*" in target.name or "?" in target.name:
+        folder = target.parent if target.parent != Path(".") else Path.cwd()
+        matches = sorted(folder.glob(target.name))
+        if not matches:
+            raise ValueError(f"No files found matching pattern: {target.name}")
+        return matches
+    if target.is_file() and target.suffix == ".txt":
+        paths = []
+        for line in target.read_text(encoding="utf-8").splitlines():
+            entry = line.strip()
+            if entry.startswith("file "):
+                entry = entry[len("file ") :].strip().strip("'\"")
+            if entry:
+                paths.append(Path(entry))
+        return paths
+    raise ValueError(
+        "Provide either a .txt file with file paths or a glob pattern (e.g., *.mp4)"
+    )
+
+
 class VideoEngine(FFmpegEngine):
     """Video operations."""
 

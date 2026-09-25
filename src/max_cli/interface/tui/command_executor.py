@@ -3,21 +3,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from max_cli.common.exceptions import MaxError
+from max_cli.core import presets
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchema
-
-LEVEL_TO_CRF: dict[str, tuple[int, str]] = {
-    "high": (23, "fast"),
-    "balanced": (28, "medium"),
-    "max": (32, "slow"),
-}
-
-QUALITY_TO_BITRATE: dict[str, str] = {
-    "s": "128k",
-    "m": "192k",
-    "h": "256k",
-    "x": "320k",
-}
 
 ENGINE_MODULE_MAP: dict[str, str] = {
     "NetworkEngine": "max_cli.core.engines.network_engine",
@@ -39,6 +27,7 @@ PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "width": "scale",
     },
     ("video", "cut"): {"target": "input_path", "output": "output_path"},
+    ("video", "concat"): {"target": "input_paths", "output": "output_path"},
     ("pdf", "compress"): {"target": "input_path"},
     ("pdf", "split"): {"target": "input_path", "output": "output_path"},
     ("pdf", "merge"): {"inputs": "input_paths", "output": "output_path"},
@@ -140,48 +129,23 @@ class CommandExecutor:
         params: dict[str, Any],
         schema: CommandSchema,
     ) -> dict[str, Any]:
+        """Rename TUI fields to engine arguments and fill in derived values.
+
+        Defaults and file discovery come from core (presets, engine helpers),
+        so this only maps names.
+        """
         mapped: dict[str, Any] = {}
         name_map = PARAM_NAME_MAPS.get((category, command), {})
-        skip_keys: set[str] = set()
+        converters = _VALUE_CONVERTERS.get((category, command), {})
 
         for key, value in params.items():
-            if key in skip_keys:
+            if key == "queue":
                 continue
-            engine_key = name_map.get(key, key)
-
-            if category == "video" and command == "compress" and key == "level":
-                crf, preset = LEVEL_TO_CRF.get(value, (28, "medium"))
-                mapped["crf"] = crf
-                mapped["preset"] = preset
+            if key in converters:
+                mapped.update(converters[key](value))
                 continue
-
-            if category == "video" and command == "to_audio" and key == "quality":
-                mapped["bitrate"] = QUALITY_TO_BITRATE.get(value, "192k")
+            if category == "pdf" and command == "split" and key in ("start", "end"):
                 continue
-
-            if category == "audio" and command == "set" and key == "track":
-                mapped["tracknumber"] = str(value)
-                continue
-
-            if category == "pdf" and command == "split":
-                if key in ("start", "end"):
-                    continue
-
-            if category == "pdf" and command == "merge" and key == "inputs":
-                if isinstance(value, Path) and value.is_dir():
-                    mapped["input_paths"] = sorted(
-                        p
-                        for p in value.iterdir()
-                        if p.suffix.lower() == ".pdf" and p.is_file()
-                    )
-                elif isinstance(value, list):
-                    mapped["input_paths"] = [
-                        Path(p) if isinstance(p, str) else p for p in value
-                    ]
-                else:
-                    mapped["input_paths"] = [value] if isinstance(value, Path) else []
-                continue
-
             if category == "files" and command == "smart_sort" and key == "path":
                 mapped["path"] = value
                 if "categories" not in params:
@@ -189,121 +153,27 @@ class CommandExecutor:
                     ai_engine = self._get_engine("AIEngine")
                     mapped["categories"] = ai_engine.categorize_files(files)
                 continue
-
-            if category == "images" and command == "convert" and key == "to_format":
-                mapped["force_format"] = value
+            if category == "images" and key in _IMAGE_FLAG_NAMES:
+                mapped[_IMAGE_FLAG_NAMES[key]] = value
                 continue
-
-            if category == "images" and command == "compress" and key == "force_jpeg":
-                if value:
-                    mapped["force_format"] = "jpg"
-                continue
-
-            if category == "images" and key == "strip":
-                mapped["strip_exif"] = value
-                continue
-
-            if category == "images" and key == "quantize":
-                mapped["quantize_png"] = value
-                continue
-
-            if category == "audio" and command == "organize" and key == "source_paths":
-                if isinstance(value, Path) and value.is_dir():
-                    from max_cli.core.engines.audio_metadata_engine import (
-                        SUPPORTED_EXTENSIONS,
-                    )
-
-                    mapped["source_paths"] = sorted(
-                        p
-                        for p in value.iterdir()
-                        if p.suffix.lower() in SUPPORTED_EXTENSIONS and p.is_file()
-                    )
-                elif isinstance(value, list):
-                    mapped["source_paths"] = [
-                        Path(p) if isinstance(p, str) else p for p in value
-                    ]
-                else:
-                    mapped["source_paths"] = [value] if isinstance(value, Path) else []
-                continue
-
-            if key == "queue":
-                continue
-
-            mapped[engine_key] = value
+            mapped[name_map.get(key, key)] = value
 
         if category == "pdf" and command == "split":
-            start = params.get("start")
-            end = params.get("end")
-            if start is not None and end is not None:
-                mapped["page_ranges"] = f"{start}-{end}"
-            elif start is not None:
-                mapped["page_ranges"] = str(start)
-            elif end is not None:
-                mapped["page_ranges"] = f"1-{end}"
+            page_range = _page_range(params.get("start"), params.get("end"))
+            if page_range:
+                mapped["page_ranges"] = page_range
 
-        if category in ("video", "pdf") and command in (
-            "compress",
-            "to_audio",
-            "convert",
-            "gif",
-            "cut",
-        ):
-            if "input_path" in mapped and "output_path" not in mapped:
-                input_path = mapped["input_path"]
-                if command == "compress":
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}_compressed.mp4"
-                    )
-                elif command == "to_audio":
-                    fmt = params.get("format", "mp3")
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}.{fmt}"
-                    )
-                elif command == "convert":
-                    fmt = params.get("format", "mp4")
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}.{fmt}"
-                    )
-                elif command == "gif":
-                    mapped["output_path"] = input_path.parent / f"{input_path.stem}.gif"
-                elif command == "cut":
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}_cut{input_path.suffix}"
-                    )
-
-        if category == "pdf" and command == "compress":
-            if "input_path" in mapped and "output_path" not in mapped:
-                input_path = mapped["input_path"]
-                mapped["output_path"] = (
-                    input_path.parent / f"{input_path.stem}_compressed.pdf"
-                )
-
-        if category == "images" and command in ("compress", "resize", "convert"):
-            if "input_path" in mapped and "output_path" not in mapped:
-                input_path = mapped["input_path"]
-                if command == "compress":
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}_compressed.jpg"
-                    )
-                elif command == "resize":
-                    mapped["output_path"] = (
-                        input_path.parent
-                        / f"{input_path.stem}_resized{input_path.suffix}"
-                    )
-                elif command == "convert":
-                    fmt = params.get("to_format", "webp")
-                    ext = "jpg" if fmt == "jpg" else fmt
-                    mapped["output_path"] = (
-                        input_path.parent / f"{input_path.stem}.{ext}"
-                    )
+        input_path = mapped.get("input_path")
+        if isinstance(input_path, Path) and "output_path" not in mapped:
+            output_path = _default_output_path(category, command, input_path, params)
+            if output_path is not None:
+                mapped["output_path"] = output_path
 
         if category == "grab" and command == "download":
-            if "output_path" not in mapped:
-                mapped["output_path"] = Path.home() / "Max Downloads"
-            if isinstance(mapped.get("output_path"), str):
-                mapped["output_path"] = Path(
-                    mapped["output_path"].replace("~", str(Path.home()))
-                )
+            from max_cli.core.engines.network_engine import DEFAULT_DOWNLOAD_DIR
+
+            output_dir = mapped.get("output_path") or DEFAULT_DOWNLOAD_DIR
+            mapped["output_path"] = Path(str(output_dir).replace("~", str(Path.home())))
 
         return mapped
 
@@ -620,3 +490,102 @@ class CommandExecutor:
             if msg:
                 return msg
         return "Command completed successfully"
+
+
+def _paths_from(value: Any, find_in_folder: Callable[[Path], list[Path]]) -> list[Path]:
+    """A folder becomes its matching files; a list or single path is kept."""
+    if isinstance(value, Path) and value.is_dir():
+        return find_in_folder(value)
+    if isinstance(value, list):
+        return [Path(p) if isinstance(p, str) else p for p in value]
+    return [value] if isinstance(value, Path) else []
+
+
+def _pdf_inputs(value: Any) -> dict[str, Any]:
+    from max_cli.core.engines.pdf_engine import find_pdfs
+
+    return {"input_paths": _paths_from(value, find_pdfs)}
+
+
+def _audio_inputs(value: Any) -> dict[str, Any]:
+    from max_cli.core.engines.audio_metadata_engine import find_audio_files
+
+    return {"source_paths": _paths_from(value, find_audio_files)}
+
+
+def _concat_inputs(value: Any) -> dict[str, Any]:
+    from max_cli.core.engines.video_engine import resolve_concat_inputs
+
+    return {"input_paths": resolve_concat_inputs(Path(value))}
+
+
+_VALUE_CONVERTERS: dict[tuple[str, str], dict[str, Callable[[Any], dict[str, Any]]]] = {
+    ("video", "compress"): {
+        "level": lambda level: {
+            "crf": presets.crf_for_level(level),
+            "preset": presets.DEFAULT_VIDEO_PRESET,
+        }
+    },
+    ("video", "to_audio"): {
+        "quality": lambda quality: {
+            "bitrate": presets.bitrate_for_quality(
+                presets.VIDEO_TO_AUDIO_BITRATES,
+                quality,
+                presets.DEFAULT_VIDEO_TO_AUDIO_QUALITY,
+            )
+        }
+    },
+    ("video", "concat"): {
+        "target": _concat_inputs,
+        "method": lambda method: {
+            "method": presets.CONCAT_METHODS.get(method, presets.CONCAT_METHODS["safe"])
+        },
+    },
+    ("audio", "set"): {"track": lambda track: {"tracknumber": str(track)}},
+    ("pdf", "merge"): {"inputs": _pdf_inputs},
+    ("audio", "organize"): {"targets": _audio_inputs},
+    ("images", "convert"): {"to_format": lambda fmt: {"force_format": fmt}},
+    ("images", "compress"): {
+        "force_jpeg": lambda force: {"force_format": "jpg"} if force else {}
+    },
+}
+
+_IMAGE_FLAG_NAMES = {"strip": "strip_exif", "quantize": "quantize_png"}
+
+
+def _page_range(start: Optional[int], end: Optional[int]) -> Optional[str]:
+    if start is not None and end is not None:
+        return f"{start}-{end}"
+    if start is not None:
+        return str(start)
+    if end is not None:
+        return f"1-{end}"
+    return None
+
+
+def _default_output_path(
+    category: str, command: str, input_path: Path, params: dict[str, Any]
+) -> Optional[Path]:
+    """Output next to the input, named the way the matching CLI command names it."""
+    sibling = presets.sibling_path
+    if category == "video":
+        if command == "compress":
+            return sibling(input_path, "_compressed", "mp4")
+        if command == "to_audio":
+            return sibling(input_path, extension=params.get("format", "mp3"))
+        if command == "convert":
+            return sibling(input_path, extension=params.get("format", "mp4"))
+        if command == "gif":
+            return sibling(input_path, extension="gif")
+        if command == "cut":
+            return sibling(input_path, "_cut")
+    if category == "pdf" and command == "compress":
+        return sibling(input_path, "_compressed", "pdf")
+    if category == "images":
+        if command == "compress":
+            return sibling(input_path, "_compressed", "jpg")
+        if command == "resize":
+            return sibling(input_path, "_resized")
+        if command == "convert":
+            return sibling(input_path, extension=params.get("to_format", "webp"))
+    return None
