@@ -41,6 +41,8 @@ def _status(app: App) -> str:
 
 
 async def _settle(app: App, pilot) -> None:
+    # press() only posts a message; process it so the worker exists before waiting.
+    await pilot.pause()
     await app.workers.wait_for_complete()
     await pilot.pause()
 
