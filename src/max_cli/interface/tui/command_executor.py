@@ -9,7 +9,6 @@ from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchem
 
 ENGINE_MODULE_MAP: dict[str, str] = {
     "NetworkEngine": "max_cli.core.engines.network_engine",
-    "MediaEngine": "max_cli.core.engines.media_engine",
     "ImageEngine": "max_cli.core.engines.image_processor",
     "FileOrganizer": "max_cli.core.engines.file_organizer",
     "PDFEngine": "max_cli.core.engines.pdf_engine",
@@ -18,16 +17,6 @@ ENGINE_MODULE_MAP: dict[str, str] = {
 }
 
 PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
-    ("video", "compress"): {"target": "input_path", "output": "output_path"},
-    ("video", "to_audio"): {"target": "input_path", "output": "output_path"},
-    ("video", "convert"): {"target": "input_path"},
-    ("video", "gif"): {
-        "target": "input_path",
-        "output": "output_path",
-        "width": "scale",
-    },
-    ("video", "cut"): {"target": "input_path", "output": "output_path"},
-    ("video", "concat"): {"target": "input_paths", "output": "output_path"},
     ("pdf", "compress"): {"target": "input_path"},
     ("pdf", "split"): {"target": "input_path", "output": "output_path"},
     ("pdf", "merge"): {"inputs": "input_paths", "output": "output_path"},
@@ -332,9 +321,6 @@ class CommandExecutor:
 
         type_map: dict[tuple[str, str], TaskType] = {
             ("grab", "download"): TaskType.DOWNLOAD,
-            ("video", "compress"): TaskType.VIDEO_COMPRESS,
-            ("video", "convert"): TaskType.VIDEO_CONVERT,
-            ("video", "to_audio"): TaskType.VIDEO_TO_AUDIO,
             ("pdf", "merge"): TaskType.PDF_MERGE,
             ("pdf", "compress"): TaskType.PDF_COMPRESS,
             ("files", "smart_sort"): TaskType.FILE_ORGANIZE,
@@ -514,34 +500,7 @@ def _audio_inputs(value: Any) -> dict[str, Any]:
     return {"source_paths": _paths_from(value, find_audio_files)}
 
 
-def _concat_inputs(value: Any) -> dict[str, Any]:
-    from max_cli.core.engines.video_engine import resolve_concat_inputs
-
-    return {"input_paths": resolve_concat_inputs(Path(value))}
-
-
 _VALUE_CONVERTERS: dict[tuple[str, str], dict[str, Callable[[Any], dict[str, Any]]]] = {
-    ("video", "compress"): {
-        "level": lambda level: {
-            "crf": presets.crf_for_level(level),
-            "preset": presets.DEFAULT_VIDEO_PRESET,
-        }
-    },
-    ("video", "to_audio"): {
-        "quality": lambda quality: {
-            "bitrate": presets.bitrate_for_quality(
-                presets.VIDEO_TO_AUDIO_BITRATES,
-                quality,
-                presets.DEFAULT_VIDEO_TO_AUDIO_QUALITY,
-            )
-        }
-    },
-    ("video", "concat"): {
-        "target": _concat_inputs,
-        "method": lambda method: {
-            "method": presets.CONCAT_METHODS.get(method, presets.CONCAT_METHODS["safe"])
-        },
-    },
     ("audio", "set"): {"track": lambda track: {"tracknumber": str(track)}},
     ("pdf", "merge"): {"inputs": _pdf_inputs},
     ("audio", "organize"): {"targets": _audio_inputs},
@@ -569,17 +528,6 @@ def _default_output_path(
 ) -> Optional[Path]:
     """Output next to the input, named the way the matching CLI command names it."""
     sibling = presets.sibling_path
-    if category == "video":
-        if command == "compress":
-            return sibling(input_path, "_compressed", "mp4")
-        if command == "to_audio":
-            return sibling(input_path, extension=params.get("format", "mp3"))
-        if command == "convert":
-            return sibling(input_path, extension=params.get("format", "mp4"))
-        if command == "gif":
-            return sibling(input_path, extension="gif")
-        if command == "cut":
-            return sibling(input_path, "_cut")
     if category == "pdf" and command == "compress":
         return sibling(input_path, "_compressed", "pdf")
     if category == "images":

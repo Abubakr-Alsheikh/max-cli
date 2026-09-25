@@ -37,37 +37,11 @@ class TestPresetHelpers:
 
 
 class TestTuiMapping:
-    def test_video_compress_output_matches_cli_naming(self, tmp_path):
-        source = tmp_path / "clip.mov"
-        params = _map("video", "compress", {"target": source, "level": "max"})
-        assert params == {
-            "input_path": source,
-            "crf": 35,
-            "preset": presets.DEFAULT_VIDEO_PRESET,
-            "output_path": tmp_path / "clip_compressed.mp4",
-        }
-
-    def test_to_audio_uses_cli_bitrates(self, tmp_path):
-        params = _map(
-            "video", "to_audio", {"target": tmp_path / "a.mp4", "quality": "m"}
-        )
-        assert params["bitrate"] == "128k"
-
     def test_pdf_merge_folder_uses_natural_order(self, tmp_path):
         for name in ["10.pdf", "2.pdf", "_temp.pdf", "notes.txt"]:
             (tmp_path / name).write_bytes(b"")
         params = _map("pdf", "merge", {"inputs": tmp_path})
         assert [p.name for p in params["input_paths"]] == ["2.pdf", "10.pdf"]
-
-    def test_concat_accepts_a_glob_like_the_cli(self, tmp_path):
-        for name in ["b.mp4", "a.mp4"]:
-            (tmp_path / name).write_bytes(b"")
-        params = _map(
-            "video", "concat", {"target": tmp_path / "*.mp4", "method": "fast"}
-        )
-        assert [p.name for p in params["input_paths"]] == ["a.mp4", "b.mp4"]
-        assert params["method"] == "concat"
-        assert "target" not in params
 
 
 class TestEngineHelpers:

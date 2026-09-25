@@ -9,6 +9,7 @@ SECTIONS = [
     ("queue", "\u2263", "Queue"),
     ("history", "\u21bb", "History"),
     ("files", "\u25a3", "Files"),
+    ("tools", "\u2692", "Tools"),
     ("analytics", "\u2248", "Analytics"),
     ("config", "\u2699", "Config"),
     ("system", "\u25c9", "System"),

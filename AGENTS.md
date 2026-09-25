@@ -249,9 +249,10 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 
 - **TUI Dashboard Pattern**:
   - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command, graceful fallback if textual missing)
-  - App: `src/max_cli/interface/tui/app.py` (Textual App with a sidebar of 9 sections: Home, Download, Queue, History, Files, Analytics, Config, System, Chat; keys `q` quit, `r` refresh, `ctrl+b` toggle sidebar)
-  - Widgets: `src/max_cli/interface/tui/widgets/` (Sidebar, HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, AnalyticsPanel, ConfigPanel, SystemPanel, ChatPanel)
-  - Registry: `src/max_cli/interface/tui/command_registry.py` (35+ command schemas across 7 categories with field definitions)
+  - App: `src/max_cli/interface/tui/app.py` (Textual App with a sidebar of 10 sections: Home, Download, Queue, History, Files, Tools, Analytics, Config, System, Chat. The sidebar's `SECTIONS` list drives which panels exist; keys `q` quit, `r` refresh, `ctrl+b` toggle sidebar)
+  - Widgets: `src/max_cli/interface/tui/widgets/` (Sidebar, HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, ToolsPanel, AnalyticsPanel, ConfigPanel, SystemPanel, ChatPanel)
+  - Forms: `widgets/action_form.py` builds a form from a catalog `Action`: every option with its CLI default, advanced options folded away, Browse for paths, a confirmation for `MOVES`/`OVERWRITES`/`DELETES`, and a thread worker for the run. `widgets/dialogs.py` holds `ConfirmDialog` and `PathPicker`. The Tools page (`widgets/tools_panel.py`) shows one form per catalog action; other pages reuse `ActionForm`
+  - Registry: `src/max_cli/interface/tui/command_registry.py` (the old hand-written schemas for groups not yet in the catalog; each ported group's entries are deleted)
   - Executor: `src/max_cli/interface/tui/command_executor.py` (direct engine method calls, lazy engine loading, handles None/int/Path/dict return types)
   - Activity: `src/max_cli/interface/tui/activity_log.py` (unified activity logging across all operations, filtering by category)
   - Tests: `tests/interface/tui/` (Textual Pilot API for simulating interactions)
