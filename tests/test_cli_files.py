@@ -267,7 +267,8 @@ class TestDuplicates:
 
 
 class TestShred:
-    def test_force_deletes_and_backs_up(self, work_dir, fake_home):
+    def test_force_deletes_without_keeping_a_copy(self, work_dir, fake_home):
+        """shred used to save an auto-backup, which defeats a secure delete."""
         secret = work_dir / "secret.txt"
         secret.write_text("top secret", encoding="utf-8")
 
@@ -276,8 +277,8 @@ class TestShred:
         assert result.exit_code == 0, result.output
         assert "File securely deleted: secret.txt" in result.output
         assert not secret.exists()
-        [backup] = _backup_files(fake_home)
-        assert backup.read_text(encoding="utf-8") == "top secret"
+        assert _backup_files(fake_home) == []
+        assert not list((fake_home / ".max_cli" / "transactions").glob("*.json"))
 
     def test_declined_prompt_keeps_file(self, work_dir):
         secret = work_dir / "secret.txt"

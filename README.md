@@ -564,7 +564,7 @@ max files backups --restore <backup-path>
 max files backup-cleanup --days 30
 ```
 
-Max records `order`, `smart-sort`, `duplicates --delete`, `shred` and `audio organize` so `max files undo` can reverse them. Before `shred` and `duplicates --delete` delete anything, Max saves a backup.
+Max records `order`, `smart-sort`, `duplicates --delete` and `audio organize` so `max files undo` can reverse them. Before `duplicates --delete` deletes anything, Max saves a backup. `shred` keeps no copy and can't be undone.
 
 ---
 

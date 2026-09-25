@@ -34,6 +34,7 @@ PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
     ("audio", "set"): {"target": "file_path"},
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
     ("files", "order"): {"start": "start_index"},
+    ("files", "shred"): {"target": "path"},
     ("grab", "download"): {"resolution": "custom_height"},
     ("images", "compress"): {"target": "input_path", "output": "output_path"},
     ("images", "resize"): {"target": "input_path", "output": "output_path"},
