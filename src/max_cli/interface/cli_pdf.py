@@ -34,7 +34,11 @@ def merge_pdfs(
     if inputs is None:
         inputs = [Path(".")]
 
-    files_to_merge = _resolve_files(inputs)
+    try:
+        files_to_merge = _resolve_files(inputs)
+    except ValueError as e:
+        log_error(str(e))
+        raise typer.Exit(1)
 
     if not output:
         # Smart default naming

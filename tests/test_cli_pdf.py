@@ -109,12 +109,6 @@ class TestMerge:
         assert "Error: Merge failed: disk full" in result.output
         assert not output_path.exists()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="cli_pdf.merge_pdfs calls _resolve_files outside its try block: "
-        "no PDF inputs raise a raw ValueError instead of log_error + exit 1 "
-        "(bundle handles the same case)",
-    )
     def test_no_pdfs_is_reported(self, tmp_path):
         empty_folder = tmp_path / "empty"
         empty_folder.mkdir()
