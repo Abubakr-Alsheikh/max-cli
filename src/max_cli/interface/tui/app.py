@@ -49,9 +49,11 @@ class MaxDashboardApp(App):
         height: 1fr;
     }
 
+    /* Every page scrolls when it's taller than the terminal. */
     #content > * {
         padding: 1 2;
         height: 1fr;
+        overflow-y: auto;
     }
 
     Footer {
@@ -61,6 +63,7 @@ class MaxDashboardApp(App):
 
     DataTable {
         height: 1fr;
+        min-height: 8;
         border: solid $border;
     }
 
@@ -100,6 +103,10 @@ class MaxDashboardApp(App):
     }
     #config-fields {
         height: 1fr;
+    }
+    /* Inner scroll areas keep a usable height; the page scrolls around them. */
+    #config-scroll, #chat-scroll {
+        min-height: 6;
     }
     #log-scroll {
         height: 8;

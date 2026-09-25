@@ -6,6 +6,10 @@ from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
 
+# `max grab` downloads log under the command group name "grab", while the
+# Home card, the History filter and get_stats() count them as "download".
+CATEGORY_ALIASES = {"grab": "download"}
+
 
 class ActivityEntry:
     def __init__(
@@ -19,7 +23,7 @@ class ActivityEntry:
     ):
         self.id = entry_id or str(uuid.uuid4())[:8]
         self.timestamp = datetime.now().isoformat()
-        self.category = category
+        self.category = CATEGORY_ALIASES.get(category, category)
         self.action = action
         self.status = status
         self.details = details or {}

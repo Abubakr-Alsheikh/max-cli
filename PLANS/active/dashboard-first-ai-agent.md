@@ -30,11 +30,12 @@ Max started as a personal tool, and its commands are long and hard to remember f
 ## Tasks
 
 ### Step 1: Fix the dashboard first (prerequisite)
-- [ ] Finish `tui-bugfix-and-ux-improvements.md`:
+- [x] Fix the P0 bugs in `tui-bugfix-and-ux-improvements.md` (2026-09-26):
   - The Config search crash.
   - The dead Files filter.
   - The Downloads card that reads 0 (`grab`/`download` category mismatch).
   - AI chat blocking the UI.
+- [x] Every page scrolls (from `dashboard-ui-redesign.md`).
 - [ ] Wire or remove the dead System buttons (`interactive-tui-expansion.md`).
 
 ### Step 2: One command catalog (single source of truth)

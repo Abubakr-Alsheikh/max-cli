@@ -43,6 +43,8 @@ class FilesPanel(Vertical):
         super().__init__(*args, **kwargs)
         self._current_path: Path = Path.home()
         self._selected_files: set[str] = set()
+        self._sort_by: str = "name"
+        self._filter_text: str = ""
 
     def compose(self) -> ComposeResult:
         yield Static("[bold cyan]File Browser[/bold cyan]", id="files-title")
@@ -90,7 +92,8 @@ class FilesPanel(Vertical):
         display = " > ".join(parts[-3:]) if len(parts) > 3 else str(self._current_path)
         breadcrumb.update(f"[bold]{display}[/bold]")
 
-    def _load_directory(self, sort_by: str = "name") -> None:
+    def _load_directory(self) -> None:
+        sort_by = self._sort_by
         table = self.query_one("#files-table", DataTable)
         table.clear()
         if not table.columns:
@@ -115,16 +118,20 @@ class FilesPanel(Vertical):
         except PermissionError:
             table.add_row("[red]Permission denied[/red]", "", "", "")
             return
+        shown_count = 0
         for entry in entries:
             if entry.name.startswith("."):
                 continue
+            if self._filter_text and self._filter_text not in entry.name.lower():
+                continue
+            shown_count += 1
             icon = self._get_file_icon(entry)
             name = f"{icon} {entry.name}" + ("/" if entry.is_dir() else "")
             size = self._format_size(entry) if entry.is_file() else "-"
             file_type = self._get_file_type(entry)
             modified = self._format_mtime(entry)
             table.add_row(name, size, file_type, modified, key=str(entry))
-        self._update_count(len(entries))
+        self._update_count(shown_count)
 
     def _get_file_icon(self, path: Path) -> str:
         if path.is_dir():
@@ -209,20 +216,15 @@ class FilesPanel(Vertical):
 
     @on(Input.Changed, "#files-filter")
     def _on_filter(self, event: Input.Changed) -> None:
-        filter_text = event.value.strip().lower()
-        table = self.query_one("#files-table", DataTable)
-        for row_key in table.rows:
-            row_data = table.get_row(row_key)
-            if row_data:
-                name = row_data[0].lower()
-                table.rows[row_key].visible = not filter_text or filter_text in name
+        self._filter_text = event.value.strip().lower()
+        self._load_directory()
 
     @on(Select.Changed, "#files-sort")
     def _on_sort(self, event: Select.Changed) -> None:
-        sort_by = event.value
-        if sort_by == Select.BLANK:
+        if event.value == Select.BLANK:
             return
-        self._load_directory(sort_by=sort_by)
+        self._sort_by = str(event.value)
+        self._load_directory()
 
     @on(Button.Pressed, "#btn-compress")
     def _on_compress(self) -> None:

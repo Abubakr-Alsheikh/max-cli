@@ -53,6 +53,11 @@ def isolated_home(tmp_path_factory, monkeypatch):
             config_module, "GLOBAL_CONFIG_PATH", fake_home / ".max_config.env"
         )
     monkeypatch.setattr(cache, "_default_cache", None)
+    from max_cli.interface.tui import activity_log
+
+    monkeypatch.setattr(
+        activity_log.ActivityLog, "LOG_FILE", max_cli_dir / "activity_log.json"
+    )
     from max_cli.common import exit_status
 
     exit_status.reset()

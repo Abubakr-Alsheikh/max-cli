@@ -9,26 +9,36 @@ from textual.widgets import Button, Input, Label, Static
 from max_cli.common.atomic import atomic_write_text
 from max_cli.config import Settings
 
+# Every name must be a Settings field (tests/interface/tui/test_dashboard_bugs.py).
+# Fields not listed here land in an "Other" section.
 CONFIG_SECTIONS = {
     "AI": [
         "OPENAI_API_KEY",
-        "OPENAI_MODEL",
-        "GOOGLE_API_KEY",
-        "GOOGLE_MODEL",
-        "AI_PROVIDER",
-        "AI_TEMPERATURE",
-        "AI_MAX_TOKENS",
+        "OPENAI_BASE_URL",
+        "AI_MODEL",
+        "AI_IMAGE_MODEL",
+        "OLLAMA_ENABLED",
+        "OLLAMA_BASE_URL",
+        "OLLAMA_MODEL",
     ],
-    "Grab": [
-        "YTDLP_FORMAT",
-        "YTDLP_OUTPUT_DIR",
-        "YTDLP_MAX_CONCURRENT",
+    "Downloads": [
+        "GRAB_QUALITY",
+        "GRAB_AUDIO_FORMAT",
+        "GRAB_DEFAULT_PATH",
+        "GRAB_DEFAULT_TYPE",
+        "GRAB_STRIP_PLAYLIST",
+        "GRAB_INCLUDE_METADATA",
+        "GRAB_QUEUE_ENABLED",
     ],
     "General": [
-        "MAX_THREADS",
-        "CACHE_DIR",
-        "LOG_LEVEL",
-        "TEMP_DIR",
+        "DEFAULT_QUALITY",
+        "MAX_WORKERS",
+        "BATCH_SIZE",
+        "DOWNLOAD_TIMEOUT",
+        "MAX_RETRIES",
+        "PROGRESS_BAR",
+        "VERBOSE",
+        "CONFIRM_DESTRUCTIVE",
     ],
 }
 
@@ -56,7 +66,7 @@ def _build_field_row(field_name: str, value: object) -> Horizontal:
                 id=f"cfg-{field_name}",
             )
 
-    return Horizontal(label, input_widget, classes="config-row")
+    return Horizontal(label, input_widget, classes="config-row", name=field_name)
 
 
 def _build_section(
@@ -90,7 +100,7 @@ class ConfigPanel(Vertical):
             placeholder="\U0001f50d Search settings...",
             id="config-search",
         )
-        yield ScrollableContainer(Vertical(id="config-fields"))
+        yield ScrollableContainer(Vertical(id="config-fields"), id="config-scroll")
         with Horizontal(id="config-actions"):
             yield Button(
                 "\U0001f4be Save Changes", id="btn-save-config", variant="success"
@@ -139,14 +149,10 @@ class ConfigPanel(Vertical):
             rows = section.query(".config-row")
             visible_count = 0
             for row in rows:
-                label = row.query_one(".config-label", Label)
-                if label:
-                    field_name = label.renderable.lower()
-                    if not search_text or search_text in field_name:
-                        row.display = True
-                        visible_count += 1
-                    else:
-                        row.display = False
+                field_name = (row.name or "").lower()
+                row.display = not search_text or search_text in field_name
+                if row.display:
+                    visible_count += 1
             section.display = visible_count > 0 or not search_text
 
     @on(Button.Pressed, "#btn-save-config")

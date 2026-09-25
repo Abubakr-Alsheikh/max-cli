@@ -1,7 +1,9 @@
 """AI chat panel for the TUI dashboard."""
 
+from functools import partial
 from typing import Any
 
+from rich.markup import escape
 from textual import on
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Key
@@ -13,9 +15,6 @@ from max_cli.interface.tui.activity_log import ActivityLog
 class ChatPanel(Vertical):
     """AI chat interface with command suggestions."""
 
-    _history: list[str] = []
-    _history_index: int = -1
-
     SUGGESTIONS: list[str] = [
         "Compress Videos",
         "Merge PDFs",
@@ -24,6 +23,11 @@ class ChatPanel(Vertical):
         "Extract Audio",
         "Find Duplicates",
     ]
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._history: list[str] = []
+        self._history_index = -1
 
     def compose(self):
         yield Static("[bold cyan]AI Assistant[/bold cyan]", id="chat-title")
@@ -97,7 +101,7 @@ class ChatPanel(Vertical):
                 severity="information",
             )
 
-    def _add_message(self, sender: str, content: str) -> None:
+    def _add_message(self, sender: str, content: str) -> Static:
         container = self.query_one("#chat-messages", Vertical)
         color = "cyan" if sender == "max" else "green"
         prefix = "Max" if sender == "max" else "You"
@@ -107,44 +111,64 @@ class ChatPanel(Vertical):
         )
         container.mount(msg)
         self.query_one("#chat-scroll").scroll_end()
+        return msg
 
     def _process_request(self, message: str) -> None:
         self._history.append(message)
         self._history_index = -1
+        thinking_msg = self._add_message("max", "[dim]Thinking...[/dim]")
+        # The AI call takes seconds; on the UI thread it froze the dashboard
+        # and the "Thinking..." line never painted.
+        self.run_worker(
+            partial(self._ask_ai, message, thinking_msg),
+            name="chat-ai",
+            thread=True,
+        )
+
+    def _ask_ai(self, message: str, thinking_msg: Static) -> None:
+        """Runs in a worker thread. UI changes go through call_from_thread."""
         try:
+            from max_cli.core.cli.registry import build_full_app
             from max_cli.core.engines.ai_engine import AIEngine
 
-            self._add_message("max", "[dim]Thinking...[/dim]")
-            thinking_msg = self.query_one("#chat-messages", Vertical).children[-1]
-
-            engine = AIEngine()
-            response: dict[str, Any] = engine.interpret_intent(
-                message, app_instance=self.app
+            response: dict[str, Any] = AIEngine().interpret_intent(
+                message, app_instance=build_full_app()
             )
-
-            thought = response.get("thought", "I'm not sure how to help with that.")
-            thinking_msg.update(f"[bold cyan]Max:[/bold cyan] {thought}")
-
-            command = response.get("command")
-            if command:
-                self._add_message("max", f"Suggested command: [bold]{command}[/bold]")
-                container = self.query_one("#chat-messages", Vertical)
-                btn_id = f"exec-cmd-{len(list(container.children))}"
-                exec_btn = Button("Execute", id=btn_id, variant="success")
-                container.mount(exec_btn)
-
-            activity = ActivityLog()
-            activity.add_entry(
-                category="ai",
-                action="chat",
-                status="success",
-                details={"prompt": message, "response": thought},
-            )
-
         except ImportError:
-            self._add_message(
-                "max",
-                "[yellow]AI engine not available. Configure your API key in settings.[/yellow]",
+            self.app.call_from_thread(
+                self._show_reply,
+                thinking_msg,
+                "[yellow]AI engine not available. "
+                "Configure your API key in settings.[/yellow]",
             )
+            return
         except Exception as e:
-            self._add_message("max", f"[red]Error: {e}[/red]")
+            self.app.call_from_thread(
+                self._show_reply, thinking_msg, f"[red]Error: {escape(str(e))}[/red]"
+            )
+            return
+
+        thought = response.get("thought") or "I'm not sure how to help with that."
+        command = response.get("command")
+        self.app.call_from_thread(
+            self._show_reply, thinking_msg, escape(thought), command
+        )
+        ActivityLog().add_entry(
+            category="ai",
+            action="chat",
+            status="success",
+            details={"prompt": message, "response": thought},
+        )
+
+    def _show_reply(
+        self, thinking_msg: Static, reply: str, command: "str | None" = None
+    ) -> None:
+        thinking_msg.update(f"[bold cyan]Max:[/bold cyan] {reply}")
+        if command:
+            self._add_message(
+                "max", f"Suggested command: [bold]{escape(command)}[/bold]"
+            )
+            container = self.query_one("#chat-messages", Vertical)
+            btn_id = f"exec-cmd-{len(container.children)}"
+            container.mount(Button("Execute", id=btn_id, variant="success"))
+            self.query_one("#chat-scroll").scroll_end()

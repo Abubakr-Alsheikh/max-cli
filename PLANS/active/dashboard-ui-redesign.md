@@ -17,14 +17,14 @@ A dashboard that feels like one designed app: every page scrolls, every page fol
 
 ## What we know today
 
-- Only 4 of the 9 pages use a scroll container (Chat, Config, Home, System). Download, Files, History, Queue and Analytics don't, so their content gets cut off in small terminals.
+- Before 2026-09-26, 7 of the 9 pages couldn't scroll at 80x16; only Home and Download could. Fixed; see the task list.
 - Each panel sets its own spacing, colours and CSS. `app.py` holds one large shared CSS block, and some panels add their own.
 - Dashboard forms show a subset of each command's options. The drift test (`tests/interface/tui/test_preset_drift.py`) checks defaults, not coverage.
 
 ## Ideas to plan later
 
 - [ ] A small design standard for the TUI: layout grid, spacing scale, colour tokens, a card component, form field components, empty and loading states, and error display. Write it down in `docs/` or a skill.
-- [ ] Wrap every page in a scrollable container, and test it at small terminal sizes with Pilot.
+- [x] Every page scrolls: `#content > *` has `overflow-y: auto`, tables keep `min-height: 8`, and the Config and Chat inner scroll areas keep `min-height: 6`. `test_every_page_scrolls_in_a_small_terminal` checks all nine pages at 80x16 (2026-09-26).
 - [ ] Build forms from the command catalog (see `dashboard-first-ai-agent.md`, Step 2):
   - Every CLI option appears.
   - Advanced options fold away.
