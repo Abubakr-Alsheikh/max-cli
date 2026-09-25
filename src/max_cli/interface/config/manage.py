@@ -5,6 +5,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 from rich import box
 
+from max_cli.common.atomic import atomic_write_json, atomic_write_text
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
 
@@ -24,7 +25,7 @@ def _write_env_file(path: Path, data: dict) -> None:
         if value is not None:
             lines.append(f"{key}={value}")
 
-    path.write_text("\n".join(lines) + "\n")
+    atomic_write_text(path, "\n".join(lines) + "\n")
 
 
 @app.command("show")
@@ -72,7 +73,7 @@ def save_local_to_global(
         raise typer.Exit(1)
 
     console.print(f"Found local config at: [bold]{local_env.resolve()}[/bold]")
-    content = local_env.read_text()
+    content = local_env.read_text(encoding="utf-8")
 
     if GLOBAL_CONFIG_PATH.exists() and not force:
         console.print(
@@ -83,7 +84,7 @@ def save_local_to_global(
             raise typer.Exit(1)
 
     try:
-        GLOBAL_CONFIG_PATH.write_text(content)
+        atomic_write_text(GLOBAL_CONFIG_PATH, content)
         log_success("Local .env saved as Global Configuration!")
         console.print(f"[dim]Copied to: {GLOBAL_CONFIG_PATH}[/dim]")
     except Exception as e:
@@ -209,7 +210,7 @@ def export_config(
                 config_dict[k] = v
 
     try:
-        output.write_text(json.dumps(config_dict, indent=2))
+        atomic_write_json(output, config_dict)
         log_success(f"Config exported to {output}")
     except Exception as e:
         log_error(f"Failed to export config: {e}")
@@ -228,7 +229,7 @@ def import_config(
         raise typer.Exit(1)
 
     try:
-        data = json.loads(input.read_text())
+        data = json.loads(input.read_text(encoding="utf-8"))
     except Exception as e:
         log_error(f"Invalid JSON: {e}")
         raise typer.Exit(1)

@@ -3,6 +3,7 @@ from pathlib import Path
 from rich.prompt import Prompt
 from rich.panel import Panel
 
+from max_cli.common.atomic import atomic_write_text
 from max_cli.common.logger import console, log_success, log_error
 
 app = typer.Typer()
@@ -21,7 +22,7 @@ def _write_env_file(path: Path, data: dict) -> None:
         if value is not None:
             lines.append(f"{key}={value}")
 
-    path.write_text("\n".join(lines) + "\n")
+    atomic_write_text(path, "\n".join(lines) + "\n")
 
 
 @app.command("setup")

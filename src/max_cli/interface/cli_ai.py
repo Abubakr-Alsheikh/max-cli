@@ -7,6 +7,7 @@ from rich.markdown import Markdown
 from pathlib import Path
 from typing import Optional
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.logger import console, log_error, log_success
 
 app = typer.Typer()
@@ -387,7 +388,7 @@ def extract_data_cmd(
         console.print(json.dumps(result, indent=2))
 
         if output:
-            output.write_text(json.dumps(result, indent=2))
+            atomic_write_json(output, result)
             log_success(f"Saved to: {output}")
     except Exception as e:
         log_error(f"Extraction failed: {e}")

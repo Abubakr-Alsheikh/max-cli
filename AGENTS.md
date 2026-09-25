@@ -44,6 +44,7 @@ src/max_cli/
 │   └── config/                # CLI config wizards
 ├── common/                    # SHARED / INFRASTRUCTURE
 │   ├── archives.py            # safe_extract_tar: use for every tar extraction
+│   ├── atomic.py              # atomic_write_text/json: use for every state file
 │   ├── cache.py               # Centralized caching
 │   ├── concurrent.py          # Parallel processing workers
 │   ├── exceptions.py          # Custom MaxError classes
@@ -146,7 +147,7 @@ def compress_images(...):
 
 `.claude/settings.json` wires hooks that enforce this file mechanically:
 
-- **PostToolUse `check_rules.py`**: after every Python edit it runs `ruff check --fix`. It also runs `ruff format`, but only on files that were already formatted at HEAD. Then it runs AST checks for this file's rules: lazy heavy imports, no UI or print in core, layering, `os.path`, `shell=True`, utf-8 encoding, `/tmp`, hardcoded ffmpeg, silent broad excepts, `extractall` filter, reason-less `# type: ignore`, and Python 3.9 syntax. It blocks only violations the edit *introduced* compared with HEAD. Run `python .claude/hooks/check_rules.py --audit src/max_cli` for a full debt report.
+- **PostToolUse `check_rules.py`**: after every Python edit it runs `ruff check --fix`. It also runs `ruff format`, but only on files that were already formatted at HEAD. Then it runs AST checks for this file's rules: lazy heavy imports, no UI or print in core, layering, `os.path`, `shell=True`, utf-8 encoding, `/tmp`, hardcoded ffmpeg, silent broad excepts, `extractall` filter, direct `write_text` (use `max_cli.common.atomic`), reason-less `# type: ignore`, and Python 3.9 syntax. It blocks only violations the edit *introduced* compared with HEAD. Run `python .claude/hooks/check_rules.py --audit src/max_cli` for a full debt report.
 - **PreToolUse `guard.py`**: denies `--no-verify`, force-push and `.env` edits. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
 - **Stop `stop_gate.py`**: when Python changed during the session, it runs `ruff check` plus `pytest -x` before the agent may finish. It blocks once, then warns.
 

@@ -6,6 +6,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Button, Input, Label, Static
 
+from max_cli.common.atomic import atomic_write_text
 from max_cli.config import Settings
 
 
@@ -166,7 +167,7 @@ class ConfigPanel(Vertical):
                         continue
                 lines.append(f"{field_name}={value}")
 
-        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        atomic_write_text(env_path, "\n".join(lines) + "\n")
 
         status = self.query_one("#config-status", Static)
         status.update("[green]Configuration saved to ~/.max_config.env[/green]")

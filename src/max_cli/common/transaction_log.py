@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
 
 
@@ -70,7 +71,7 @@ class TransactionLog:
             "undo_status": self.undo_status,
         }
         file_path = self._storage_dir / f"{self.group_id}.json"
-        file_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_json(file_path, data)
         self._cleanup_old_groups()
         return file_path
 

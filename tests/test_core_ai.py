@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from max_cli.core.engines.ai_engine import AIEngine
 from max_cli.common.exceptions import MaxError
@@ -36,29 +37,39 @@ class TestAIEngine:
         assert engine._client is None
         assert engine.client is None
 
-    @patch("os.listdir")
-    @patch("os.getcwd")
-    def test_get_local_context(self, mock_getcwd, mock_listdir):
-        """Test getting local context."""
-        mock_getcwd.return_value = "/test/dir"
-        mock_listdir.return_value = ["file1.txt", "file2.txt", "file3.py"]
+    def test_get_local_context(self, tmp_path, monkeypatch):
+        """Context lists the folder and its visible files."""
+        for name in ["file1.txt", "file2.txt", "file3.py", ".secret"]:
+            (tmp_path / name).write_text("x", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
 
-        engine = AIEngine()
-        context = engine._get_local_context()
+        context = AIEngine()._get_local_context()
 
-        assert "/test/dir" in context
-        assert "file1.txt" in context
+        assert str(tmp_path) in context
+        assert "file1.txt" in context and "file3.py" in context
+        assert ".secret" not in context
 
-    @patch("os.listdir")
-    @patch("os.getcwd")
-    def test_get_local_context_with_error(self, mock_getcwd, mock_listdir):
-        """Test error handling in local context."""
-        mock_getcwd.side_effect = Exception("Permission denied")
+    def test_get_local_context_caps_file_list(self, tmp_path, monkeypatch):
+        for index in range(35):
+            (tmp_path / f"f{index:02d}.txt").write_text("x", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
 
-        engine = AIEngine()
-        context = engine._get_local_context()
+        context = AIEngine()._get_local_context()
 
-        assert context == ""
+        assert "f29.txt" in context
+        assert "f30.txt" not in context
+        assert "and 5 more files" in context
+
+    def test_get_local_context_with_error(self, tmp_path, monkeypatch):
+        """An unreadable folder yields no context instead of an error."""
+        monkeypatch.chdir(tmp_path)
+
+        def denied(self):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr(Path, "iterdir", denied)
+
+        assert AIEngine()._get_local_context() == ""
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")

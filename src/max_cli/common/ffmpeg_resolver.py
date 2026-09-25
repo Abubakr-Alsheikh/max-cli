@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from max_cli.common.atomic import atomic_write_text
 from max_cli.common.archives import safe_extract_tar
 from max_cli.common.exceptions import ResourceNotFoundError
 from max_cli.common.logger import console, log_error, log_success
@@ -220,15 +221,14 @@ class FFmpegResolver:
             return False
 
     def _cache_resolution(self, path: Path) -> None:
-        RESOLUTION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        RESOLUTION_CACHE_FILE.write_text(str(path))
+        atomic_write_text(RESOLUTION_CACHE_FILE, str(path))
 
     @staticmethod
     def get_cached_resolution() -> Optional[Path]:
         if not RESOLUTION_CACHE_FILE.exists():
             return None
 
-        cached_path = Path(RESOLUTION_CACHE_FILE.read_text().strip())
+        cached_path = Path(RESOLUTION_CACHE_FILE.read_text(encoding="utf-8").strip())
         if cached_path.exists():
             resolver = FFmpegResolver()
             if resolver._validate_binary(cached_path):

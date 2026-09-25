@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from max_cli.common.atomic import atomic_write_json
+
 
 class ActivityEntry:
     def __init__(
@@ -71,7 +73,7 @@ class ActivityLog:
     def _save(self) -> None:
         self._ensure_dir()
         data = [e.to_dict() for e in self._entries[: self.MAX_ENTRIES]]
-        self.LOG_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_json(self.LOG_FILE, data)
 
     def start_entry(
         self,

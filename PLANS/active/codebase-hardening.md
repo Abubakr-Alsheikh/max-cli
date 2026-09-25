@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-1 done)
+**Status:** In Progress (Phases 0-2 done)
 **Priority:** P0
 **Updated:** 2026-09-24
 
@@ -90,26 +90,36 @@ Baseline on 2026-09-24:
 
 **Done when:** each row has a regression test that failed before its fix, and pytest, ruff and ratcheted mypy are green.
 
-## Phase 2: Data integrity (M)
+## Phase 2: Data integrity (Completed 2026-09-25, branch `fix/hardening-p2-data-integrity`)
 
-- [ ] Add a `common/atomic.py` helper: `atomic_write_text(path, text)` and `atomic_write_json(path, data)`. They write a temp file in the same directory, `fsync` it, then `Path.replace`. Check `common/` first so this doesn't duplicate an existing helper.
-- [ ] Use the helper for every state file:
-  - `daemon_manager` (queue and history)
-  - `queue_manager`
-  - `common/cache.py`
-  - `common/transaction_log.py:73`
-  - `plugins/manager.py`
-  - `ai_engine` chat history
-- [ ] Pass `encoding="utf-8"` to the 26 text-mode opens the audit lists: `queue_manager.py:148,165,196,206`, `cache.py:36,55,94`, `ffmpeg_resolver.py:220,227`, `plugins/manager.py:63,73`, and others.
-- [ ] Replace the magic history caps (200, 100, 200) with named constants. Phase 3 makes them a single constant.
-- [ ] Replace `os.listdir` and `os.getcwd` in `ai_engine.py:115-118` with pathlib.
-- [ ] Widen `[tool.ruff.lint] select` one family per PR, fixing each family's findings as you go:
+- [x] `common/atomic.py`: `atomic_write_text` and `atomic_write_json`.
+  - They write a temp file next to the target, `fsync` it, then `Path.replace`.
+  - On failure they remove the temp file and keep the original.
+  - JSON is serialized before any file is opened.
+  - Listed in AGENTS.md.
+- [x] Every state and config file now writes atomically (17 writes in 12 files):
+  - Daemon queue and history, grab queue and history, cache, transaction log, plugin config.
+  - AI chat history and export, TUI activity log, ffmpeg path cache, backup sidecars.
+  - `.env` and global config (`interface/config/*`, `config_panel.py`), and the `ai extract` JSON export.
+  - `tests/test_state_files_atomic.py` breaks `Path.replace` mid-save for six stores. It failed on the old code and passes now.
+- [x] Rule hook: a new `atomic-write` rule flags direct `write_text` in `src/`.
+  - The only remaining hit is `pdf_engine` OCR output, which is content, not state.
+  - The uncommitted `download_history.py` will be flagged when edited.
+- [x] utf-8: the audit reports 0 `utf8` violations, down from 23. The rule no longer mistakes `fitz`/PIL/zip/tar/webbrowser `.open()` for text opens.
+- [x] Caps: `GRAB_HISTORY_LIMIT` (grab queue), `HISTORY_LIMIT` (daemon, Phase 1), `MAX_ENTRIES` (activity log). Phase 3 merges the stores.
+- [x] `ai_engine._get_local_context` uses pathlib, catches only `OSError` and names its 30-file cap. Its tests use a real folder instead of patching `os`.
+- [x] Found while working:
+  - AI chat export wrote the working directory into `"exported_at"`; it now writes a timestamp.
+  - Scripted edits on Windows had stored 14 files with CRLF, including README.md from Phase 1. They are LF again, and `.gitattributes` (`* text=auto eol=lf`) enforces it.
+- [ ] Widen `[tool.ruff.lint] select` one family per PR. **Deferred to its own PR:** `I` (import sorting) would rewrite imports in the uncommitted TUI files (`app.py`, `download_panel.py`) and cause merge conflicts. `BLE` alone has 131 findings.
   - `I` (import sorting, auto-fixable)
   - `BLE` (blind excepts)
   - `B`, `UP` (with `FA` for Python 3.9) and `DTZ`
   - The expanded ruff 0.16 defaults flag 784 findings. Those rules stay off for now.
-
-**Done when:** `check_rules.py --audit` reports 0 `utf8` violations and a crash mid-write can't corrupt any JSON state file (tested by patching `replace` to raise).
+- [x] Results:
+  - pytest: 294 → 308.
+  - mypy: 45 (unchanged; old and new dependency sets agree).
+  - Rule audit: 47 → 25.
 
 ## Phase 3: Architecture consolidation (L, needs D1-D4)
 

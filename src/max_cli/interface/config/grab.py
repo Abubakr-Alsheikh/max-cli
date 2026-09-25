@@ -3,6 +3,7 @@ from pathlib import Path
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 
+from max_cli.common.atomic import atomic_write_text
 from max_cli.common.logger import console, log_success, log_error
 from max_cli.config import settings
 
@@ -62,7 +63,7 @@ def configure_grab():
     try:
         lines = []
         if GLOBAL_CONFIG_PATH.exists():
-            lines = GLOBAL_CONFIG_PATH.read_text().splitlines()
+            lines = GLOBAL_CONFIG_PATH.read_text(encoding="utf-8").splitlines()
 
         keys = [
             "GRAB_QUALITY",
@@ -77,7 +78,7 @@ def configure_grab():
         for k, v in current_data.items():
             lines.append(f"{k}={v}")
 
-        GLOBAL_CONFIG_PATH.write_text("\n".join(lines) + "\n")
+        atomic_write_text(GLOBAL_CONFIG_PATH, "\n".join(lines) + "\n")
         log_success("Downloader settings saved!")
 
     except Exception as e:

@@ -38,6 +38,8 @@ TUI_ONLY_PACKAGES = {"textual", "psutil"}
 ENGINE_CLASS_SUFFIXES = ("Engine", "Manager")
 FFMPEG_BINARIES = {"ffmpeg", "ffprobe"}
 TEXT_IO_METHODS = {"read_text", "write_text"}
+# Receivers whose .open() is not a text file open (PDFs, images, archives, URLs).
+NON_TEXT_OPENERS = {"fitz", "Image", "PIL.Image", "zipfile", "tarfile", "webbrowser"}
 SILENT_BODY_TYPES = (ast.Pass, ast.Continue)
 TYPE_IGNORE_BARE = re.compile(r"#\s*type:\s*ignore(\[[^\]]*\])?\s*$")
 REPORT_LIMIT = 25
@@ -192,6 +194,13 @@ class RuleVisitor(ast.NodeVisitor):
 
         if self.scope.is_src:
             self._check_text_encoding(node, func, kwargs)
+            if func.endswith(".write_text"):
+                self.add(
+                    "atomic-write",
+                    node,
+                    "Direct write_text can leave a truncated file on crash. Use "
+                    "atomic_write_text/atomic_write_json from max_cli.common.atomic.",
+                )
             if (
                 func.endswith("extractall")
                 and self.imports_tarfile
@@ -214,6 +223,8 @@ class RuleVisitor(ast.NodeVisitor):
             self.add("utf8", node, f"{method}() without encoding='utf-8'.")
             return
         if func not in ("open", "io.open") and not func.endswith(".open"):
+            return
+        if func.rsplit(".", 1)[0] in NON_TEXT_OPENERS:
             return
         mode_node = kwargs.get("mode")
         positional_mode_index = 1 if func in ("open", "io.open") else 0
