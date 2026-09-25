@@ -34,7 +34,7 @@ jobs:
 
     - name: Test with Pytest
       run: |
-        pytest --cov=max_cli --cov-report=term-missing
+        pytest --cov=max_cli --cov-report=term-missing --cov-fail-under=70
 
   typecheck:
     runs-on: ubuntu-latest

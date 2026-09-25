@@ -143,10 +143,12 @@ class FileOrganizer:
         if not folder.exists() or not folder.is_dir():
             raise ResourceNotFoundError(f"Folder '{folder}' not found.")
 
+        # Sort so every group lists paths in the same order on every OS;
+        # delete_duplicates keeps the first path of each group.
         if recursive:
-            files = [f for f in folder.rglob("*") if f.is_file()]
+            files = sorted(f for f in folder.rglob("*") if f.is_file())
         else:
-            files = [f for f in folder.iterdir() if f.is_file()]
+            files = sorted(f for f in folder.iterdir() if f.is_file())
 
         # Only files that share a size can be duplicates; skip hashing the rest.
         by_size: Dict[int, List[Path]] = {}

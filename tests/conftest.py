@@ -22,6 +22,41 @@ def isolated_task_store(tmp_path_factory, monkeypatch):
     task_manager.reset_task_manager()
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path_factory, monkeypatch):
+    """Point Path.home() and every home-based constant at a temp folder.
+
+    Tests used to write into the real ~/.max_cli (the FFmpeg path cache and
+    the AI categorize cache). Code that calls Path.home() at run time gets
+    the fake home; constants computed at import time are patched here.
+    """
+    from pathlib import Path
+
+    from max_cli.common import cache, ffmpeg_resolver
+    from max_cli.core.engines import audio_engine
+    from max_cli.interface.config import grab, manage, setup
+
+    fake_home = tmp_path_factory.mktemp("home")
+    max_cli_dir = fake_home / ".max_cli"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setattr(ffmpeg_resolver, "MAX_CLI_BIN_DIR", max_cli_dir / "bin")
+    monkeypatch.setattr(
+        ffmpeg_resolver,
+        "RESOLUTION_CACHE_FILE",
+        max_cli_dir / ".ffmpeg_resolved_path",
+    )
+    monkeypatch.setattr(audio_engine, "RNNOISE_MODEL_DIR", max_cli_dir / "rnnoise")
+    for config_module in (grab, manage, setup):
+        monkeypatch.setattr(
+            config_module, "GLOBAL_CONFIG_PATH", fake_home / ".max_config.env"
+        )
+    monkeypatch.setattr(cache, "_default_cache", None)
+    yield fake_home
+    monkeypatch.setattr(cache, "_default_cache", None)
+
+
 @pytest.fixture
 def temp_directory(tmp_path):
     """Provides a temporary directory for file operations."""
