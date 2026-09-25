@@ -26,6 +26,13 @@ Each user turns on only the features they want, like image tools or media downlo
   - (b) Install on demand: a feature's heavy dependencies install when you turn it on (the plugin plan). Smaller installs, more moving parts.
 - [ ] A `features` setting (for example in `~/.max_cli/features.json`) read by the registry and the dashboard sidebar.
 - [ ] A `max features` command and a dashboard settings page to turn features on and off. It shows what each one needs, such as FFmpeg or an API key.
+- [ ] **Select menus in the CLI (maintainer, 2026-09-26).** `max features` opens an interactive checklist where you move with the arrow keys, press space to toggle and Enter to save, so you don't type feature names. Flags such as `max features enable images` still work for scripts.
+- [ ] **The same for config.** `max config setup` shows a select menu of what to set up (AI provider and key, download defaults, FFmpeg, image quality, ...), and walks through only what you pick. Choices inside each step (quality, provider, audio or video) are select menus too.
+- [ ] Pick the menu library. Candidates:
+  - `questionary` or `InquirerPy`: small, made for this.
+  - A Rich-based helper of our own.
+  - Textual inline mode.
+  A new dependency needs the maintainer's approval (AGENTS.md). Whichever it is, it must fall back to plain prompts or flags when there's no interactive terminal.
 - [ ] Decide the default for new users: a small core set (files, images?) or everything on.
 - [ ] Hidden features stay reachable: `max <group> ...` could say "feature X is off; turn it on with `max features enable X`".
 

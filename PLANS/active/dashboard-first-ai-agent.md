@@ -59,11 +59,18 @@ Max started as a personal tool, and its commands are long and hard to remember f
 - [ ] Undo: every file change goes through the transaction log, so "undo that" works.
 - [ ] Progress through the event system, so the CLI and the Chat panel both show live steps.
 - [ ] The dashboard Chat panel and `max <text>` run the same agent.
+- [ ] **Load commands on demand (maintainer, 2026-09-26).** Don't put the whole command catalog in the context window.
+  - At the start, the agent sees only the parent command groups, each with a one-line description (`video`, `pdf`, `grab`, ...).
+  - When a request needs a group, the agent calls a lookup tool (for example `load_group("video")`). That tool returns the group's child commands with their parameters, defaults and usage notes, and only then does the agent call them.
+  - The agent sees only the groups for features the user turned on (see `feature-packs.md`).
+  - Loaded groups stay available for the rest of the conversation, so they aren't fetched twice.
+  - Measure the token cost per request, and add a test that the first prompt holds only the group list.
+  - Goal: an efficient agent that uses a small context, picks the right command, and gets the work done.
 - [ ] Guardrails: path limits, a step limit, cost and token limits, a dry-run mode.
 - [ ] Replace `ai ask`'s "write one command string" approach, keeping `ai ask` as an alias.
 
 ### Step 5: Onboarding and packaging
-- [ ] A first-run wizard covering the API key (optional), FFmpeg and the download folder, with sensible defaults.
+- [ ] A first-run wizard covering the API key (optional), FFmpeg and the download folder, with sensible defaults. It uses the arrow-key select menus from `feature-packs.md`, so you pick which settings to set up instead of typing answers.
 - [ ] Friendlier errors: "did you mean ...", plus a next step in every message.
 - [ ] Distribution for non-technical users, for example a Windows installer or a single executable. Research needed.
 
