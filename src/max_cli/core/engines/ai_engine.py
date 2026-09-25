@@ -10,6 +10,8 @@ from max_cli.common.cache import get_default_cache
 
 LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
 IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 60
+# Text formats semantic_search can read; other files are skipped.
+SEARCHABLE_SUFFIXES = {".txt", ".md", ".py", ".json", ".yaml", ".yml"}
 DOWNLOAD_CHUNK_SIZE = 8192
 
 logger = logging.getLogger(__name__)
@@ -538,21 +540,11 @@ If the request is unrelated to the tools or ambiguous, return:
         )
         for file_path in files:
             try:
-                if file_path.suffix.lower() in [
-                    ".txt",
-                    ".md",
-                    ".py",
-                    ".json",
-                    ".yaml",
-                    ".yml",
-                ]:
-                    file_content = file_path.read_text(
-                        encoding="utf-8", errors="ignore"
-                    )[:5000]
-                elif file_path.suffix.lower() == ".pdf":
+                if file_path.suffix.lower() not in SEARCHABLE_SUFFIXES:
                     continue
-                else:
-                    continue
+                file_content = file_path.read_text(
+                    encoding="utf-8", errors="ignore"
+                )[:5000]
 
                 prompt = f"""Search Query: {query}
 

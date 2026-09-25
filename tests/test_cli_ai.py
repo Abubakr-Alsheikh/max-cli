@@ -460,3 +460,20 @@ class TestExtract:
         assert result.exit_code == 0
         assert result.exception is None
         assert "Extraction failed: AI Client not configured." in _plain(result)
+
+
+def test_search_warns_about_extensions_it_cannot_read(tmp_path: Path) -> None:
+    """--ext pdf used to be accepted and then skipped without a word."""
+    (tmp_path / "notes.txt").write_text("hello", encoding="utf-8")
+    (tmp_path / "paper.pdf").write_bytes(b"%PDF")
+    engine = MagicMock()
+    engine.semantic_search.return_value = []
+    with patch(ENGINE_PATH, return_value=engine):
+        result = runner.invoke(
+            ai_app, ["search", "hello", str(tmp_path), "--ext", "txt,pdf"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "Skipping pdf" in _plain(result)
+    searched = engine.semantic_search.call_args.args[1]
+    assert [p.name for p in searched] == ["notes.txt"]
