@@ -195,16 +195,6 @@ class NetworkEngine:
             get_emitter,
         )
 
-        if not self.has_js:
-            from max_cli.common.logger import console
-
-            console.print(
-                "[yellow]⚠️ Warning: No JavaScript runtime (Node.js/Deno) found.[/yellow]"
-            )
-            console.print(
-                "[dim]YouTube downloads may be limited or fail. Install Deno: winget install DenoLand.Deno[/dim]\n"
-            )
-
         q = quality.lower()[0]
 
         quality_info = self.get_quality_info(quality, custom_height)

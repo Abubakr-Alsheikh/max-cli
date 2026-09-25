@@ -395,6 +395,14 @@ def _download_immediate(
     console.print(
         f"[cyan]Grabbing {'Audio' if audio_only else 'Video'} ({quality_display})...[/cyan]"
     )
+    if not _get_engine().has_js:
+        console.print(
+            "[yellow]Warning: No JavaScript runtime (Node.js/Deno) found.[/yellow]"
+        )
+        console.print(
+            "[dim]YouTube downloads may be limited or fail. "
+            "Install Deno: winget install DenoLand.Deno[/dim]"
+        )
     if subtitles:
         console.print("[dim]Subtitles: Enabled[/dim]")
     if not include_metadata:

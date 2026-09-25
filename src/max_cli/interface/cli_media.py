@@ -552,6 +552,8 @@ def denoise_audio_cmd(
     def _on_progress(event):
         if event.type == EventType.PROGRESS and event.file == target.name:
             progress.update(task_id, completed=event.percentage)
+        elif event.type == EventType.STATUS:
+            progress.update(task_id, description=event.message)
 
     emitter.subscribe(_on_progress)
 

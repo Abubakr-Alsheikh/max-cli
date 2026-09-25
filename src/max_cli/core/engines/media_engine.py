@@ -380,8 +380,6 @@ class MediaEngine:
         import threading
         from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-        from max_cli.common.logger import console
-
         hls_dir = Path(tempfile.gettempdir()) / "max_cli_hls"
         hls_dir.mkdir(parents=True, exist_ok=True)
 
@@ -422,10 +420,6 @@ class MediaEngine:
 
         def run_server():
             server = HTTPServer(("", port), QuietHandler)
-            console.print(
-                f"[cyan]Live preview available at "
-                f"http://localhost:{port}/live.m3u8[/cyan]"
-            )
             server.serve_forever()
 
         thread = threading.Thread(target=run_server, daemon=True)
@@ -878,10 +872,13 @@ class MediaEngine:
 
         RNNOISE_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-        from max_cli.common.logger import console
+        from max_cli.common.events import StatusEvent
 
-        console.print(
-            "[yellow]Downloading speech denoising model (RNNoise)...[/yellow]"
+        get_emitter().emit(
+            StatusEvent(
+                message="Downloading speech denoising model (RNNoise)...",
+                source="media_engine",
+            )
         )
 
         import requests
