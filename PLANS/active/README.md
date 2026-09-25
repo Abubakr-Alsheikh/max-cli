@@ -7,7 +7,7 @@ Place new plan files here.
 ### Phase 0: Hardening (Do First)
 | Plan | Status | Priority |
 |------|--------|----------|
-| [codebase-hardening.md](./codebase-hardening.md) | In Progress (Phases 0-3 done, D5 open) | P0 |
+| [codebase-hardening.md](./codebase-hardening.md) | In Progress (Phases 0-4 done, D5 open) | P0 |
 
 ### Phase 3: Dashboard UX (In Progress)
 | Plan | Status |

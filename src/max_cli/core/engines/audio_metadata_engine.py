@@ -8,6 +8,15 @@ if TYPE_CHECKING:
 SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
 
 
+def find_audio_files(folder: Path) -> List[Path]:
+    """Supported audio files directly inside `folder`, sorted by name."""
+    return sorted(
+        path
+        for path in folder.iterdir()
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
+
+
 class AudioMetadataEngine:
     """
     Engine for reading, writing, and clearing audio file metadata.

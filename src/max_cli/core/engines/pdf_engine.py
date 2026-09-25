@@ -2,6 +2,23 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 
+def find_pdfs(folder: Path) -> List[Path]:
+    """PDFs directly inside `folder`, in natural order ("2" before "10").
+
+    Skips names starting with "." or "_", which are hidden or temp files.
+    """
+    from max_cli.common.utils import natural_sort_key
+
+    pdfs = [
+        path
+        for path in folder.iterdir()
+        if path.is_file()
+        and path.suffix.lower() == ".pdf"
+        and not path.name.startswith((".", "_"))
+    ]
+    return sorted(pdfs, key=lambda path: natural_sort_key(path.name))
+
+
 class PDFEngine:
     """
     Core logic for PDF manipulation using PyMuPDF and Pillow.

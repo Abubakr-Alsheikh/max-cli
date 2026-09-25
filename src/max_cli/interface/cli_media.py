@@ -1,11 +1,24 @@
 import typer
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from max_cli.common.events import EventType, get_emitter
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.core.presets import (
+    AUDIO_CONVERT_BITRATES,
+    CONCAT_METHODS,
+    DEFAULT_AUDIO_CONVERT_QUALITY,
+    DEFAULT_CONCAT_METHOD,
+    DEFAULT_VIDEO_LEVEL,
+    DEFAULT_VIDEO_PRESET,
+    DEFAULT_VIDEO_TO_AUDIO_QUALITY,
+    VIDEO_TO_AUDIO_BITRATES,
+    bitrate_for_quality,
+    crf_for_level,
+    sibling_path,
+)
 from max_cli.common.utils import format_size
 
 app = typer.Typer()
@@ -28,7 +41,7 @@ def compress_video(
     target: Path = typer.Argument(..., help="Video file to compress."),
     output: Optional[Path] = typer.Option(None, "-o", help="Output path."),
     level: str = typer.Option(
-        "balanced", help="Quality: high, balanced, max (smaller size)."
+        DEFAULT_VIDEO_LEVEL, help="Quality: high, balanced, max (smaller size)."
     ),
     queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue"),
 ):
@@ -37,11 +50,7 @@ def compress_video(
     """
     _get_engine()
 
-    crf_map = {
-        "high": 23,
-        "balanced": 28,
-        "max": 35,
-    }
+    crf = crf_for_level(level)
 
     if queue:
         from max_cli.core.engines.task_manager import get_task_manager
@@ -49,16 +58,16 @@ def compress_video(
 
         dm = get_task_manager()
         if not output:
-            output = target.parent / f"{target.stem}_compressed.mp4"
+            output = sibling_path(target, "_compressed", "mp4")
         task = TaskItem(
             type=TaskType.VIDEO_COMPRESS,
             title=f"Compress {target.name}",
-            description=f"CRF={crf_map.get(level.lower(), 28)}, preset=medium",
+            description=f"CRF={crf}, preset={DEFAULT_VIDEO_PRESET}",
             payload={
                 "input_path": str(target),
                 "output_path": str(output),
-                "crf": crf_map.get(level.lower(), 28),
-                "preset": "medium",
+                "crf": crf,
+                "preset": DEFAULT_VIDEO_PRESET,
             },
         )
         dm.add(task)
@@ -67,9 +76,7 @@ def compress_video(
         return
 
     if not output:
-        output = target.parent / f"{target.stem}_compressed.mp4"
-
-    crf = crf_map.get(level.lower(), 28)
+        output = sibling_path(target, "_compressed", "mp4")
 
     console.print(
         f"[cyan]Compressing video (Level: {level})... This may take time.[/cyan]"
@@ -78,7 +85,7 @@ def compress_video(
     with console.status("[bold green]Encoding... (CPU working hard)[/bold green]"):
         try:
             eng = _get_engine()
-            eng.compress_video(target, output, crf=crf)
+            eng.compress_video(target, output, crf=crf, preset=DEFAULT_VIDEO_PRESET)
 
             orig_size = target.stat().st_size
             new_size = output.stat().st_size
@@ -126,7 +133,7 @@ def video_to_audio(
         "mp3", "--format", "-f", help="Target audio format: mp3, wav, flac, aac."
     ),
     quality: str = typer.Option(
-        "h",
+        DEFAULT_VIDEO_TO_AUDIO_QUALITY,
         "--quality",
         "-q",
         help="Quality: [s]mall (96k), [m]edium (128k), [h]igh (192k), [x]treme (320k).",
@@ -143,8 +150,9 @@ def video_to_audio(
         raise typer.Exit(1)
 
     # Resolve Bitrate
-    bitrate_map = {"s": "96k", "m": "128k", "h": "192k", "x": "320k"}
-    bitrate = bitrate_map.get(quality.lower()[0], "192k")
+    bitrate = bitrate_for_quality(
+        VIDEO_TO_AUDIO_BITRATES, quality, DEFAULT_VIDEO_TO_AUDIO_QUALITY
+    )
 
     # Resolve Output Path
     target_ext = f".{format.lower().lstrip('.')}"
@@ -312,7 +320,10 @@ def concat_videos(
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
     method: str = typer.Option(
-        "fast", "--method", "-m", help="Method: fast (stream copy) or safe (re-encode)."
+        DEFAULT_CONCAT_METHOD,
+        "--method",
+        "-m",
+        help="Method: fast (stream copy) or safe (re-encode).",
     ),
 ):
     """
@@ -322,27 +333,12 @@ def concat_videos(
     """
     _get_engine()
 
-    input_files: List[Path] = []
+    from max_cli.core.engines.video_engine import resolve_concat_inputs
 
-    if "*" in target.name or "?" in target.name:
-        parent = target.parent if target.parent != Path(".") else Path.cwd()
-        pattern = target.name
-        input_files = sorted(parent.glob(pattern))
-        if not input_files:
-            log_error(f"No files found matching pattern: {pattern}")
-            raise typer.Exit(1)
-    elif target.is_file() and target.suffix == ".txt":
-        with open(target, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("file "):
-                    line = line[5:].strip().strip("'\"")
-                if line:
-                    input_files.append(Path(line))
-    else:
-        log_error(
-            "Provide either a .txt file with file paths or a glob pattern (e.g., *.mp4)"
-        )
+    try:
+        input_files = resolve_concat_inputs(target)
+    except ValueError as e:
+        log_error(str(e))
         raise typer.Exit(1)
 
     if not output:
@@ -354,7 +350,7 @@ def concat_videos(
 
     with console.status("[bold green]Merging videos...[/bold green]"):
         try:
-            concat_method = "concat" if method == "fast" else "filter"
+            concat_method = CONCAT_METHODS.get(method, CONCAT_METHODS["safe"])
             eng = _get_engine()
             eng.concatenate_videos(input_files, output, method=concat_method)
             log_success(f"Videos merged: {output}")
@@ -580,7 +576,10 @@ def convert_audio_cmd(
         "mp3", "--format", "-f", help="Target format: mp3, aac, flac, wav, ogg."
     ),
     quality: str = typer.Option(
-        "h", "--quality", "-q", help="Quality: s (128k), m (192k), h (320k)."
+        DEFAULT_AUDIO_CONVERT_QUALITY,
+        "--quality",
+        "-q",
+        help="Quality: s (128k), m (192k), h (320k).",
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
 ):
@@ -589,8 +588,9 @@ def convert_audio_cmd(
     """
     _get_engine()
 
-    bitrate_map = {"s": "128k", "m": "192k", "h": "320k"}
-    bitrate = bitrate_map.get(quality.lower()[0], "192k")
+    bitrate = bitrate_for_quality(
+        AUDIO_CONVERT_BITRATES, quality, DEFAULT_AUDIO_CONVERT_QUALITY
+    )
 
     target_ext = f".{format.lower().lstrip('.')}"
     if not output:

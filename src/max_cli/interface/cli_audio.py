@@ -6,6 +6,13 @@ from rich.table import Table
 
 from max_cli.common.events import EventType, get_emitter
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.core.presets import (
+    AUDIO_COMPRESS_BITRATES,
+    DEFAULT_AUDIO_COMPRESS_QUALITY,
+    DEFAULT_AUDIO_ORGANIZE_PATTERN,
+    bitrate_for_quality,
+    sibling_path,
+)
 from max_cli.common.utils import format_size
 
 app = typer.Typer()
@@ -58,11 +65,12 @@ def compress_audio(
         log_error(f"File not found: {target}")
         raise typer.Exit(1)
 
-    bitrate_map = {"s": "64k", "m": "96k", "h": "128k", "x": "192k"}
-    bitrate = bitrate_map.get(quality.lower()[0], "128k")
+    bitrate = bitrate_for_quality(
+        AUDIO_COMPRESS_BITRATES, quality, DEFAULT_AUDIO_COMPRESS_QUALITY
+    )
 
     if not output:
-        output = target.parent / f"{target.stem}_compressed.mp3"
+        output = sibling_path(target, "_compressed", "mp3")
 
     console.print(
         f"[cyan]Compressing audio ({bitrate}, {'mono' if mono else 'stereo'})...[/cyan]"
@@ -362,7 +370,7 @@ def organize_files(
         None, "-o", "--output", help="Target directory (default: same as source)."
     ),
     pattern: str = typer.Option(
-        "artist",
+        DEFAULT_AUDIO_ORGANIZE_PATTERN,
         "--pattern",
         "-p",
         help="Folder structure: artist, album, genre, artist-album, contributing-artists.",

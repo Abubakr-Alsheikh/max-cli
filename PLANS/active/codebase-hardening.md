@@ -1,6 +1,6 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-3 done, startup target open)
+**Status:** In Progress (Phases 0-4 done, D5 open)
 **Priority:** P0
 **Updated:** 2026-09-25
 
@@ -174,11 +174,24 @@ Baseline on 2026-09-24:
   - Option C: raise the target to what's reachable now (about 450 ms) and keep the 1.0 s ceiling.
   - Recommendation: A, as its own small phase before the plugin migration, which needs lazy groups anyway.
 
-## Phase 4: TUI single source of truth (M)
+## Phase 4: TUI single source of truth (Completed 2026-09-25, branch `refactor/hardening-p4-presets`)
 
-- [ ] Create a `core/presets.py` module (or constants on the engines) for the CRF levels, bitrate maps and other defaults the CLI and TUI share. Today they disagree: the TUI's "max" level is CRF 32 and the CLI's is 35, and the audio bitrate maps differ.
-- [ ] `interface/tui/command_executor.py`: import the presets, and move the path derivation and globbing out of `_map_engine_params` (136-308) into engine methods, so that function only maps fields.
-- [ ] Add a drift test that asserts the TUI defaults equal the CLI defaults for every shared command.
+- [x] `core/presets.py` holds the CRF levels, the three audio bitrate maps, the concat methods, the PDF compress defaults, the image strip default, the audio organize pattern, and `sibling_path` for output names. The CLI values won every conflict.
+- [x] `command_executor._map_engine_params` only maps field names now.
+  - Value conversions live in a `_VALUE_CONVERTERS` table.
+  - Output names come from `presets.sibling_path`.
+  - Folder listing moved to the engines: `pdf_engine.find_pdfs` (natural order, skips `.`/`_` files), `audio_metadata_engine.find_audio_files` and `video_engine.resolve_concat_inputs`.
+- [x] `tests/interface/tui/test_preset_drift.py` compares every TUI field default with the CLI option of the same name. Two deliberate differences: `dry_run=True` in the dashboard's file commands, which preview before moving files, and the dashboard's `artist-album` organize pattern, which the maintainer chose after a problem with plain `artist` (`presets.TUI_AUDIO_ORGANIZE_PATTERN`).
+- [x] Found while working:
+  - The TUI concat command passed `target=` to `concatenate_videos`, which takes a list, so it always failed. It now takes a glob or a `.txt` list, like the CLI.
+  - TUI defaults that changed to match the CLI:
+    - Video "max" level: CRF 32 to 35.
+    - Extract-audio quality: `m` to `h`. The bitrates also changed, for example `s` from 128k to 96k.
+    - PDF compress quality: 75 to 80.
+    - Image compress: quality now follows `DEFAULT_QUALITY` in settings (it was fixed at 85), and metadata stripping is on.
+    - Video compress preset: `medium` at every level, as in the CLI (it was fast/medium/slow).
+
+**Result:** pytest 405 passed, 1 skipped, 1 xfailed. mypy 41 (unchanged). Rule audit 6 (unchanged).
 
 ## Phase 5: Test coverage (L, can run alongside Phases 2-4)
 
@@ -216,6 +229,7 @@ Baseline on 2026-09-24:
   - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
   - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
+- 2026-09-25: Phase 4. Where the CLI and TUI disagreed, the CLI value became the preset, because CLI users see those values in `--help` and the docs.
 - 2026-09-25: Phase 3.
   - The maintainer answered D1 (merge all stores, including the WIP history), D3 (option A) and D4 (keep 200 ms, dataclasses).
   - The dataclass switch alone didn't reach 200 ms: pydantic still loads through `max_cli.config`. Recorded as D5 instead of widening Phase 3.
