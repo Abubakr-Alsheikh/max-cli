@@ -3,7 +3,6 @@ import subprocess
 import shlex
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
-from rich.markdown import Markdown
 from pathlib import Path
 from typing import Optional
 
@@ -118,6 +117,8 @@ def analyze_image(
 
     with console.status("[bold magenta]Analyzing Vision Data...[/bold magenta]"):
         try:
+            from rich.markdown import Markdown
+
             eng = _get_engine()
             result_text = eng.analyze_image_content(target, prompt)
 
