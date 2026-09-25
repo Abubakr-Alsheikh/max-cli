@@ -164,7 +164,7 @@ class TestValidate:
         assert result.exit_code == 0, result.output
         output = _plain(result)
         assert "Configuration Validation" in output
-        assert "MAX_WORKERS" in output
+        assert output.count("MAX_WORKERS") == 1  # the row used to appear twice
 
 
 class TestExportImport:
