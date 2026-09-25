@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Optional, Callable, Union
 from collections.abc import Generator
 from datetime import datetime
-from pydantic import BaseModel, Field
+from dataclasses import dataclass, field
 import logging
 import threading
 import queue
@@ -30,12 +30,14 @@ class EventLevel(str, Enum):
     SUCCESS = "success"
 
 
-class BaseEvent(BaseModel):
+@dataclass
+class BaseEvent:
     type: EventType
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=datetime.now)
     source: str = ""
 
 
+@dataclass
 class ProgressEvent(BaseEvent):
     type: EventType = EventType.PROGRESS
     file: str = ""
@@ -44,9 +46,10 @@ class ProgressEvent(BaseEvent):
     percentage: float = 0.0
     speed: str = ""
     eta: str = ""
-    extra: dict[str, Any] = {}
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
 class BatchProgressEvent(BaseEvent):
     type: EventType = EventType.BATCH_PROGRESS
     current: int = 0
@@ -55,18 +58,21 @@ class BatchProgressEvent(BaseEvent):
     description: str = ""
 
 
+@dataclass
 class FileStartEvent(BaseEvent):
     type: EventType = EventType.FILE_START
     file: str = ""
     action: str = ""
 
 
+@dataclass
 class FileCompleteEvent(BaseEvent):
     type: EventType = EventType.FILE_COMPLETE
     file: str = ""
-    result: dict[str, Any] = {}
+    result: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
 class FileErrorEvent(BaseEvent):
     type: EventType = EventType.FILE_ERROR
     file: str = ""
@@ -74,23 +80,27 @@ class FileErrorEvent(BaseEvent):
     level: EventLevel = EventLevel.ERROR
 
 
+@dataclass
 class StatusEvent(BaseEvent):
     type: EventType = EventType.STATUS
     message: str = ""
     level: EventLevel = EventLevel.INFO
 
 
+@dataclass
 class LogEvent(BaseEvent):
     type: EventType = EventType.LOG
     message: str = ""
     level: EventLevel = EventLevel.INFO
 
 
+@dataclass
 class CompleteEvent(BaseEvent):
     type: EventType = EventType.COMPLETE
-    summary: dict[str, Any] = {}
+    summary: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
 class DownloadProgressEvent(BaseEvent):
     type: EventType = EventType.DOWNLOAD_PROGRESS
     url: str = ""
@@ -102,6 +112,7 @@ class DownloadProgressEvent(BaseEvent):
     percentage: float = 0.0
 
 
+@dataclass
 class DownloadCompleteEvent(BaseEvent):
     type: EventType = EventType.DOWNLOAD_COMPLETE
     url: str = ""

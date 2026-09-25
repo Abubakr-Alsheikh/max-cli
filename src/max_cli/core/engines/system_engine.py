@@ -1,5 +1,4 @@
-import segno
-import pyperclip
+import io
 from pathlib import Path
 
 
@@ -8,15 +7,16 @@ class SystemEngine:
     Handles System interactions: Clipboard and QR generation.
     """
 
-    def generate_qr(self, data: str) -> None:
+    def generate_qr(self, data: str) -> str:
         """
-        Generates a compact ASCII QR code and prints it directly to stdout.
+        Renders a compact text QR code for terminal display and returns it.
         """
-        qr = segno.make(data)
+        import segno
+
+        qr_text = io.StringIO()
         # 'compact=True' makes it render nicely in most terminals (black/white blocks)
-        print("")  # Add spacing
-        qr.terminal(compact=True)
-        print("")
+        segno.make(data).terminal(out=qr_text, compact=True)
+        return qr_text.getvalue()
 
     def save_clipboard_image(self, output_path: Path) -> None:
         """
@@ -41,6 +41,8 @@ class SystemEngine:
         """
         Reads a text file and copies its content to the system clipboard.
         """
+        import pyperclip
+
         if not input_path.exists():
             raise FileNotFoundError(f"File not found: {input_path}")
 
@@ -52,5 +54,5 @@ class SystemEngine:
             raise ValueError(
                 "File appears to be binary (not text). Cannot copy to clipboard."
             )
-        except Exception as e:
+        except pyperclip.PyperclipException as e:
             raise RuntimeError(f"Clipboard error: {e}")

@@ -1,4 +1,6 @@
 import logging
+import subprocess
+import sys
 import threading
 
 from max_cli.common.events import (
@@ -10,6 +12,7 @@ from max_cli.common.events import (
     BatchProgressEvent,
     FileErrorEvent,
     CompleteEvent,
+    ProgressEvent,
     get_emitter,
     reset_emitter,
 )
@@ -258,3 +261,22 @@ class TestEmitterRobustness:
             emitter.emit(StatusEvent(message=str(index)))
 
         assert emitter.get_queue().get_nowait().message == "1"
+
+
+def test_events_module_does_not_import_pydantic():
+    """Event models are dataclasses; pydantic cost ~150 ms at startup (D4)."""
+    probe = (
+        "import sys\n"
+        "import max_cli.common.events\n"
+        "print('pydantic' in sys.modules)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False"
+
+
+def test_event_mutable_defaults_are_not_shared():
+    first, second = ProgressEvent(), ProgressEvent()
+    first.extra["key"] = "value"
+    assert second.extra == {}

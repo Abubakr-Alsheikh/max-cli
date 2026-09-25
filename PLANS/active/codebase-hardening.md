@@ -1,8 +1,8 @@
 # Plan: Codebase Hardening
 
-**Status:** In Progress (Phases 0-2 done)
+**Status:** In Progress (Phases 0-3 done, startup target open)
 **Priority:** P0
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 
 ## Goal
 
@@ -24,17 +24,17 @@ Baseline on 2026-09-24:
 
 ## Decisions needed before Phase 3
 
-- [ ] **D1. One queue and history store.**
+- [x] **D1. One queue and history store.** Decided 2026-09-25: yes to both, including the WIP `download_history.py` (done in Phase 3).
   - Merge the `max grab` queue (`QueueManager`, `~/.max_cli/grab_history.json`) into `DaemonManager` + `task_queue` (`~/.max_cli/queue/history.json`)?
   - Fold the uncommitted `common/download_history.py` into that store instead of adding a third file?
   - Recommendation: yes to both. Put one persistence helper under `DaemonManager`, and migrate the old files on first load.
 - [x] **D2. Plugin loading from `./plugins`.** Decided 2026-09-24: home directory only. Extra folders come from `"plugin_dirs"` in `~/.max_cli/plugins.json` (implemented in 1.7).
-- [ ] **D3. The "daemon".**
+- [x] **D3. The "daemon".** Decided 2026-09-25: option A (done in Phase 3).
   - It's a `daemon=True` thread that dies when the CLI exits.
   - Option A: rename it to an in-process worker and remove the unused PID and log files.
   - Option B: build a real detached background process.
   - Recommendation: A now, and B as its own plan if it's ever needed.
-- [ ] **D4. Startup target.**
+- [x] **D4. Startup target.** Decided 2026-09-25: keep 200 ms and switch the event models to dataclasses (done). The target is still missed; see Phase 3 results.
   - Is 200 ms still the goal? The biggest single cost is pydantic models in `common/events.py` (about 150 ms).
   - Recommendation: keep the target, and switch the event models to `dataclasses` (Phase 3).
 
@@ -121,29 +121,58 @@ Baseline on 2026-09-24:
   - mypy: 45 (unchanged; old and new dependency sets agree).
   - Rule audit: 47 → 25.
 
-## Phase 3: Architecture consolidation (L, needs D1-D4)
+## Phase 3: Architecture consolidation (Completed 2026-09-25, branch `refactor/hardening-p3-architecture`)
 
-- [ ] **One store.** Per D1, move `max grab` queueing onto `DaemonManager` + `task_queue`, migrate `grab_history.json` and `download_history.json` on first load, then delete `queue_manager.py` and fold `download_history.py` into that store.
-- [ ] **Remove UI from core.** Replace the `console` usage in `daemon_manager.py:9,59,79,258`, `queue_manager.py`, and `media_engine.py:406,850` with events or return values.
-- [ ] **Move the FFmpeg prompt to the interface.** `ffmpeg_resolver` must not call `Confirm.ask`. It takes an `on_confirm` callback that the interface supplies, or raises, and the interface asks.
-- [ ] **Lazy loading.**
-  - Empty `core/engines/__init__.py` of eager engine imports, and register task executors explicitly (not as an import side effect).
-  - Replace the module-level `engine = SystemEngine()` (`cli_tools.py:8`) and `daemon = DaemonManager()` (`cli_queue.py:11`) with `_get_engine()` helpers.
-  - Lazy-load `segno` and `pyperclip` inside `system_engine` methods.
-  - Remove the `print` calls at `system_engine.py:17,19`.
-- [ ] **Startup (D4).** Switch `common/events.py` models from pydantic to `dataclasses`. Target: `import max_cli.main` under 200 ms, enforced by the Phase 0 test.
-- [ ] **Split `media_engine.py` (1090 lines)** by domain: `video_engine.py`, `audio_engine.py` (to-audio, denoise and the rnnoise model), `stream_engine.py` (the HTTP server). Keep a thin `MediaEngine` facade until every caller has moved.
-- [ ] **Move business logic out of the interface.**
-  - `cli_ai.py`: move the image download (186-205, which has no timeout) and the file discovery (327) into engines.
-  - `cli_pdf.py`: move the bundle pipeline (209-253), including its `os.remove` calls, into `PDFEngine`.
-  - `cli_network.py`: move the URL cleaning (36-55) into `NetworkEngine`.
-- [ ] **Narrow the broad catches.** Replace the silent `except Exception` blocks the audit lists with specific exceptions, or log them. Start with `ai_engine.py:57,108,127,249,512`, `network_engine.py:145` and `plugins/manager.py:65`.
+- [x] **One store (D1).**
+  - `max grab`, the TUI download panel and `max queue` share `~/.max_cli/tasks/queue.json` and `history.json`.
+  - `task_migration.py` folds `grab_queue.json`, `grab_history.json` and `download_history.json` in on first load, then renames each to `*.migrated`.
+  - `queue_manager.py` and `common/download_history.py` are gone. `core/engines/download_history.py` is a view over the store.
+  - `get_task_manager()` shares one instance per process, and `refresh()` lets the TUI see other processes' tasks.
+  - The maintainer's WIP download panel was committed first (`d956390`), with a fix: `Worker.State` doesn't exist in Textual 8, so its finished and error handlers crashed.
+- [x] **Rename the daemon (D3).** `DaemonManager` is now `TaskManager` in `task_manager.py`. The unused PID and log files are gone, and the system panel lists recent tasks instead of `daemon.log`.
+- [x] **Remove UI from core.** The audit reports 0 `no-ui-in-core`. Core logs with `logging`, emits a `StatusEvent`, or leaves the message to the interface.
+- [x] **Move the FFmpeg prompt to the interface.** The resolver takes `confirm_download` and `on_progress` callbacks. `interface/ffmpeg_prompt.py` supplies them, and without them the resolver raises.
+- [x] **Lazy loading.**
+  - `core/engines/__init__.py` is empty. `task_queue.EXECUTOR_MODULES` maps each task type to its module, and `get_executor` imports it on first use.
+  - `cli_tools` and `cli_queue` use `_get_engine()`.
+  - `segno` and `pyperclip` load inside `SystemEngine`, and `generate_qr` returns text instead of printing.
+- [x] **Startup (D4).** The event models are dataclasses, and `cli_ai` loads `rich.markdown` lazily. See the results for the remaining gap.
+- [x] **Split `media_engine.py`** into `ffmpeg_base.py`, `video_engine.py`, `audio_engine.py` and `stream_engine.py`. `MediaEngine` inherits all three and keeps the executors.
+- [x] **Move business logic out of the interface.**
+  - `PDFEngine.bundle_pdfs` runs the bundle pipeline, and cleans up its temp file on every path.
+  - `ai_engine.download_image` has a 60 s timeout and never leaves a partial file. `find_searchable_files` does the search file discovery.
+  - `network_engine.strip_playlist_params` cleans URLs.
+- [x] **Narrow the broad catches.** The audit reports 0 silent `except Exception`. Two of them hid bugs:
+  - The `max grab` playlist prompt: answering "n" didn't cancel, because the catch swallowed `typer.Exit`.
+  - The TUI system panel "Confirm?" buttons never reset, because of a `##btn-...` selector.
+- [x] Found while working:
+  - Tests now use a temporary task store through an autouse fixture, so they never touch `~/.max_cli`.
+  - The download executor passes the playlist options and reports the downloaded files, their size and the video title.
+  - `scripts/mypy_baseline.py --update` wrote CRLF on Windows; it writes LF now.
 
 **Done when:**
-- `import max_cli.main` takes under 200 ms.
-- The audit shows 0 `no-ui-in-core`, `lazy-import`, `engine-at-import` and `no-print-in-core` violations.
-- One history file exists.
-- Every existing CLI command still passes its tests.
+- [ ] `import max_cli.main` takes under 200 ms. **Not met: about 430 ms** (down from 550 ms). See the results.
+- [x] The audit shows 0 `no-ui-in-core`, `lazy-import`, `engine-at-import` and `no-print-in-core` violations.
+- [x] One history file exists.
+- [x] Every existing CLI command still passes its tests.
+
+**Result:**
+- pytest: 357 passed, 1 skipped, 1 xfailed (up from 308).
+- mypy: 41 errors, down from 45.
+- Rule audit: 25 violations down to 6 (type-ignore-reason 5, atomic-write 1).
+- Startup: about 430 ms on the dev machine, measured the same way as `tests/test_startup_time.py`.
+  - typer costs about 85 ms.
+  - `max_cli.config` costs about 270 ms, most of it pydantic-settings.
+  - `cli_images` and `cli_network` read `settings` for option defaults at import time, so config loads during command registration.
+  - Reaching 200 ms needs one of two changes, and the maintainer has to choose (**D5** below).
+
+## Decisions needed before closing the startup target
+
+- [ ] **D5. How to reach 200 ms.**
+  - Option A: lazy command groups. `max --help` lists the groups without importing them, and each group's module (and `settings`) loads only when you run it. This is the bigger change, and it also speeds up every command.
+  - Option B: replace pydantic-settings with a small dataclass plus `.env` loader. This loses pydantic's field validation, and `config_panel` reads `Settings.model_fields`.
+  - Option C: raise the target to what's reachable now (about 450 ms) and keep the 1.0 s ceiling.
+  - Recommendation: A, as its own small phase before the plugin migration, which needs lazy groups anyway.
 
 ## Phase 4: TUI single source of truth (M)
 
@@ -166,7 +195,7 @@ Baseline on 2026-09-24:
 - [ ] Add `docs/commands/queue.md` and `docs/commands/tools.md`, and register both in the `mkdocs.yml` nav.
 - [ ] `AGENTS.md`:
   - Remove `ToolsPanel`, which doesn't exist, and add `AnalyticsPanel`.
-  - Update the queue/history section after Phase 3.
+  - [x] Update the queue/history section after Phase 3 (done in Phase 3).
 
 ## Out of scope (tracked elsewhere)
 
@@ -187,3 +216,6 @@ Baseline on 2026-09-24:
   - After the mypy cap, typecheck still failed. click 8.5 uses `match`, and mypy targeting 3.9 aborted after one error, which the ratchet misread as progress (fixed in `scripts/mypy_baseline.py`). Second strike: HALT, and the maintainer chose `python_version = 3.10`.
   - `--player-client` is now a `str` Enum, because typer 0.27 rejects `click_type=click.Choice`. Old and new dependency sets now report the same 45 errors.
 - 2026-09-24: CI on PR #1 failed at `ruff check .`. The unpinned `ruff>=0.1.0` pulled 0.16.8, whose expanded default rules flag 784 findings, and `main` fails the same way. Fixed by pinning the rules to the classic defaults (`E4`, `E7`, `E9`, `F`), setting `target-version = "py39"`, and capping ruff at `>=0.14.6,<0.17`.
+- 2026-09-25: Phase 3.
+  - The maintainer answered D1 (merge all stores, including the WIP history), D3 (option A) and D4 (keep 200 ms, dataclasses).
+  - The dataclass switch alone didn't reach 200 ms: pydantic still loads through `max_cli.config`. Recorded as D5 instead of widening Phase 3.

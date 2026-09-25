@@ -1,17 +1,27 @@
 """FFmpeg binary auto-resolution and download module."""
 
+import logging
 import os
 import platform
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from max_cli.common.atomic import atomic_write_text
 from max_cli.common.archives import safe_extract_tar
 from max_cli.common.exceptions import ResourceNotFoundError
-from max_cli.common.logger import console, log_error, log_success
+
+logger = logging.getLogger(__name__)
+
+# Asked before downloading; gets a message and returns True to download.
+ConfirmDownload = Callable[[str], bool]
+# Called while downloading with (bytes so far, total bytes or None).
+DownloadProgress = Callable[[int, Optional[int]], None]
+
+DOWNLOAD_CHUNK_SIZE = 8192
+DOWNLOAD_TIMEOUT_SECONDS = 120
 
 MAX_CLI_BIN_DIR = Path.home() / ".max_cli" / "bin"
 RESOLUTION_CACHE_FILE = Path.home() / ".max_cli" / ".ffmpeg_resolved_path"
@@ -47,7 +57,17 @@ class FFmpegResolver:
     def _get_binary_name(self) -> str:
         return "ffmpeg.exe" if self.system == "Windows" else "ffmpeg"
 
-    def resolve(self, auto_download: bool = True) -> Path:
+    def resolve(
+        self,
+        auto_download: bool = True,
+        confirm_download: Optional[ConfirmDownload] = None,
+        on_progress: Optional[DownloadProgress] = None,
+    ) -> Path:
+        """Find FFmpeg, downloading it when allowed.
+
+        Downloading needs `confirm_download`, which the interface supplies
+        (a prompt). Without it the resolver raises instead of asking.
+        """
         cached = FFmpegResolver.get_cached_resolution()
         if cached:
             return cached
@@ -65,34 +85,34 @@ class FFmpegResolver:
             self.local_path.unlink()
 
         if auto_download:
-            return self._download_and_install()
+            return self._download_and_install(confirm_download, on_progress)
 
         raise ResourceNotFoundError(
             "FFmpeg not found. Install manually or run 'max config setup-ffmpeg'"
         )
 
-    def _download_and_install(self) -> Path:
+    def _download_and_install(
+        self,
+        confirm_download: Optional[ConfirmDownload] = None,
+        on_progress: Optional[DownloadProgress] = None,
+    ) -> Path:
         if self.system not in FFMPEG_DOWNLOADS:
             raise ResourceNotFoundError(
                 f"Unsupported platform for auto-download: {self.system}. "
                 "Please install FFmpeg manually from https://ffmpeg.org/download.html"
             )
 
-        console.print("[yellow]FFmpeg is not installed.[/yellow]")
-        console.print(
-            f"[dim]Max CLI can automatically download a static FFmpeg binary "
-            f"to {self.bin_dir} (~60-100MB).[/dim]"
-        )
-
-        if not console.is_terminal or os.environ.get("MAX_CLI_NON_INTERACTIVE"):
+        if confirm_download is None or os.environ.get("MAX_CLI_NON_INTERACTIVE"):
             raise ResourceNotFoundError(
-                "FFmpeg is required. Install manually or set MAX_CLI_NON_INTERACTIVE=0 "
-                "to enable interactive prompts."
+                "FFmpeg is required. Install it manually or run "
+                "'max config setup-ffmpeg'."
             )
 
-        from rich.prompt import Confirm
-
-        if not Confirm.ask("Download FFmpeg automatically?", default=True):
+        question = (
+            "FFmpeg is not installed. Max CLI can download a static FFmpeg "
+            f"binary to {self.bin_dir} (~60-100MB). Download it now?"
+        )
+        if not confirm_download(question):
             raise ResourceNotFoundError(
                 "FFmpeg download declined. Install manually:\n"
                 "  Windows: https://www.gyan.dev/ffmpeg/builds/\n"
@@ -101,19 +121,20 @@ class FFmpegResolver:
             )
 
         self.bin_dir.mkdir(parents=True, exist_ok=True)
-        console.print(f"[cyan]Downloading FFmpeg for {self.system}...[/cyan]")
 
         try:
             download_info = FFMPEG_DOWNLOADS[self.system]
+            extract_path = download_info.get("extract_path")
             self._download_binary(
-                url=download_info["url"],
+                url=str(download_info["url"]),
                 binary_name=self.binary_name,
-                extract_path=download_info.get("extract_path"),
+                extract_path=str(extract_path) if extract_path else None,
+                on_progress=on_progress,
             )
         except ResourceNotFoundError:
             raise
-        except Exception as e:
-            log_error(f"FFmpeg download failed: {e}")
+        except Exception as e:  # noqa: BLE001 - any failure means "install manually"
+            logger.exception("FFmpeg download failed")
             if self.local_path.exists():
                 self.local_path.unlink()
             raise ResourceNotFoundError(
@@ -131,7 +152,6 @@ class FFmpegResolver:
             os.chmod(self.local_path, 0o755)
 
         self._cache_resolution(self.local_path)
-        log_success(f"FFmpeg installed to {self.local_path}")
         return self.local_path
 
     def _download_binary(
@@ -139,6 +159,7 @@ class FFmpegResolver:
         url: str,
         binary_name: str,
         extract_path: Optional[str] = None,
+        on_progress: Optional[DownloadProgress] = None,
     ) -> None:
         import tarfile
         import zipfile
@@ -147,9 +168,9 @@ class FFmpegResolver:
         headers = {"User-Agent": "MaxCLI/1.0 (FFmpeg Auto-Resolver)"}
         request = Request(url, headers=headers)
 
-        with urlopen(request, timeout=120) as response:
-            total_size = response.getheader("Content-Length")
-            total_size = int(total_size) if total_size else None
+        with urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            content_length = response.getheader("Content-Length")
+            total_size = int(content_length) if content_length else None
 
             with tempfile.NamedTemporaryFile(
                 dir=self.bin_dir,
@@ -157,29 +178,14 @@ class FFmpegResolver:
                 delete=False,
             ) as tmp_file:
                 downloaded = 0
-                chunk_size = 8192
-
                 while True:
-                    chunk = response.read(chunk_size)
+                    chunk = response.read(DOWNLOAD_CHUNK_SIZE)
                     if not chunk:
                         break
                     tmp_file.write(chunk)
                     downloaded += len(chunk)
-
-                    if total_size:
-                        pct = (downloaded / total_size) * 100
-                        console.print(
-                            f"\r[cyan]Downloading... {downloaded / 1024 / 1024:.1f}MB "
-                            f"/ {total_size / 1024 / 1024:.1f}MB ({pct:.0f}%)[/cyan]",
-                            end="",
-                        )
-                    else:
-                        console.print(
-                            f"\r[cyan]Downloading... {downloaded / 1024 / 1024:.1f}MB[/cyan]",
-                            end="",
-                        )
-
-                console.print()
+                    if on_progress:
+                        on_progress(downloaded, total_size)
                 tmp_path = Path(tmp_file.name)
 
         # Path.replace (not rename) so an existing, possibly corrupt binary is
@@ -238,10 +244,18 @@ class FFmpegResolver:
         return None
 
 
-def resolve_ffmpeg(auto_download: bool = True) -> Path:
+def resolve_ffmpeg(
+    auto_download: bool = True,
+    confirm_download: Optional[ConfirmDownload] = None,
+    on_progress: Optional[DownloadProgress] = None,
+) -> Path:
     cached = FFmpegResolver.get_cached_resolution()
     if cached:
         return cached
 
     resolver = FFmpegResolver()
-    return resolver.resolve(auto_download=auto_download)
+    return resolver.resolve(
+        auto_download=auto_download,
+        confirm_download=confirm_download,
+        on_progress=on_progress,
+    )

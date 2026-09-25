@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
-from max_cli.common.logger import console
+from max_cli.core.engines import task_migration
 from max_cli.core.engines.task_queue import (
     TaskItem,
     TaskStatus,
@@ -24,16 +24,23 @@ IDLE_POLL_SECONDS = 2
 BETWEEN_TASKS_SECONDS = 1
 
 
-class DaemonError(MaxError):
+class TaskManagerError(MaxError):
     pass
 
 
-class DaemonManager:
+class TaskManager:
+    """Persistent task queue and history, run by an in-process worker thread.
+
+    The worker is a daemon thread: it stops when the CLI process exits, and
+    pending tasks wait in queue.json until `max queue process` or another
+    command runs them.
+    """
+
     QUEUE_DIR = Path.home() / ".max_cli" / "tasks"
     QUEUE_FILE = QUEUE_DIR / "queue.json"
     HISTORY_FILE = QUEUE_DIR / "history.json"
-    DAEMON_PID_FILE = QUEUE_DIR / "daemon.pid"
-    DAEMON_LOG_FILE = QUEUE_DIR / "daemon.log"
+    # Folder holding the old grab and download stores (see task_migration).
+    LEGACY_DIR = Path.home() / ".max_cli"
 
     def __init__(self):
         self._queue: List[TaskItem] = []
@@ -44,6 +51,7 @@ class DaemonManager:
         self._ensure_dirs()
         self._load_queue()
         self._load_history()
+        self._migrate_legacy_stores()
 
     def _ensure_dirs(self) -> None:
         self.QUEUE_DIR.mkdir(parents=True, exist_ok=True)
@@ -54,7 +62,8 @@ class DaemonManager:
         try:
             data = json.loads(self.QUEUE_FILE.read_text(encoding="utf-8"))
             self._queue = [TaskItem.from_dict(item) for item in data]
-        except Exception:
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring unreadable task queue %s", self.QUEUE_FILE)
             self._queue = []
 
     def _save_queue(self) -> None:
@@ -62,8 +71,8 @@ class DaemonManager:
         try:
             data = [item.to_dict() for item in self._queue]
             atomic_write_json(self.QUEUE_FILE, data, default=str)
-        except Exception as e:
-            console.print(f"[red]Failed to save queue: {e}[/red]")
+        except OSError:
+            logger.exception("Failed to save task queue %s", self.QUEUE_FILE)
 
     def _load_history(self) -> None:
         if not self.HISTORY_FILE.exists():
@@ -71,7 +80,8 @@ class DaemonManager:
         try:
             data = json.loads(self.HISTORY_FILE.read_text(encoding="utf-8"))
             self._history = [TaskItem.from_dict(item) for item in data]
-        except Exception:
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring unreadable task history %s", self.HISTORY_FILE)
             self._history = []
 
     def _save_history(self) -> None:
@@ -79,8 +89,61 @@ class DaemonManager:
         try:
             data = [item.to_dict() for item in self._history]
             atomic_write_json(self.HISTORY_FILE, data, default=str)
-        except Exception as e:
-            console.print(f"[red]Failed to save history: {e}[/red]")
+        except OSError:
+            logger.exception("Failed to save task history %s", self.HISTORY_FILE)
+
+    def refresh(self) -> None:
+        """Reload queue and history from disk to see other processes' changes.
+
+        Skipped while this instance runs a task, because reloading would
+        replace the task object the worker is updating.
+        """
+        with self._lock:
+            if any(item.status == TaskStatus.RUNNING for item in self._queue):
+                return
+            self._queue = []
+            self._history = []
+            self._load_queue()
+            self._load_history()
+
+    def _migrate_legacy_stores(self) -> None:
+        """Fold the old grab and download history files into this store once."""
+        migrated_queue: List[TaskItem] = []
+        migrated_history: List[TaskItem] = []
+        legacy_files = [
+            task_migration.LEGACY_GRAB_QUEUE,
+            task_migration.LEGACY_GRAB_HISTORY,
+            task_migration.LEGACY_DOWNLOAD_HISTORY,
+        ]
+        for file_name in legacy_files:
+            legacy_file = self.LEGACY_DIR / file_name
+            if not legacy_file.exists():
+                continue
+            try:
+                data = json.loads(legacy_file.read_text(encoding="utf-8"))
+                if file_name == task_migration.LEGACY_DOWNLOAD_HISTORY:
+                    migrated_history.extend(
+                        task_migration.convert_download_history(data)
+                    )
+                else:
+                    queued, finished = task_migration.convert_grab_entries(data)
+                    migrated_queue.extend(queued)
+                    migrated_history.extend(finished)
+                legacy_file.replace(
+                    legacy_file.with_name(file_name + task_migration.MIGRATED_SUFFIX)
+                )
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                logger.warning("Could not migrate %s; left it in place", legacy_file)
+        if not migrated_queue and not migrated_history:
+            return
+        with self._lock:
+            known_ids = {task.id for task in self._queue + self._history}
+            self._queue.extend(t for t in migrated_queue if t.id not in known_ids)
+            self._history.extend(t for t in migrated_history if t.id not in known_ids)
+            self._history.sort(key=_finished_at, reverse=True)
+            del self._history[HISTORY_LIMIT:]
+            self._save_queue()
+            self._save_history()
 
     def add(self, task: TaskItem) -> TaskItem:
         with self._lock:
@@ -178,9 +241,23 @@ class DaemonManager:
                 items = [i for i in items if i.status == status]
             return items
 
-    def get_pending(self) -> List[TaskItem]:
+    def record(self, task: TaskItem) -> TaskItem:
+        """Add a task that already finished outside the queue to history."""
         with self._lock:
-            return [i for i in self._queue if i.status == TaskStatus.PENDING]
+            if task.completed_at is None:
+                task.completed_at = datetime.now().isoformat()
+            self._archive(task)
+            self._save_history()
+        return task
+
+    def get_pending(self, task_type: Optional[TaskType] = None) -> List[TaskItem]:
+        with self._lock:
+            return [
+                i
+                for i in self._queue
+                if i.status == TaskStatus.PENDING
+                and (task_type is None or i.type == task_type)
+            ]
 
     def get_history(
         self,
@@ -191,25 +268,40 @@ class DaemonManager:
             items = list(self._history)
             if task_type:
                 items = [i for i in items if i.type == task_type]
-            return items[:limit]
+            return items[:limit] if limit > 0 else items
 
-    def clear(self, status: Optional[TaskStatus] = None) -> int:
-        with self._lock:
+    def clear(
+        self,
+        status: Optional[TaskStatus] = None,
+        task_type: Optional[TaskType] = None,
+    ) -> int:
+        """Remove queued tasks with `status` (default: all but running ones)."""
+
+        def removable(item: TaskItem) -> bool:
+            if task_type is not None and item.type != task_type:
+                return False
             if status:
-                before = len(self._queue)
-                self._queue = [i for i in self._queue if i.status != status]
-                count = before - len(self._queue)
-            else:
-                before = len(self._queue)
-                self._queue = [i for i in self._queue if i.status == TaskStatus.RUNNING]
-                count = before - len(self._queue)
+                return item.status == status
+            return item.status != TaskStatus.RUNNING
+
+        with self._lock:
+            before = len(self._queue)
+            self._queue = [i for i in self._queue if not removable(i)]
+            count = before - len(self._queue)
             self._save_queue()
             return count
 
-    def clear_history(self, limit: Optional[int] = None) -> int:
+    def clear_history(
+        self,
+        limit: Optional[int] = None,
+        task_type: Optional[TaskType] = None,
+    ) -> int:
         with self._lock:
             count = len(self._history)
-            if limit:
+            if task_type is not None:
+                self._history = [i for i in self._history if i.type != task_type]
+                count -= len(self._history)
+            elif limit:
                 self._history = self._history[:limit]
                 count = count - limit
             else:
@@ -217,47 +309,45 @@ class DaemonManager:
             self._save_history()
             return count
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, task_type: Optional[TaskType] = None) -> Dict[str, Any]:
         with self._lock:
-            stats = {
-                "total": len(self._queue),
-                "pending": sum(
-                    1 for i in self._queue if i.status == TaskStatus.PENDING
-                ),
-                "running": sum(
-                    1 for i in self._queue if i.status == TaskStatus.RUNNING
-                ),
-                "paused": sum(1 for i in self._queue if i.status == TaskStatus.PAUSED),
-                "completed": sum(
-                    1 for i in self._queue if i.status == TaskStatus.COMPLETED
-                ),
-                "failed": sum(1 for i in self._queue if i.status == TaskStatus.FAILED),
-                "cancelled": sum(
-                    1 for i in self._queue if i.status == TaskStatus.CANCELLED
-                ),
+            queue = [
+                i for i in self._queue if task_type is None or i.type == task_type
+            ]
+            stats: Dict[str, Any] = {
+                "total": len(queue),
+                "pending": sum(1 for i in queue if i.status == TaskStatus.PENDING),
+                "running": sum(1 for i in queue if i.status == TaskStatus.RUNNING),
+                "paused": sum(1 for i in queue if i.status == TaskStatus.PAUSED),
+                "completed": sum(1 for i in queue if i.status == TaskStatus.COMPLETED),
+                "failed": sum(1 for i in queue if i.status == TaskStatus.FAILED),
+                "cancelled": sum(1 for i in queue if i.status == TaskStatus.CANCELLED),
                 "by_type": {},
             }
-            for item in self._queue:
+            for item in queue:
                 t = item.type.value
                 stats["by_type"][t] = stats["by_type"].get(t, 0) + 1
         return stats
 
-    def start_daemon(self) -> None:
+    def start_worker(self) -> None:
         if self._running:
             return
         self._running = True
         self._worker_thread = threading.Thread(target=self._process_loop, daemon=True)
         self._worker_thread.start()
 
-    def stop_daemon(self) -> None:
+    def stop_worker(self) -> None:
         self._running = False
         if self._worker_thread:
             self._worker_thread.join(timeout=5)
 
-    def process_now(self, max_tasks: int = 0) -> int:
+    def process_now(
+        self, max_tasks: int = 0, task_type: Optional[TaskType] = None
+    ) -> int:
+        """Run pending tasks (optionally of one type) in this thread."""
         processed = 0
         while max_tasks <= 0 or processed < max_tasks:
-            if not self._process_next():
+            if not self._process_next(task_type):
                 break
             processed += 1
         return processed
@@ -269,9 +359,9 @@ class DaemonManager:
             else:
                 time.sleep(IDLE_POLL_SECONDS)
 
-    def _process_next(self) -> bool:
+    def _process_next(self, task_type: Optional[TaskType] = None) -> bool:
         """Run the oldest pending task. Returns False when nothing is pending."""
-        pending = self.get_pending()
+        pending = self.get_pending(task_type)
         if not pending:
             return False
         task = pending[0]
@@ -299,6 +389,8 @@ class DaemonManager:
         with self._lock:
             if task.status != TaskStatus.PENDING:
                 return  # cancelled or paused after it was picked
+            if not any(item is task for item in self._queue):
+                return  # refresh() replaced it; the fresh copy runs instead
             task.status = TaskStatus.RUNNING
             task.started_at = datetime.now().isoformat()
             task.retry_count += 1
@@ -342,3 +434,31 @@ class DaemonManager:
             self._archive(task)
             self._save_queue()
             self._save_history()
+
+
+def _finished_at(task: TaskItem) -> str:
+    return task.completed_at or task.created_at
+
+
+_shared_manager: Optional[TaskManager] = None
+_shared_manager_lock = threading.Lock()
+
+
+def get_task_manager() -> TaskManager:
+    """Return the process-wide TaskManager.
+
+    Share one instance inside a process: two instances each hold their own
+    copy of the queue, and the last one to save overwrites the other's work.
+    """
+    global _shared_manager
+    with _shared_manager_lock:
+        if _shared_manager is None:
+            _shared_manager = TaskManager()
+        return _shared_manager
+
+
+def reset_task_manager() -> None:
+    """Forget the shared instance (tests, or after changing the store paths)."""
+    global _shared_manager
+    with _shared_manager_lock:
+        _shared_manager = None

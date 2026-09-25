@@ -751,11 +751,14 @@ src/max_cli/
 │   │   ├── ai_engine.py
 │   │   ├── file_organizer.py
 │   │   ├── image_processor.py
-│   │   ├── media_engine.py
+│   │   ├── media_engine.py   # Facade over video/audio/stream engines
+│   │   ├── video_engine.py
+│   │   ├── audio_engine.py
+│   │   ├── stream_engine.py
 │   │   ├── network_engine.py
 │   │   ├── pdf_engine.py
-│   │   ├── queue_manager.py
-│   │   └── system_engine.py
+│   │   ├── system_engine.py
+│   │   └── task_manager.py  # Task queue and history (queue, grab, TUI)
 │   └── cli/              # CLI command registration
 │       ├── commands/     # Command modules
 │       ├── plugins.py    # Plugin lifecycle

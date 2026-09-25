@@ -50,7 +50,8 @@ def run_mypy() -> tuple[int, str]:
 def main() -> int:
     error_count, output = run_mypy()
     if "--update" in sys.argv:
-        BASELINE_FILE.write_text(f"{error_count}\n", encoding="utf-8")
+        # Bytes, not write_text: on Windows write_text turns "\n" into CRLF.
+        BASELINE_FILE.write_bytes(f"{error_count}\n".encode("utf-8"))
         print(f"Baseline set to {error_count}.")
         return 0
 

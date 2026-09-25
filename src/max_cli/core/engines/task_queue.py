@@ -1,3 +1,4 @@
+import importlib
 import threading
 from datetime import datetime
 from enum import Enum
@@ -71,6 +72,22 @@ _executor_registry: Dict[TaskType, TaskExecutor] = {}
 _executor_lock = threading.Lock()
 
 
+# Module that registers each task type's executor when imported. get_executor
+# imports it on first use, so engines load only when a task of their type runs.
+EXECUTOR_MODULES: Dict[TaskType, str] = {
+    TaskType.DOWNLOAD: "max_cli.core.engines.network_engine",
+    TaskType.VIDEO_COMPRESS: "max_cli.core.engines.media_engine",
+    TaskType.VIDEO_CONVERT: "max_cli.core.engines.media_engine",
+    TaskType.VIDEO_TO_AUDIO: "max_cli.core.engines.media_engine",
+    TaskType.VIDEO_DENOISE: "max_cli.core.engines.media_engine",
+    TaskType.AUDIO_DENOISE: "max_cli.core.engines.media_engine",
+    TaskType.PDF_MERGE: "max_cli.core.engines.pdf_engine",
+    TaskType.PDF_COMPRESS: "max_cli.core.engines.pdf_engine",
+    TaskType.FILE_ORGANIZE: "max_cli.core.engines.file_organizer",
+    TaskType.FILE_DUPLICATES: "max_cli.core.engines.file_organizer",
+}
+
+
 def register_executor(task_type: TaskType, executor: TaskExecutor) -> None:
     with _executor_lock:
         _executor_registry[task_type] = executor
@@ -78,9 +95,15 @@ def register_executor(task_type: TaskType, executor: TaskExecutor) -> None:
 
 def get_executor(task_type: TaskType) -> Optional[TaskExecutor]:
     with _executor_lock:
-        return _executor_registry.get(task_type)
+        executor = _executor_registry.get(task_type)
+    if executor is None and task_type in EXECUTOR_MODULES:
+        importlib.import_module(EXECUTOR_MODULES[task_type])
+        with _executor_lock:
+            executor = _executor_registry.get(task_type)
+    return executor
 
 
 def list_registered_executors() -> Dict[str, bool]:
     with _executor_lock:
-        return {t.value: t in _executor_registry for t in TaskType}
+        registered = set(_executor_registry)
+    return {t.value: t in registered or t in EXECUTOR_MODULES for t in TaskType}

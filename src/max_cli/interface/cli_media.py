@@ -14,8 +14,9 @@ app = typer.Typer()
 def _get_engine():
     try:
         from max_cli.core.engines.media_engine import MediaEngine
+        from max_cli.interface.ffmpeg_prompt import ffmpeg_prompt_callbacks
 
-        return MediaEngine(auto_resolve=True)
+        return MediaEngine(auto_resolve=True, **ffmpeg_prompt_callbacks())
     except RuntimeError as e:
         log_error(str(e))
         raise typer.Exit(1)
@@ -43,10 +44,10 @@ def compress_video(
     }
 
     if queue:
-        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_manager import get_task_manager
         from max_cli.core.engines.task_queue import TaskItem, TaskType
 
-        dm = DaemonManager()
+        dm = get_task_manager()
         if not output:
             output = target.parent / f"{target.stem}_compressed.mp4"
         task = TaskItem(
@@ -515,10 +516,10 @@ def denoise_audio_cmd(
             strength = "medium"
 
     if queue:
-        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_manager import get_task_manager
         from max_cli.core.engines.task_queue import TaskItem, TaskType
 
-        dm = DaemonManager()
+        dm = get_task_manager()
         task = TaskItem(
             type=TaskType.VIDEO_DENOISE,
             title=f"Denoise {target.name}",
@@ -551,6 +552,8 @@ def denoise_audio_cmd(
     def _on_progress(event):
         if event.type == EventType.PROGRESS and event.file == target.name:
             progress.update(task_id, completed=event.percentage)
+        elif event.type == EventType.STATUS:
+            progress.update(task_id, description=event.message)
 
     emitter.subscribe(_on_progress)
 

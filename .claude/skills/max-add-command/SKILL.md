@@ -33,7 +33,7 @@ Work through these steps in order. Skip a step only when it does not apply, and 
 - Keep command bodies to argument parsing, the engine call, and Rich output (`console`, `log_success`, `log_error`).
 - Wrap the call in `try/except MaxError`, then call `log_error` and `raise typer.Exit(1)`. The user must never see a stack trace.
 - Destructive commands need `Confirm.ask()`, with a `--force/-f` flag to skip it.
-- Long-running commands get a `--queue` flag that enqueues a `TaskItem` through `DaemonManager`.
+- Long-running commands get a `--queue` flag that enqueues a `TaskItem` through `TaskManager`.
 - Show progress with `EventSubscriber` from `max_cli.interface.event_subscriber`. Don't pass Rich objects into core.
 
 ## 4. Registration

@@ -93,23 +93,20 @@ class TestFFmpegResolverTier3:
 
     @patch("shutil.which", return_value=None)
     @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
-    @patch("max_cli.common.ffmpeg_resolver.console")
-    @patch("rich.prompt.Confirm.ask", return_value=True)
     @patch.object(FFmpegResolver, "_download_binary")
     @patch.object(FFmpegResolver, "_validate_binary", return_value=True)
-    @patch("max_cli.common.ffmpeg_resolver.log_success")
     def test_auto_download_flow(
         self,
-        mock_log_success: MagicMock,
         mock_validate: MagicMock,
         mock_download: MagicMock,
-        mock_confirm: MagicMock,
-        mock_console: MagicMock,
         mock_cached: MagicMock,
         mock_which: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        mock_console.is_terminal = True
+        monkeypatch.delenv("MAX_CLI_NON_INTERACTIVE", raising=False)
+        confirm = MagicMock(return_value=True)
+        progress = MagicMock()
 
         def _fake_download(**kwargs: object) -> None:
             (tmp_path / "ffmpeg").touch()
@@ -120,88 +117,86 @@ class TestFFmpegResolverTier3:
             resolver = FFmpegResolver()
             resolver.bin_dir = tmp_path
             resolver.local_path = tmp_path / "ffmpeg"
-            result = resolver.resolve(auto_download=True)
-            mock_confirm.assert_called_once()
-            mock_download.assert_called_once()
+            result = resolver.resolve(
+                auto_download=True, confirm_download=confirm, on_progress=progress
+            )
+            confirm.assert_called_once()
+            assert mock_download.call_args.kwargs["on_progress"] is progress
             assert result == resolver.local_path
 
     @patch("shutil.which", return_value=None)
     @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
-    @patch("max_cli.common.ffmpeg_resolver.console")
-    @patch("rich.prompt.Confirm.ask", return_value=False)
     def test_user_declines_download(
         self,
-        mock_confirm: MagicMock,
-        mock_console: MagicMock,
         mock_cached: MagicMock,
         mock_which: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        mock_console.is_terminal = True
+        monkeypatch.delenv("MAX_CLI_NON_INTERACTIVE", raising=False)
         with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
             resolver = FFmpegResolver()
             resolver.bin_dir = tmp_path
             resolver.local_path = tmp_path / "ffmpeg"
             with pytest.raises(ResourceNotFoundError, match="download declined"):
-                resolver.resolve(auto_download=True)
+                resolver.resolve(
+                    auto_download=True, confirm_download=lambda question: False
+                )
 
     @patch("shutil.which", return_value=None)
     @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
-    @patch("os.environ.get", return_value="1")
-    def test_non_interactive_raises(
+    def test_non_interactive_env_raises_without_asking(
         self,
-        mock_env: MagicMock,
         mock_cached: MagicMock,
         mock_which: MagicMock,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        with patch("max_cli.common.ffmpeg_resolver.console") as mock_console:
-            mock_console.is_terminal = True
-            with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
-                resolver = FFmpegResolver()
-                resolver.bin_dir = tmp_path
-                resolver.local_path = tmp_path / "ffmpeg"
-                with pytest.raises(
-                    ResourceNotFoundError, match="MAX_CLI_NON_INTERACTIVE"
-                ):
-                    resolver.resolve(auto_download=True)
-
-    @patch("shutil.which", return_value=None)
-    @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
-    @patch("max_cli.common.ffmpeg_resolver.console")
-    def test_non_terminal_raises(
-        self,
-        mock_console: MagicMock,
-        mock_cached: MagicMock,
-        mock_which: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        mock_console.is_terminal = False
+        monkeypatch.setenv("MAX_CLI_NON_INTERACTIVE", "1")
+        confirm = MagicMock(return_value=True)
         with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
             resolver = FFmpegResolver()
             resolver.bin_dir = tmp_path
             resolver.local_path = tmp_path / "ffmpeg"
-            with pytest.raises(ResourceNotFoundError, match="MAX_CLI_NON_INTERACTIVE"):
+            with pytest.raises(ResourceNotFoundError, match="setup-ffmpeg"):
+                resolver.resolve(auto_download=True, confirm_download=confirm)
+        confirm.assert_not_called()
+
+    @patch("shutil.which", return_value=None)
+    @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
+    def test_no_confirm_callback_raises(
+        self,
+        mock_cached: MagicMock,
+        mock_which: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Core code never prompts; without an interface callback it raises."""
+        monkeypatch.delenv("MAX_CLI_NON_INTERACTIVE", raising=False)
+        with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
+            resolver = FFmpegResolver()
+            resolver.bin_dir = tmp_path
+            resolver.local_path = tmp_path / "ffmpeg"
+            with pytest.raises(ResourceNotFoundError, match="setup-ffmpeg"):
                 resolver.resolve(auto_download=True)
 
     @patch("shutil.which", return_value=None)
     @patch.object(FFmpegResolver, "get_cached_resolution", return_value=None)
-    @patch("max_cli.common.ffmpeg_resolver.console")
     def test_unsupported_platform_raises(
         self,
-        mock_console: MagicMock,
         mock_cached: MagicMock,
         mock_which: MagicMock,
         tmp_path: Path,
     ) -> None:
-        mock_console.is_terminal = True
         with patch("platform.system", return_value="FreeBSD"):
             with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
                 resolver = FFmpegResolver()
                 resolver.bin_dir = tmp_path
                 resolver.local_path = tmp_path / "ffmpeg"
                 with pytest.raises(ResourceNotFoundError, match="Unsupported platform"):
-                    resolver.resolve(auto_download=True)
+                    resolver.resolve(
+                        auto_download=True, confirm_download=lambda question: True
+                    )
 
 
 class TestBinaryValidation:
@@ -526,7 +521,9 @@ class TestResolveFfmpegConvenience:
         mock_resolve.return_value = Path("/resolved/ffmpeg")
         result = resolve_ffmpeg(auto_download=True)
         assert result == Path("/resolved/ffmpeg")
-        mock_resolve.assert_called_once_with(auto_download=True)
+        mock_resolve.assert_called_once_with(
+            auto_download=True, confirm_download=None, on_progress=None
+        )
 
 
 class TestBinaryName:

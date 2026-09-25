@@ -6,10 +6,13 @@ from pathlib import Path
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Button, ProgressBar, Static
 
 from max_cli.common.utils import format_size
-from max_cli.core.engines.daemon_manager import DaemonManager
+from max_cli.core.engines.task_manager import get_task_manager
+
+RECENT_TASK_LIMIT = 20
 
 
 class SystemPanel(Vertical):
@@ -94,9 +97,10 @@ class SystemPanel(Vertical):
             progress_bar.update(progress=0)
             lines.append("  Max CLI directory not found.")
 
-        daemon = DaemonManager()
-        stats = daemon.get_stats()
-        history = daemon.get_history(limit=1)
+        manager = get_task_manager()
+        manager.refresh()
+        stats = manager.get_stats()
+        history = manager.get_history(limit=1)
         last_task = history[0] if history else None
 
         lines.append("")
@@ -138,25 +142,23 @@ class SystemPanel(Vertical):
 
     def _update_recent_log(self) -> None:
         log_widget = self.query_one("#system-log", Static)
-        log_file = DaemonManager.DAEMON_LOG_FILE
+        recent_tasks = get_task_manager().get_history(limit=RECENT_TASK_LIMIT)
 
-        if log_file.exists():
-            lines = log_file.read_text(encoding="utf-8").strip().split("\n")
-            last_50 = lines[-50:]
-            colored_lines = []
-            for line in last_50:
-                lower = line.lower()
-                if "error" in lower or "exception" in lower or "fail" in lower:
-                    colored_lines.append(f"[red]{line}[/red]")
-                elif "warn" in lower:
-                    colored_lines.append(f"[yellow]{line}[/yellow]")
-                elif "success" in lower or "complete" in lower:
-                    colored_lines.append(f"[green]{line}[/green]")
-                else:
-                    colored_lines.append(line)
-            log_widget.update("\n".join(colored_lines))
-        else:
-            log_widget.update("  No daemon log found.")
+        if not recent_tasks:
+            log_widget.update("  No finished tasks yet.")
+            return
+
+        status_colors = {"completed": "green", "failed": "red", "cancelled": "dim"}
+        lines = []
+        for task in recent_tasks:
+            status = task.status.value
+            color = status_colors.get(status, "white")
+            finished = (task.completed_at or task.created_at)[:16].replace("T", " ")
+            lines.append(
+                f"  {finished}  [{color}]{status:<9}[/{color}] "
+                f"{task.title or task.type.value}"
+            )
+        log_widget.update("\n".join(lines))
 
     @on(Button.Pressed, "#btn-clear-cache")
     def _on_clear_cache(self) -> None:
@@ -179,8 +181,8 @@ class SystemPanel(Vertical):
     def _on_clear_queues(self) -> None:
         btn = self.query_one("#btn-clear-queues", Button)
         if btn.label == "Confirm?":
-            daemon = DaemonManager()
-            daemon.clear()
+            manager = get_task_manager()
+            manager.clear()
             btn.label = "Clear Queues"
             self.notify("All queues cleared", severity="information")
         else:
@@ -205,12 +207,14 @@ class SystemPanel(Vertical):
             )
 
     def _reset_confirm(self, btn_id: str, original_label: str) -> None:
+        # btn_id already starts with "#"; the old f"#{btn_id}" made "##btn-..."
+        # and the silent except hid that, so labels never reset.
         try:
-            btn = self.query_one(f"#{btn_id}", Button)
-            if btn.label == "Confirm?":
-                btn.label = original_label
-        except Exception:
-            pass
+            btn = self.query_one(btn_id, Button)
+        except NoMatches:
+            return  # panel was closed before the timer fired
+        if btn.label == "Confirm?":
+            btn.label = original_label
 
     @on(Button.Pressed, "#btn-refresh")
     def _on_refresh(self) -> None:

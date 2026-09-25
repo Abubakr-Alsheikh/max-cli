@@ -63,7 +63,7 @@ PLANS/                         # Project Management (Active/Deferred tasks)
 ### Naming Conventions
 
 - **Modules/Files**: `snake_case.py`
-- **Classes/Engines**: `PascalCase` (e.g., `ImageEngine`, `QueueManager`)
+- **Classes/Engines**: `PascalCase` (e.g., `ImageEngine`, `TaskManager`)
 - **Functions/Methods**: `snake_case` (Private methods prefixed with `_`)
 - **Constants**: `UPPER_SNAKE_CASE`
 
@@ -153,7 +153,7 @@ def compress_images(...):
 
 Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes) and `max-plans` (PLANS lifecycle). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
 
-The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges` and `textual-builder`. Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
+The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges`, `textual-builder` and `handoff` (session handovers in `.claude/handoffs/`; read the newest one first when resuming work). Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
 
 ## 6. Boundaries & Permissions
 
@@ -163,7 +163,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 - Use custom exceptions from `max_cli.common.exceptions` (`MaxError`, `ResourceNotFoundError`).
 - Use `console`, `log_success`, and `log_error` from `max_cli.common.logger` for user output in the `interface/` layer.
 - Use the event system (`EventEmitter` from `max_cli.common.events`, `EventSubscriber` from `max_cli.interface.event_subscriber`) for progress tracking — never pass Rich UI objects into core/common functions.
-- Use the task queue system (`DaemonManager` from `max_cli.core.engines.daemon_manager`, `TaskItem`/`TaskType` from `max_cli.core.engines.task_queue`) for long-running operations — add `--queue` flag to heavy commands.
+- Use the task queue system (`TaskManager` from `max_cli.core.engines.task_manager`, `TaskItem`/`TaskType` from `max_cli.core.engines.task_queue`) for long-running operations — add `--queue` flag to heavy commands.
 - Add type hints to all function signatures.
 
 ### ⚠️ Ask First Before
@@ -212,14 +212,17 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 
 - **Task Queue Pattern**:
   - Schema: `src/max_cli/core/engines/task_queue.py` (TaskItem, TaskType, executor registry)
-  - Manager: `src/max_cli/core/engines/daemon_manager.py` (queue operations, daemon processing)
+  - Manager: `src/max_cli/core/engines/task_manager.py` (queue operations and an in-process worker thread; tasks stop when the CLI exits and wait in `queue.json` for the next run)
   - Interface: `src/max_cli/interface/cli_queue.py` (`max queue` command group)
-  - Executors: `src/max_cli/core/engines/media_engine.py` (registers video task executors)
+  - Executors: each engine module registers its executors when imported. `task_queue.EXECUTOR_MODULES` maps every task type to that module, and `get_executor` imports it on first use. Add new task types there.
+  - One store: `~/.max_cli/tasks/queue.json` and `history.json` hold every task type, including `max grab` downloads. Don't add another queue or history file. Use `get_task_manager()` to share one instance per process; two instances overwrite each other's saves.
+  - Migration: `task_migration.py` folds the old `grab_queue.json`, `grab_history.json` and `download_history.json` into the store once, then renames them to `*.migrated`.
   - *Shows: Heavy commands support `--queue` flag, tasks are executed via registered executors, results persisted to history.*
 
 - **FFmpeg Auto-Resolution Pattern**:
   - Resolver: `src/max_cli/common/ffmpeg_resolver.py` (3-tier: PATH → `~/.max_cli/bin/` → auto-download)
-  - Engine: `src/max_cli/core/engines/media_engine.py` (`__init__` calls `_resolve_ffmpeg`, uses `self.ffmpeg_path` in all commands)
+  - Engine: `src/max_cli/core/engines/ffmpeg_base.py` (`FFmpegEngine.__init__` calls `_resolve_ffmpeg`; every command uses `self.ffmpeg_path`). `VideoEngine`, `AudioEngine` and `StreamEngine` subclass it, and `media_engine.MediaEngine` combines all three for existing callers
+  - Prompt: `src/max_cli/interface/ffmpeg_prompt.py` supplies the download confirmation and progress callbacks. The resolver never prompts itself
   - Interface: `src/max_cli/interface/cli_media.py` (`_get_engine()` with `auto_resolve=True`)
   - *Shows: Zero-friction onboarding — user never sees "FFmpeg not found". Binary auto-downloaded, validated, and cached.*
 
@@ -356,7 +359,7 @@ Max CLI must work seamlessly on Linux, macOS, and Windows. AI agents often defau
 Max CLI interfaces with external APIs (OpenAI, Google Gemini). Hitting these APIs unnecessarily causes rate-limit errors and wastes user credits.
 
 - **Use the Built-in Cache**: If you are adding a feature that fetches static metadata, categorizes files, or performs an expensive operation, you MUST wrap it using the `@cached` decorator from `max_cli.common.cache` or explicitly use `get_default_cache()`.
-- **Background Queue Awareness**: For long-running network tasks (like `yt-dlp` downloads), never block the main thread. Ensure integration with `max_cli.core.engines.queue_manager.QueueManager` to allow background processing.
+- **Background Queue Awareness**: For long-running network tasks (like `yt-dlp` downloads), never block the main thread. Queue them as tasks through `get_task_manager()` from `max_cli.core.engines.task_manager`. Downloads use `make_download_task()` from `network_engine`, and their history is read through `DownloadHistory` in `core/engines/download_history.py`.
 
 ## 19. The "Halt and Catch Fire" Rule (Anti-Looping)
 

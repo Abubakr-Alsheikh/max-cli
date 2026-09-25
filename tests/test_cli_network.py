@@ -77,3 +77,70 @@ class TestCLINetwork:
         result = runner.invoke(network_app, ["pot-setup"])
         assert result.exit_code == 1
         assert "Deno not found" in result.stdout
+
+class TestGrabQueueUsesTaskStore:
+    """`max grab queue/history/clear` read the shared task store (D1)."""
+
+    def test_queue_lists_download_tasks_only(self):
+        from max_cli.core.engines.network_engine import make_download_task
+        from max_cli.core.engines.task_manager import get_task_manager
+        from max_cli.core.engines.task_queue import TaskItem, TaskType
+
+        manager = get_task_manager()
+        manager.add(make_download_task("https://youtu.be/queued"))
+        manager.add(TaskItem(type=TaskType.CUSTOM, title="not a download"))
+
+        result = runner.invoke(network_app, ["queue"])
+
+        assert result.exit_code == 0, result.output
+        assert "https://youtu.be/queued" in result.stdout
+        assert "not a download" not in result.stdout
+
+    def test_history_shows_recorded_downloads(self):
+        from max_cli.core.engines.download_history import DownloadHistory
+
+        DownloadHistory().record_download(url="https://youtu.be/x", title="Clip X")
+
+        result = runner.invoke(network_app, ["history"])
+
+        assert result.exit_code == 0, result.output
+        assert "Clip X" in result.stdout
+
+    def test_clear_all_removes_queued_downloads(self):
+        from max_cli.core.engines.network_engine import make_download_task
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        manager = get_task_manager()
+        manager.add(make_download_task("https://youtu.be/queued"))
+
+        result = runner.invoke(network_app, ["clear", "--all", "--force"])
+
+        assert result.exit_code == 0, result.output
+        assert manager.get_all() == []
+
+
+def test_declining_playlist_prompt_cancels_download():
+    """typer.Exit from the playlist prompt used to be swallowed by `except Exception`."""
+    import typer
+
+    from max_cli.interface import cli_network
+
+    engine = MagicMock(has_js=True)
+    engine.get_info.return_value = {"entries": [{}, {}]}
+    with patch.object(cli_network, "_get_engine", return_value=engine), patch.object(
+        cli_network.Confirm, "ask", return_value=False
+    ), patch.object(cli_network.Prompt, "ask", return_value="n"), pytest.raises(
+        typer.Exit
+    ):
+        cli_network._download_immediate(
+            "https://youtube.com/watch?v=a&list=b",
+            quality="h",
+            audio_only=False,
+            include_metadata=True,
+            index=None,
+            no_playlist=False,
+            output_path=MagicMock(),
+            show_progress=False,
+        )
+
+    engine.download_media.assert_not_called()

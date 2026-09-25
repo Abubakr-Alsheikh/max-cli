@@ -76,12 +76,18 @@ max grab history
 max grab history --limit 20
 
 # Clear queue
-max grab clear              # Clear pending items
-max grab clear --all       # Clear everything including completed
+max grab clear              # Clear pending downloads
+max grab clear --all        # Clear every queued download that isn't running
 
 # Show statistics
 max grab status
 ```
+
+Downloads share one task store with `max queue` and the dashboard, so
+`max queue status` lists queued downloads next to other tasks. The first run
+after upgrading moves the old `~/.max_cli/grab_queue.json`,
+`grab_history.json` and `download_history.json` into that store and renames
+each file to `*.migrated`.
 
 ## Configuration
 

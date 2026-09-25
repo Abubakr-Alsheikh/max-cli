@@ -88,6 +88,38 @@ class PDFEngine:
 
         return page_count
 
+    def bundle_pdfs(
+        self,
+        input_paths: List[Path],
+        output_path: Path,
+        compress: bool = True,
+        dpi: int = 150,
+        quality: int = 80,
+    ) -> Dict[str, Any]:
+        """Merge PDFs into one file and optionally compress it.
+
+        The merge goes to a hidden temp file next to `output_path`, so a
+        failure never leaves a half-written bundle at the target path.
+        Returns the output size, the combined input size and the page count.
+        """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_merged = output_path.parent / f".tmp_{output_path.stem}_merged.pdf"
+        try:
+            self.merge_pdfs(input_paths, temp_merged)
+            if compress:
+                self.compress_pdf(temp_merged, output_path, dpi, quality)
+            else:
+                temp_merged.replace(output_path)
+        finally:
+            temp_merged.unlink(missing_ok=True)
+
+        return {
+            "output_path": output_path,
+            "output_size": output_path.stat().st_size,
+            "input_size": sum(path.stat().st_size for path in input_paths),
+            "page_count": self.get_page_count(output_path),
+        }
+
     def split_pdf(self, input_path: Path, output_path: Path, page_ranges: str) -> int:
         """
         Extracts specific pages from a PDF.

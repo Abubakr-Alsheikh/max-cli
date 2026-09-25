@@ -14,6 +14,8 @@ These skills are vendored copies of upstream skills. Each one was read in full b
 | sharp-edges | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/sharp-edges/skills/sharp-edges` | `32e34f8` | CC BY-SA 4.0 (modified copy under the same license) | Override block. Only the Python and config references kept, and the reference table trimmed |
 | textual-builder | smithery.ai `textual-builder` (also in `.agents/skills/`, see `skills-lock.json`) | hash `8c9a99e0` | as distributed | Override block. New description. Added `references/workers-and-testing.md` (verified on Textual 8.2.7). Template made Python 3.9-safe. Install and version lines corrected |
 
+| handoff | [robertguss/claude-code-toolkit](https://github.com/robertguss/claude-code-toolkit) `skills/handoff` | `f7fd35e` | MIT | Override block: repository state, plan status and quality gate sections; the ask step is skipped when the goal is already given; LF endings |
+
 ## Rejected after review
 - **wshobson python-packaging:** generic, and the project is already packaged.
 - **wshobson uv-package-manager:** recommends `curl | sh`, and the project uses pip.

@@ -146,10 +146,11 @@ class HomePanel(Vertical):
         )
 
     def _update_stats(self) -> None:
-        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_manager import get_task_manager
 
-        daemon = DaemonManager()
-        q_stats = daemon.get_stats()
+        manager = get_task_manager()
+        manager.refresh()
+        q_stats = manager.get_stats()
 
         activity = ActivityLog()
         a_stats = activity.get_stats()
@@ -174,8 +175,8 @@ class HomePanel(Vertical):
             cache = get_default_cache()
             cache_size = cache.get_size()
             self.query_one("#stat-cache", Static).update(format_size(cache_size))
-        except Exception:
-            pass
+        except OSError:
+            self.query_one("#stat-cache", Static).update("-")
 
     def _load_recent_activity(self) -> None:
         activity = ActivityLog()

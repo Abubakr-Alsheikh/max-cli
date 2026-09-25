@@ -409,7 +409,7 @@ class CommandExecutor:
         schema: CommandSchema,
         values: dict[str, Any],
     ) -> ExecutionResult:
-        from max_cli.core.engines.daemon_manager import DaemonManager
+        from max_cli.core.engines.task_manager import get_task_manager
         from max_cli.core.engines.task_queue import TaskItem
 
         entry = self._activity_log.start_entry(
@@ -418,7 +418,7 @@ class CommandExecutor:
             details={"params": {k: str(v) for k, v in values.items()}, "queued": True},
         )
         try:
-            daemon = DaemonManager()
+            manager = get_task_manager()
             task_type = self._get_task_type(category, command)
             params = self._resolve_params(category, command, schema, values)
             serializable_params = {}
@@ -437,7 +437,7 @@ class CommandExecutor:
                 description=schema.get("description", ""),
                 payload=serializable_params,
             )
-            daemon.add(task)
+            manager.add(task)
             self._activity_log.complete_entry(
                 entry, "success", {"queued": True, "task_id": task.id}
             )

@@ -1,11 +1,15 @@
 import typer
 from pathlib import Path
 
-from max_cli.core.engines.system_engine import SystemEngine
 from max_cli.common.logger import console, log_success, log_error
 
 app = typer.Typer()
-engine = SystemEngine()
+
+
+def _get_engine():
+    from max_cli.core.engines.system_engine import SystemEngine
+
+    return SystemEngine()
 
 
 @app.command("share")
@@ -19,7 +23,9 @@ def share_qr(
     """
     console.print(f"[cyan]Generating QR for:[/cyan] [dim]{data}[/dim]")
     try:
-        engine.generate_qr(data)
+        qr_text = _get_engine().generate_qr(data)
+        console.print()
+        console.print(qr_text, markup=False, highlight=False, soft_wrap=True)
     except Exception as e:
         log_error(f"QR generation failed: {e}")
 
@@ -39,7 +45,7 @@ def paste_image(
         output = output.with_suffix(".png")
 
     try:
-        engine.save_clipboard_image(output)
+        _get_engine().save_clipboard_image(output)
         log_success(f"Image saved to: [bold]{output}[/bold]")
     except ValueError as e:
         console.print(f"[yellow]{e}[/yellow]")
@@ -55,7 +61,7 @@ def copy_file(
     Copy the contents of a text file to your system clipboard.
     """
     try:
-        engine.copy_file_to_clipboard(target)
+        _get_engine().copy_file_to_clipboard(target)
         log_success(f"Copied [bold]{target.name}[/bold] to clipboard.")
     except Exception as e:
         log_error(str(e))
