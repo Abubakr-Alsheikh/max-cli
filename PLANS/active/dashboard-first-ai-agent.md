@@ -48,7 +48,7 @@ The design and build order live in `command-catalog.md`.
 - [ ] Decide whether the Typer commands are generated from the catalog or only checked against it. Checking is the smaller step.
 
 ### Step 3: New front door
-- [ ] Bare `max` opens the dashboard when a person is at an interactive terminal (D2).
+- [x] Bare `max` opens the dashboard when a person is at an interactive terminal (D2). `LazyTyperGroup.parse_args` does it; `textual` and `psutil` are required dependencies now, with `textual>=6.0.0` because older releases fail the dashboard tests (2026-09-26).
 - [ ] `max <text>` routes to the agent (D1). The routing lives in `LazyTyperGroup` (`core/cli/lazy_group.py`), where an unknown command name becomes an agent request.
 - [ ] `max --help` and every existing command keep working unchanged.
 
@@ -77,7 +77,7 @@ The design and build order live in `command-catalog.md`.
 - [ ] Distribution for non-technical users, for example a Windows installer or a single executable. Research needed.
 
 ### Tests and docs
-- [ ] Routing tests for D1 and D2, including non-interactive terminals.
+- [ ] Routing tests for D1 and D2, including non-interactive terminals. D2 is covered in `tests/test_front_door.py`.
 - [ ] Agent tests with a mocked model: tool selection, confirmation, refusal, undo.
 - [ ] README and `docs/`: a new "Getting started" built around `max` and plain-language requests.
 

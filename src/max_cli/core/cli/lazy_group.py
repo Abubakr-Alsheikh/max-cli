@@ -4,9 +4,13 @@
 importing any of them. `max video compress ...` imports only
 `max_cli.interface.cli_media`. This keeps pydantic-settings, Rich prompts
 and every engine out of startup (hardening decision D5).
+
+It also routes a bare `max`: a person at a terminal gets the dashboard,
+scripts and pipes get the help text (dashboard-first-ai-agent.md, D2).
 """
 
 import importlib
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -29,6 +33,12 @@ class LazyGroupSpec:
 
 
 LAZY_GROUPS: dict[str, LazyGroupSpec] = {}
+
+
+def is_interactive() -> bool:
+    """A person is at the keyboard: stdin and stdout are both a terminal."""
+    streams = (sys.stdin, sys.stdout)
+    return all(stream is not None and stream.isatty() for stream in streams)
 
 
 def lazy_group(name: str, spec: LazyGroupSpec) -> None:
@@ -57,6 +67,14 @@ class LazyTyperGroup(TyperGroup):
     """TyperGroup that resolves LAZY_GROUPS entries on demand."""
 
     _rendering_help = False
+    # What a bare `max` runs at an interactive terminal (D2).
+    interactive_default = "dashboard"
+
+    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
+        if not args and is_interactive():
+            args = [self.interactive_default]
+        result: list[str] = super().parse_args(ctx, args)
+        return result
 
     def list_commands(self, ctx: Any) -> list[str]:
         eager = super().list_commands(ctx)

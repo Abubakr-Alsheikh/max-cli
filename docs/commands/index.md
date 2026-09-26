@@ -12,6 +12,6 @@ Max CLI provides these command groups:
 - [Queue](queue.md) - Run heavy jobs in the background (`max queue`)
 - [Tools](tools.md) - QR codes and clipboard helpers (`max tools`)
 - [Config](config.md) - API keys and settings (`max config`)
-- [Dashboard](dashboard.md) - Interactive terminal dashboard (`max dashboard`)
+- [Dashboard](dashboard.md) - Interactive terminal dashboard (`max`, or `max dashboard`)
 
 Run `max <group> --help` to see every command in a group, and `max <group> <command> --help` for its options.

@@ -19,9 +19,11 @@ def dashboard(
     try:
         from max_cli.interface.tui.app import MaxDashboardApp
     except ImportError:
+        # textual is a required dependency, so only a broken install gets here.
         console.print(
-            "[yellow]The TUI dashboard requires the 'textual' library.[/yellow]\n"
-            "Install it with: [bold]pip install max-cli\\[tui][/bold]"
+            "[yellow]The dashboard needs the 'textual' library, "
+            "which is missing.[/yellow]\n"
+            "Reinstall Max with: [bold]pip install --upgrade max-cli[/bold]"
         )
         raise typer.Exit(1) from None
 

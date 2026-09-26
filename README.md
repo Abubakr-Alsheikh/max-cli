@@ -56,7 +56,7 @@ Max turns multi-step jobs, like compressing a video, merging PDFs or downloading
 | **File history** | `max files history` | `max files history -v` |
 | **Background jobs** | `max queue` | `max queue status` |
 | **QR code for a URL** | `max tools share` | `max tools share "http://192.168.1.20:8000"` |
-| **TUI Dashboard** | `max dashboard` | `max dashboard` |
+| **TUI Dashboard** | `max` | `max` (or `max dashboard`) |
 
 ---
 
@@ -570,15 +570,14 @@ Max records `order`, `smart-sort`, `duplicates --delete` and `audio organize` so
 
 ### 🖥 TUI Dashboard
 
-Max includes an interactive terminal dashboard for monitoring queues, history, and system status.
+Type `max` on its own and the dashboard opens. From there you can download media, run tools, watch the queue and chat with the AI. The dashboard comes with the base install.
 
 ```bash
-# Install TUI dependencies
-pip install max-cli[tui]
-
-# Launch dashboard
-max dashboard
+max              # opens the dashboard in a terminal
+max dashboard    # the same, by name
 ```
+
+In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing waits for key presses.
 
 **Dashboard Sections:**
 
@@ -589,14 +588,13 @@ max dashboard
 | **Queue** | Live task queue with progress |
 | **History** | Filterable task history |
 | **Files** | File browser |
+| **Tools** | A form for each command, with all its options |
 | **Analytics** | Live usage and system monitoring |
 | **Config** | Editable configuration panel |
 | **System** | Disk usage and system info |
 | **Chat** | AI chat |
 
 Press `q` to quit, `r` to refresh and `Ctrl+B` to collapse the sidebar.
-
-If `textual` is not installed, `max dashboard` will show a friendly message with install instructions.
 
 ---
 

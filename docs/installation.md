@@ -26,7 +26,7 @@ pip install -e .[dev]
 pip install -e .
 ```
 
-The base install includes the AI, PDF, image and download features. Add an extra from the table below for OCR or the dashboard, for example `pip install -e .[ocr,tui]`.
+The base install includes the AI, PDF, image and download features. The dashboard is part of the base install too. Add an extra from the table below for OCR, for example `pip install -e .[ocr]`.
 
 ## Optional Dependencies
 
@@ -34,7 +34,7 @@ The base install includes the AI, PDF, image and download features. Add an extra
 |-------|-------------|
 | `dev` | Development dependencies (pytest, ruff, mypy, mkdocs) |
 | `ocr` | OCR support (pytesseract) |
-| `tui` | Interactive TUI dashboard (textual, psutil) |
+| `tui` | Empty; kept so `pip install max-cli[tui]` from older instructions still works |
 
 ## FFmpeg Auto-Resolution
 
