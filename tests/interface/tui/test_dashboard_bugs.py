@@ -159,3 +159,20 @@ async def test_every_page_scrolls_in_a_small_terminal(section):
 
         assert panel.virtual_size.height > panel.container_size.height
         assert panel.allow_vertical_scroll
+
+
+@pytest.mark.asyncio
+async def test_refresh_timer_survives_shutdown():
+    """The 2-second refresh timer can fire while the app tears its panels down.
+
+    It used to raise NoMatches for #queue-panel; a slow test run hit it.
+    """
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.query_one("#content").remove_children()
+
+        app._refresh_active_panel()
+        app.action_refresh()

@@ -9,6 +9,7 @@ import typer
 from rich import box
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.text import Text
 
 from max_cli.common.events import get_emitter
 from max_cli.common.logger import console, log_error, log_success
@@ -420,7 +421,9 @@ def _download_immediate(
             engine=_get_engine(),
         )
         for saved in result.output_files:
-            console.print(f"[dim]Saved:[/dim] {saved}")
+            # Plain Text: titles like "Song [red]" are not markup. No wrapping,
+            # so the path stays whole when you copy it.
+            console.print(Text.assemble(("Saved: ", "dim"), str(saved)), soft_wrap=True)
 
     def _handle_final_error(error: Optional[Exception]) -> None:
         error_text = str(error or "")

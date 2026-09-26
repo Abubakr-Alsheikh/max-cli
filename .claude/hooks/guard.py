@@ -2,6 +2,7 @@
 
 Bash/PowerShell:
 - deny: skipping git hooks (--no-verify), force-pushing, committing .env files
+- deny: `gh pr create` until HEAD passed `python scripts/ci_local.py --full`
 - ask:  installing packages (AGENTS.md: ask before adding dependencies),
         git reset --hard / git clean -f (destroys uncommitted work)
 Write/Edit:
@@ -13,8 +14,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
 DENY_COMMAND_PATTERNS = [
     (r"--no-verify\b", "Skipping git hooks is not allowed. Fix the hook failure."),
@@ -32,6 +34,12 @@ ASK_COMMAND_PATTERNS = [
     (r"\bgit\s+reset\s+--hard\b", "git reset --hard discards uncommitted work."),
     (r"\bgit\s+clean\s+-\w*f", "git clean -f deletes untracked files."),
 ]
+PR_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
+CI_LOCAL_STAMP = "ci-local.json"
+CI_LOCAL_REASON = (
+    "Run `python scripts/ci_local.py --full` on a clean tree first; "
+    "it runs the GitHub CI checks locally and records HEAD when they pass."
+)
 ASK_EDIT_FILES = {
     "pyproject.toml": "AGENTS.md: ask before changing dependencies or entry points.",
 }
@@ -65,12 +73,33 @@ def strip_literals(command: str) -> str:
     return QUOTED_STRING.sub("''", without_heredocs)
 
 
+def head_passed_local_ci() -> bool:
+    """True when scripts/ci_local.py --full passed for the checked-out commit."""
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        stamp_file = subprocess.run(
+            ["git", "rev-parse", "--git-path", CI_LOCAL_STAMP],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        stamp = json.loads(Path(stamp_file).read_text(encoding="utf-8"))
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+        return False
+    return stamp == {"head": head, "mode": "full"}
+
+
 def check_command(command: str) -> None:
     command = strip_literals(command)
     for pattern, reason in DENY_COMMAND_PATTERNS:
         if re.search(pattern, command):
             decision("deny", reason)
             return
+    if PR_CREATE.search(command) and not head_passed_local_ci():
+        decision("deny", CI_LOCAL_REASON)
+        return
     for pattern, reason in ASK_COMMAND_PATTERNS:
         if re.search(pattern, command):
             decision("ask", reason)

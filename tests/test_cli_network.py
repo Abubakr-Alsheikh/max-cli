@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -169,7 +170,10 @@ class TestDownloadUsesTheSharedOperation:
     def test_download_records_history_and_lists_files(self, mock_get_engine, tmp_path):
         from max_cli.core.engines.download_history import DownloadHistory
 
-        saved = tmp_path / "Clip.mp4"
+        # A long folder name makes Rich wrap unless the path prints unwrapped.
+        folder = tmp_path / ("long-folder-name-" * 6)
+        folder.mkdir()
+        saved = folder / "Clip [red].mp4"
         saved.write_bytes(b"video")
         engine = MagicMock()
         engine.has_js = True
@@ -182,12 +186,12 @@ class TestDownloadUsesTheSharedOperation:
         )
 
         assert result.exit_code == 0, result.output
-        assert "Saved:" in result.output and "Clip.mp4" in result.output
+        assert f"Saved: {saved}" in click.unstyle(result.output)
         kwargs = engine.download_media.call_args.kwargs
         assert kwargs["audio_only"] is True
         assert kwargs["output_path"] == tmp_path
         [entry] = DownloadHistory().get_recent()
-        assert entry["title"] == "Clip"
+        assert entry["title"] == "Clip [red]"
         assert entry["output_files"] == [str(saved)]
 
     @patch("max_cli.interface.cli_network._process_downloads")

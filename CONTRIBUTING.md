@@ -65,6 +65,25 @@ ruff format .
 mypy src/
 ```
 
+## Running CI Locally
+
+`scripts/ci_local.py` runs the checks from `.github/workflows/ci.yml` on your machine, so a push doesn't fail on GitHub for a reason you could have caught first.
+
+```bash
+# Quick: ruff, the mypy ratchet, and the tests with the 70% coverage floor (about 2 minutes)
+python scripts/ci_local.py
+
+# Full (about 4 minutes): the tests on Python 3.9, 3.10, 3.11 and 3.12 in fresh virtualenvs,
+# two at a time, plus the package build. A step that hangs stops after 10 minutes.
+# Needs uv, which downloads any Python you don't have.
+python scripts/ci_local.py --full
+
+# Once per clone: make `git push` run the quick check on commits that haven't passed yet
+python scripts/ci_local.py --install-hook
+```
+
+CI also runs on macOS and Linux. The script can't reproduce those, so watch for file-order and path differences.
+
 ## Submitting PRs
 
 1. Create a feature branch:
@@ -76,10 +95,8 @@ mypy src/
 2. Make your changes and run quality checks:
 
    ```bash
-   pytest
-   ruff check .
    ruff format .
-   mypy src/
+   python scripts/ci_local.py --full
    ```
 
 3. Commit with a clear message:
