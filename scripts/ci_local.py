@@ -46,14 +46,21 @@ HOOK_SCRIPT = f"""#!/bin/sh
 # {HOOK_MARKER} --install-hook.
 exec python scripts/ci_local.py --pre-push
 """
+# A test stuck this long prints every thread's stack, so a hang names itself.
+HANG_REPORT_SECONDS = 120
 PYTEST_ARGS = (
     "-q",
     "-p",
     "no:cacheprovider",
-    "--cov=max_cli",
-    "--cov-report=",
-    f"--cov-fail-under={COVERAGE_MIN}",
+    "-o",
+    f"faulthandler_timeout={HANG_REPORT_SECONDS}",
 )
+COVERAGE_ARGS = ("--cov=max_cli", "--cov-report=", f"--cov-fail-under={COVERAGE_MIN}")
+# One suite takes about a minute (two with coverage). Past this, it hangs.
+STEP_TIMEOUT_SECONDS = 600
+# Test suites at once in --full. Four at once starved each other and made a
+# timing-sensitive test hang; two keeps the run short and the machine usable.
+PARALLEL_SUITES = 2
 
 
 @dataclass
@@ -68,21 +75,40 @@ def run_step(
     name: str, command: list[str], env: dict[str, str] | None = None
 ) -> StepResult:
     started = time.monotonic()
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env={**os.environ, **(env or {})},
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, **(env or {})},
+            timeout=STEP_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as timeout:
+        partial = (timeout.stdout or "") + (timeout.stderr or "")
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        return StepResult(
+            name=name,
+            ok=False,
+            seconds=time.monotonic() - started,
+            output=f"{partial}\nStopped after {STEP_TIMEOUT_SECONDS}s: something hangs.",
+        )
     return StepResult(
         name=name,
         ok=completed.returncode == 0,
         seconds=time.monotonic() - started,
         output=completed.stdout + completed.stderr,
     )
+
+
+def announce(result: StepResult) -> StepResult:
+    """Print each step as it finishes, so a long run shows progress."""
+    status = "PASS" if result.ok else "FAIL"
+    print(f"    {status}  {result.name}  ({result.seconds:.0f}s)", flush=True)
+    return result
 
 
 def git(*args: str) -> str:
@@ -126,13 +152,13 @@ def quick_steps() -> list[StepResult]:
         ("mypy baseline", [python, "scripts/mypy_baseline.py"]),
         (
             f"pytest (Python {current_version()})",
-            [python, "-m", "pytest", *PYTEST_ARGS],
+            [python, "-m", "pytest", *PYTEST_ARGS, *COVERAGE_ARGS],
         ),
     ]
     results = []
     for name, command in steps:
         print(f"... {name}", flush=True)
-        results.append(run_step(name, command))
+        results.append(announce(run_step(name, command)))
     return results
 
 
@@ -166,7 +192,11 @@ def create_venv(version: str) -> StepResult | None:
 
 
 def run_tests_on(version: str) -> StepResult:
-    """Install as CI does, then run the tests in their own temp folders."""
+    """Install as CI does, then run the tests in their own temp folders.
+
+    Only the type-check Python measures coverage: coverage doubles the run
+    time and barely changes between versions.
+    """
     name = test_step_name(version)
     python = venv_python(WORK_DIR / f"py{version}")
     installed = run_step(
@@ -174,7 +204,8 @@ def run_tests_on(version: str) -> StepResult:
         ["uv", "pip", "install", "-q", "--python", str(python), "-e", PACKAGE_EXTRAS],
     )
     if not installed.ok:
-        return installed
+        return announce(installed)
+    coverage = COVERAGE_ARGS if version == TYPECHECK_PYTHON else ()
     tested = run_step(
         name,
         [
@@ -182,16 +213,19 @@ def run_tests_on(version: str) -> StepResult:
             "-m",
             "pytest",
             *PYTEST_ARGS,
+            *coverage,
             f"--basetemp={WORK_DIR / f'tmp-{version}'}",
         ],
         env={"COVERAGE_FILE": str(WORK_DIR / f".coverage-{version}")},
     )
     tested.seconds += installed.seconds
-    return tested
+    return announce(tested)
 
 
 def build_package() -> StepResult:
-    return run_step("build", ["uv", "build", "-q", "--out-dir", str(WORK_DIR / "dist")])
+    return announce(
+        run_step("build", ["uv", "build", "-q", "--out-dir", str(WORK_DIR / "dist")])
+    )
 
 
 def full_steps() -> list[StepResult]:
@@ -208,7 +242,7 @@ def full_steps() -> list[StepResult]:
     results = []
     for name, command in lint:
         print(f"... {name}", flush=True)
-        results.append(run_step(name, command))
+        results.append(announce(run_step(name, command)))
     ready = []
     for version in PYTHON_VERSIONS:
         created = create_venv(version)
@@ -216,11 +250,15 @@ def full_steps() -> list[StepResult]:
             ready.append(version)
         else:
             results.append(created)
-    print(f"... pytest on Python {', '.join(ready)} in parallel, and build", flush=True)
-    with ThreadPoolExecutor(max_workers=len(ready) + 1) as pool:
+    print(
+        f"... pytest on Python {', '.join(ready)}, {PARALLEL_SUITES} at a time",
+        flush=True,
+    )
+    with ThreadPoolExecutor(max_workers=PARALLEL_SUITES) as pool:
         jobs = [pool.submit(run_tests_on, version) for version in ready]
-        jobs.append(pool.submit(build_package))
         results.extend(job.result() for job in jobs)
+    print("... build", flush=True)
+    results.append(build_package())
     return results
 
 
