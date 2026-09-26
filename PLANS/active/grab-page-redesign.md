@@ -98,7 +98,7 @@ Chosen for the first round:
    - A Downloads list with real Cancel.
 3. [x] **G3: playlists.** Done 2026-09-26 in the page redesign (PR #21). The item picker (all, none, a range, single items), passed through as `playlist_items`.
 4. [x] **G4: several at once.** Done 2026-09-26 (PR #21): paste several links and each becomes a download. The concurrency limit, Retry, Open folder and history clear with confirmation shipped with G2.
-5. [ ] **G5: CLI.** `max grab download` calls the same operation; the CLI's interactive prompt stays.
+5. [x] **G5: CLI.** Done 2026-09-26. `max grab download` calls the same operation; the CLI's interactive prompt stays.
 
 ## Decisions
 
@@ -126,3 +126,7 @@ Chosen for the first round:
     - Tabs for Downloads, with a count of those running, and History, with Download again, Open folder and Clear.
   - **Flow.** The link is checked on its own 0.6 s after a paste, and Enter downloads once it's checked.
   - The sidebar is wider, so every label fits.
+- 2026-09-26, G5:
+  - `max grab download` now downloads through `core/operations/grab.download`. Terminal downloads now appear in the dashboard's History, which they didn't before, and the CLI lists the saved files.
+  - `--no-process` now does what its help says: it queues without starting the queue.
+  - The CLI's flags stay as they are (`--video`/`--audio`, `--no-meta`, `--index`), because renaming them would break scripts. The catalog drift test therefore checks `grab`'s operation but not its CLI flags; see `CLI_CHECKED_GROUPS` in `tests/test_catalog_drift.py`.

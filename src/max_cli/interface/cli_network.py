@@ -281,7 +281,9 @@ def download_media(
             progress,
             player_client_name,
         )
-        if queue:
+        if queue and no_process:
+            console.print("[dim]Queued. Run 'max queue process' to start it.[/dim]")
+        elif queue:
             import threading
 
             console.print("[dim]Processing queue in background...[/dim]")
@@ -399,19 +401,26 @@ def _download_immediate(
         console.print("[dim]Metadata disabled.[/dim]")
 
     def _do_download() -> None:
-        eng = _get_engine()
-        eng.download_media(
+        # The same operation the dashboard's Download page runs, so both record
+        # the download in history and report the final files.
+        from max_cli.core.operations import grab as grab_ops
+
+        result = grab_ops.download(
             url=url,
-            output_path=output_path,
+            output=output_path,
+            media_type="audio" if audio_only else "video",
             quality=quality,
-            audio_only=audio_only,
-            include_metadata=include_metadata,
+            resolution=custom_height,
             playlist_items=index,
             no_playlist=no_playlist,
             subtitles=subtitles,
-            custom_height=custom_height,
-            player_client=player_client,
+            include_metadata=include_metadata,
+            strip_playlist=False,  # the caller already cleaned the URL
+            player_client=player_client or "auto",
+            engine=_get_engine(),
         )
+        for saved in result.output_files:
+            console.print(f"[dim]Saved:[/dim] {saved}")
 
     def _handle_final_error(error: Optional[Exception]) -> None:
         error_text = str(error or "")

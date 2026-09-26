@@ -160,3 +160,46 @@ def test_history_clear_asks_first():
     forced = runner.invoke(network_app, ["history", "--clear", "--force"])
     assert forced.exit_code == 0, forced.output
     assert DownloadHistory().get_recent() == []
+
+
+class TestDownloadUsesTheSharedOperation:
+    """G5: `max grab download` runs core/operations/grab.py like the dashboard."""
+
+    @patch("max_cli.interface.cli_network._get_engine")
+    def test_download_records_history_and_lists_files(self, mock_get_engine, tmp_path):
+        from max_cli.core.engines.download_history import DownloadHistory
+
+        saved = tmp_path / "Clip.mp4"
+        saved.write_bytes(b"video")
+        engine = MagicMock()
+        engine.has_js = True
+        engine.download_media.return_value = {"files": [str(saved)]}
+        mock_get_engine.return_value = engine
+
+        result = runner.invoke(
+            network_app,
+            ["do", "https://youtu.be/abc", "-a", "-o", str(tmp_path), "--no-progress"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Saved:" in result.output and "Clip.mp4" in result.output
+        kwargs = engine.download_media.call_args.kwargs
+        assert kwargs["audio_only"] is True
+        assert kwargs["output_path"] == tmp_path
+        [entry] = DownloadHistory().get_recent()
+        assert entry["title"] == "Clip"
+        assert entry["output_files"] == [str(saved)]
+
+    @patch("max_cli.interface.cli_network._process_downloads")
+    def test_no_process_queues_without_starting(self, mock_process, tmp_path):
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        result = runner.invoke(
+            network_app,
+            ["do", "https://youtu.be/abc", "-Q", "--no-process", "-o", str(tmp_path)],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "max queue process" in result.output
+        mock_process.assert_not_called()
+        assert len(get_task_manager().get_all()) == 1
