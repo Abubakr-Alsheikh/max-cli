@@ -15,6 +15,7 @@ from max_cli.core.catalog.spec import Action, Group, Surface
 GROUP_MODULES: dict[str, str] = {
     "video": "max_cli.core.catalog.groups.video",
     "grab": "max_cli.core.catalog.groups.grab",
+    "images": "max_cli.core.catalog.groups.images",
 }
 
 

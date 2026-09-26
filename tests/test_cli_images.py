@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from PIL import Image
 from typer.testing import CliRunner
@@ -70,14 +69,30 @@ class TestCLIImagesParsing:
         assert "Specify" in result.stdout or result.exit_code != 0
 
 
-def test_batch_output_folder_has_a_name_for_current_dir(tmp_path, monkeypatch):
-    """`max images compress` with no path wrote into ./_optimized."""
-    from max_cli.interface.cli_images import _resolve_batch
+class TestCLIImagesUsesTheOperation:
+    """The CLI prints what core/operations/images.py returns."""
 
-    photos = tmp_path / "photos"
-    photos.mkdir()
-    monkeypatch.chdir(photos)
+    def test_compress_prints_a_summary_and_the_output_path(self, dummy_image):
+        result = runner.invoke(images_app, ["compress", str(dummy_image), "-j", "1"])
 
-    _files, out_dir = _resolve_batch(Path("."))
+        assert result.exit_code == 0, result.output
+        assert "Optimizing Summary" in result.output
+        assert (dummy_image.parent / "test_opt.jpg").exists()
 
-    assert out_dir == tmp_path / "photos_optimized"
+    def test_missing_target_exits_1(self, tmp_path):
+        result = runner.invoke(images_app, ["compress", str(tmp_path / "gone.jpg")])
+
+        assert result.exit_code == 1
+        assert "Not found" in result.output
+
+    def test_resize_without_a_size_exits_1(self, dummy_image):
+        result = runner.invoke(images_app, ["resize", str(dummy_image)])
+
+        assert result.exit_code == 1
+        assert "Specify" in result.output
+
+    def test_unknown_convert_format_exits_1(self, dummy_image):
+        result = runner.invoke(images_app, ["convert", str(dummy_image), "--to", "gif"])
+
+        assert result.exit_code == 1
+        assert "Unknown format" in result.output

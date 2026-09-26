@@ -73,8 +73,10 @@ class EventSubscriber:
 
     def _on_batch_progress(self, event: BatchProgressEvent) -> None:
         if self._progress and self._batch_task:
+            # The event carries the total, so callers needn't count files first.
             self._progress.update(
                 self._batch_task,
+                total=event.total,
                 completed=event.current,
                 description=f"[green]{event.description}[/green] ({event.current}/{event.total})",
             )

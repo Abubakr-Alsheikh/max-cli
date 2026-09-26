@@ -197,8 +197,9 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 
 - **Good Example - Core/Interface Separation**:
   - Interface: `src/max_cli/interface/cli_images.py`
+  - Operation: `src/max_cli/core/operations/images.py` (finds the images, names the outputs, runs the batch)
   - Core: `src/max_cli/core/engines/image_processor.py`
-  - *Shows: How CLI parses args and passes them to the Engine, which returns stats for the CLI to format into a Rich table.*
+  - *Shows: How the CLI parses args and calls the operation, which drives the Engine and returns an `ActionResult` whose details the CLI formats into a Rich table.*
   
 - **Utility Pattern**: `src/max_cli/common/concurrent.py`
   - *Shows: Standardized ThreadPoolExecutor implementation used across the app.*
@@ -215,10 +216,11 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - Events: `src/max_cli/common/events.py` (EventEmitter, event models)
   - Subscriber: `src/max_cli/interface/event_subscriber.py` (Rich UI updates)
   - Batch: `src/max_cli/common/concurrent.py` (emits events, zero Rich imports)
-  - Interface: `src/max_cli/interface/cli_images.py` (uses EventSubscriber)
+  - Operation: `src/max_cli/core/operations/images.py` (takes an optional `emitter` and hands it to the batch)
+  - Interface: `src/max_cli/interface/cli_images.py` (subscribes an EventSubscriber and passes the emitter in)
   - *Shows: Core emits pure events, interface translates to Rich progress bars. Core stays 100% UI-agnostic.*
 
-- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`, and `grab download`, whose CLI calls the operation but keeps its own flags):
+- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`, `images`, and `grab download`, whose CLI calls the operation but keeps its own flags):
   - Operation: `src/max_cli/core/operations/video.py`. One function per command. It does the output naming, input checks and engine calls, and returns `ActionResult`. It takes an optional `engine`, so the CLI can pass one that asks before downloading FFmpeg.
   - Catalog: `src/max_cli/core/catalog/groups/video.py`. One `Action` per command: its params (kind, default, CLI spellings), `danger`, `queueable` and `surfaces`. A default of `Setting("GRAB_QUALITY")` reads the user's config when the action runs; the operation then takes `None` for it. Catalog modules import no engines.
   - Interface: `src/max_cli/interface/cli_media.py` parses options, calls the operation through `_run` and prints the result.

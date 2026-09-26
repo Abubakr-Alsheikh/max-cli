@@ -22,7 +22,7 @@ QUEUE_OPTION = "queue"
 # Groups whose Typer flags match their catalog entries. `max grab download`
 # calls its operation too, but keeps flags such as --video/--audio and
 # --no-meta that scripts rely on, so only its operation is checked.
-CLI_CHECKED_GROUPS = ("video",)
+CLI_CHECKED_GROUPS = ("video", "images")
 
 
 def _cli_commands(group_name: str) -> dict[str, Any]:
@@ -69,7 +69,9 @@ def test_cli_options_match_the_catalog(group_name: str, action: Action):
         cli_param = cli_params[param.name]
         assert cli_param.required == param.required, param.name
         if not param.required:
-            assert _normalize(cli_param.default) == param.default, param.name
+            # A Setting default: the CLI read the same setting at import time.
+            expected = _normalize(param.resolved_default())
+            assert _normalize(cli_param.default) == expected, param.name
         if param.cli:
             assert set(cli_param.opts) == set(param.cli), param.name
         else:
@@ -87,12 +89,21 @@ def test_operation_arguments_match_the_catalog(group_name: str, action: Action):
         if param.kind is not inspect.Parameter.KEYWORD_ONLY
     }
     assert list(op_params) == [param.name for param in action.params]
+    earlier_has_default = False
     for param in action.params:
         op_default = op_params[param.name].default
         if param.required:
-            assert op_default is inspect.Parameter.empty, param.name
+            # Python needs a default after a defaulted argument (`images
+            # convert` has target="." then a required --to); None is it.
+            allowed = (
+                (inspect.Parameter.empty, None)
+                if earlier_has_default
+                else (inspect.Parameter.empty,)
+            )
+            assert op_default in allowed, param.name
         elif isinstance(param.default, Setting):
             # The operation reads the setting itself when given None.
             assert op_default is None, param.name
         else:
-            assert _normalize(op_default) == param.default, param.name
+            assert _normalize(op_default) == _normalize(param.default), param.name
+        earlier_has_default = earlier_has_default or not param.required

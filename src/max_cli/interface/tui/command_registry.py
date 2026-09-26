@@ -1,6 +1,5 @@
 from typing import Any, Literal, Optional, TypedDict
 
-from max_cli.config import settings
 from max_cli.core import presets
 
 FieldType = Literal[
@@ -58,86 +57,6 @@ def _f(
 
 
 COMMANDS: dict[str, dict[str, CommandSchema]] = {
-    "images": {
-        "compress": {
-            "label": "Compress Image",
-            "icon": "\U0001f5bc",
-            "category": "images",
-            "engine": "ImageEngine",
-            "method": "process_single_image",
-            "description": "Compress a single image",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input Image", required=True),
-                _f("output", "path_output", "Output Image"),
-                _f("quality", "int", "Quality", default=settings.DEFAULT_QUALITY),
-                _f("scale", "int", "Scale (%)", help="Resize percentage"),
-                _f(
-                    "max_dim",
-                    "int",
-                    "Max Dimension",
-                    help="Maximum width/height in pixels",
-                ),
-                _f("force_jpeg", "bool", "Force JPEG", default=False),
-                _f("quantize", "bool", "Quantize Colors", default=False),
-                _f(
-                    "strip",
-                    "bool",
-                    "Strip Metadata",
-                    default=presets.STRIP_IMAGE_METADATA,
-                ),
-            ],
-        },
-        "resize": {
-            "label": "Resize Image",
-            "icon": "\U0001f4d0",
-            "category": "images",
-            "engine": "ImageEngine",
-            "method": "process_single_image",
-            "description": "Resize a single image",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input Image", required=True),
-                _f("output", "path_output", "Output Image"),
-                _f("width", "int", "Width (px)"),
-                _f("height", "int", "Height (px)"),
-                _f("scale", "int", "Scale (%)"),
-            ],
-        },
-        "convert": {
-            "label": "Convert Image",
-            "icon": "\U0001f504",
-            "category": "images",
-            "engine": "ImageEngine",
-            "method": "process_single_image",
-            "description": "Convert image to a different format",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input Image", required=True),
-                _f("output", "path_output", "Output Image"),
-                _f(
-                    "to_format",
-                    "select",
-                    "Output Format",
-                    required=True,
-                    options=["webp", "jpg", "png"],
-                ),
-            ],
-        },
-        "strip": {
-            "label": "Strip EXIF",
-            "icon": "\U0001f9f9",
-            "category": "images",
-            "engine": "ImageEngine",
-            "method": "process_single_image",
-            "description": "Remove EXIF metadata from image",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input Image", required=True),
-                _f("strip_exif", "bool", "Strip EXIF", default=True),
-            ],
-        },
-    },
     "files": {
         "order": {
             "label": "Order Files",
@@ -389,7 +308,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
 
 # `video` and `grab` moved to the command catalog (core/catalog); the Tools
 # and Download pages use it.
-CATEGORIES: list[str] = ["images", "files", "pdf", "audio", "ai"]
+CATEGORIES: list[str] = ["files", "pdf", "audio", "ai"]
 
 
 class CommandRegistry:
