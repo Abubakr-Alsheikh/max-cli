@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from max_cli.common.exceptions import MaxError
-from max_cli.core import presets
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchema
 
@@ -15,9 +14,6 @@ ENGINE_MODULE_MAP: dict[str, str] = {
 }
 
 PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
-    ("pdf", "compress"): {"target": "input_path"},
-    ("pdf", "split"): {"target": "input_path", "output": "output_path"},
-    ("pdf", "merge"): {"inputs": "input_paths", "output": "output_path"},
     ("audio", "set"): {"target": "file_path"},
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
     ("files", "order"): {"start": "start_index"},
@@ -128,8 +124,6 @@ class CommandExecutor:
             if key in converters:
                 mapped.update(converters[key](value))
                 continue
-            if category == "pdf" and command == "split" and key in ("start", "end"):
-                continue
             if category == "files" and command == "smart_sort" and key == "path":
                 mapped["path"] = value
                 if "categories" not in params:
@@ -138,17 +132,6 @@ class CommandExecutor:
                     mapped["categories"] = ai_engine.categorize_files(files)
                 continue
             mapped[name_map.get(key, key)] = value
-
-        if category == "pdf" and command == "split":
-            page_range = _page_range(params.get("start"), params.get("end"))
-            if page_range:
-                mapped["page_ranges"] = page_range
-
-        input_path = mapped.get("input_path")
-        if isinstance(input_path, Path) and "output_path" not in mapped:
-            output_path = _default_output_path(category, command, input_path, params)
-            if output_path is not None:
-                mapped["output_path"] = output_path
 
         return mapped
 
@@ -305,8 +288,6 @@ class CommandExecutor:
         from max_cli.core.engines.task_queue import TaskType
 
         type_map: dict[tuple[str, str], TaskType] = {
-            ("pdf", "merge"): TaskType.PDF_MERGE,
-            ("pdf", "compress"): TaskType.PDF_COMPRESS,
             ("files", "smart_sort"): TaskType.FILE_ORGANIZE,
             ("files", "duplicates"): TaskType.FILE_DUPLICATES,
         }
@@ -472,12 +453,6 @@ def _paths_from(value: Any, find_in_folder: Callable[[Path], list[Path]]) -> lis
     return [value] if isinstance(value, Path) else []
 
 
-def _pdf_inputs(value: Any) -> dict[str, Any]:
-    from max_cli.core.engines.pdf_engine import find_pdfs
-
-    return {"input_paths": _paths_from(value, find_pdfs)}
-
-
 def _audio_inputs(value: Any) -> dict[str, Any]:
     from max_cli.core.engines.audio_metadata_engine import find_audio_files
 
@@ -486,25 +461,5 @@ def _audio_inputs(value: Any) -> dict[str, Any]:
 
 _VALUE_CONVERTERS: dict[tuple[str, str], dict[str, Callable[[Any], dict[str, Any]]]] = {
     ("audio", "set"): {"track": lambda track: {"tracknumber": str(track)}},
-    ("pdf", "merge"): {"inputs": _pdf_inputs},
     ("audio", "organize"): {"targets": _audio_inputs},
 }
-
-def _page_range(start: Optional[int], end: Optional[int]) -> Optional[str]:
-    if start is not None and end is not None:
-        return f"{start}-{end}"
-    if start is not None:
-        return str(start)
-    if end is not None:
-        return f"1-{end}"
-    return None
-
-
-def _default_output_path(
-    category: str, command: str, input_path: Path, params: dict[str, Any]
-) -> Optional[Path]:
-    """Output next to the input, named the way the matching CLI command names it."""
-    sibling = presets.sibling_path
-    if category == "pdf" and command == "compress":
-        return sibling(input_path, "_compressed", "pdf")
-    return None

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
+from rich.markup import escape
 
 from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
@@ -74,10 +75,11 @@ def _print_result(result: "ActionResult", label: str) -> None:
                 f"{row['reduction_pct']}%",
             )
         console.print(table)
+    # escape: a folder named "photos [red]" is not markup.
     if result.ok:
-        log_success(result.message)
+        log_success(escape(result.message))
     else:
-        log_error(result.message)
+        log_error(escape(result.message))
 
 
 @app.command("compress")

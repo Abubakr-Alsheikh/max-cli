@@ -126,7 +126,7 @@ Each step is one PR, with tests first.
 2. **Generic dashboard form.** Build the form widget from the catalog and use it for `video`. Remove the `video` entries from `command_registry.py`. Done 2026-09-26, branch `feat/dashboard-tools-page`.
 3. **The heavy groups** (after the grab work below). Move the orchestration into operations, one group per PR:
    - `images` (batching and output naming). Done 2026-09-26, branch `feat/catalog-images`: `core/operations/images.py`, the CLI calls it, the drift test checks it, and the old dashboard entries are gone;
-   - `pdf` (folder compress, the split modes);
+   - `pdf` (folder compress, the split modes). Done 2026-09-26, branch `feat/catalog-pdf`: 14 actions. Added `Param.multiple` for lists and `ParamKind.SECRET` for the `lock` password; `lock` stays off the agent's surfaces;
    - `files` (transaction log, `smart-sort`'s two engines);
    - `audio` (the batch loop).
 4. **`grab download`: next, by the maintainer's choice.**

@@ -1,21 +1,66 @@
+"""`max pdf`: parse options, call core/operations/pdf.py, print the result.
+
+The catalog entries in core/catalog/groups/pdf.py describe the same
+commands; tests/test_catalog_drift.py fails when the two disagree.
+"""
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
+from rich.markup import escape
 
-from max_cli.common.events import get_emitter
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
-from max_cli.common.utils import format_size, natural_sort_key
+from max_cli.common.utils import format_size
+from max_cli.core.operations import pdf as pdf_ops
 from max_cli.core.presets import PDF_COMPRESS_DPI, PDF_COMPRESS_QUALITY
-from max_cli.interface.event_subscriber import EventSubscriber
+
+if TYPE_CHECKING:
+    from max_cli.core.operations.result import ActionResult
 
 app = typer.Typer()
+
+OCR_TIP = (
+    # "\[" keeps Rich from reading [ocr] as a style tag.
+    "[yellow]Tip: Install OCR dependencies with: pip install max-cli\\[ocr][/yellow]"
+)
 
 
 def _get_engine():
     from max_cli.core.engines.pdf_engine import PDFEngine
 
     return PDFEngine()
+
+
+def _run(
+    operation: Callable[..., "ActionResult"],
+    fail_message: str,
+    exit_on_error: bool = False,
+    **kwargs: Any,
+) -> Optional["ActionResult"]:
+    """Call a pdf operation and report its errors.
+
+    Bad input (a missing file, an invalid range) exits 1 before any work.
+    Other failures print `fail_message`; commands whose scripts rely on it
+    exit 1 (exit_on_error), the rest return None and `max` exits 1 anyway.
+    """
+    try:
+        return operation(engine=_get_engine(), **kwargs)
+    except (ResourceNotFoundError, ValidationError) as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    except Exception as e:
+        log_error(escape(f"{fail_message}: {e}"))
+        if exit_on_error:
+            raise typer.Exit(1) from None
+        return None
+
+
+def _success(result: Optional["ActionResult"]) -> Optional["ActionResult"]:
+    if result:
+        log_success(escape(result.message))
+    return result
 
 
 @app.command("merge")
@@ -31,34 +76,7 @@ def merge_pdfs(
     """
     Combine multiple PDFs into one.
     """
-    # Handle default to current directory
-    if inputs is None:
-        inputs = [Path(".")]
-
-    try:
-        files_to_merge = _resolve_files(inputs)
-    except ValueError as e:
-        log_error(str(e))
-        raise typer.Exit(1) from None
-
-    if not output:
-        # Smart default naming
-        if inputs[0].is_dir():
-            folder_name = inputs[0].name
-            if not folder_name:
-                folder_name = inputs[0].absolute().name or inputs[0].parent.name
-            output = inputs[0] / f"{folder_name}_merged.pdf"
-        else:
-            output = inputs[0].parent / f"{inputs[0].stem}_merged.pdf"
-
-    console.print(f"Merging [bold]{len(files_to_merge)}[/bold] files...")
-
-    try:
-        eng = _get_engine()
-        pages = eng.merge_pdfs(files_to_merge, output)
-        log_success(f"Merged {pages} pages into: [bold]{output}[/bold]")
-    except Exception as e:
-        log_error(f"Merge failed: {e}")
+    _success(_run(pdf_ops.merge, "Merge failed", inputs=inputs, output=output))
 
 
 @app.command("compress")
@@ -78,70 +96,50 @@ def compress_pdf(
     """
     Shrink PDFs. Accepts a single file OR a folder (batch mode).
     """
-    if not target.exists():
-        log_error(f"Target not found: {target}")
-        raise typer.Exit(1)
-
-    targets = []
-
-    # 1. Determine targets
-    if target.is_dir():
-        console.print(f"[cyan]Batch Mode: Scanning '{target.name}'...[/cyan]")
-        targets = sorted(
-            list(target.glob("*.pdf")), key=lambda f: natural_sort_key(f.name)
-        )
-        # Create a subfolder for output to avoid mess
-        output_dir = target / "compressed"
-        output_dir.mkdir(exist_ok=True)
-    else:
-        targets = [target]
-        output_dir = target.parent
-
-    if not targets:
-        log_error("No PDF files found.")
-        raise typer.Exit(1)
-
-    # 2. Process
-    success_count = 0
-    total_saved = 0
+    from max_cli.common.events import get_emitter
+    from max_cli.interface.event_subscriber import EventSubscriber
 
     emitter = get_emitter()
     subscriber = EventSubscriber(emitter)
     subscriber.subscribe()
+    try:
+        with subscriber.create_progress_context(0, "Compressing PDFs..."):
+            result = _run(
+                pdf_ops.compress,
+                "Compression failed",
+                target=target,
+                dpi=dpi,
+                quality=quality,
+                emitter=emitter,
+            )
+    finally:
+        subscriber.unsubscribe()
+    if not result:
+        return
 
-    with subscriber.create_progress_context(len(targets), "Compressing PDFs..."):
-        for pdf in targets:
-            if target.is_dir():
-                out_path = output_dir / pdf.name
-            else:
-                out_path = output_dir / f"{pdf.stem}_compressed.pdf"
-
-            try:
-                engine = _get_engine()
-                engine.compress_pdf(pdf, out_path, dpi, quality)
-                orig = pdf.stat().st_size
-                new = out_path.stat().st_size
-                diff = orig - new
-                total_saved += diff
-                success_count += 1
-            except Exception as e:
-                console.print(f"[red]Failed to compress {pdf.name}: {e}[/red]")
-
-    subscriber.unsubscribe()
-
-    log_success(f"Finished! Processed {success_count}/{len(targets)} files.")
-    if total_saved > 0:
+    for failure in result.details["failed"]:
         console.print(
-            f"[green]Total Space Saved:[/green] [bold]{format_size(total_saved)}[/bold]"
+            f"[red]Failed to compress {escape(failure['file'])}: "
+            f"{escape(failure['error'])}[/red]"
+        )
+    if not result.ok:
+        log_error(escape(result.message))
+        return
+    log_success(escape(result.message))
+    saved = result.details["saved_bytes"]
+    if saved > 0:
+        console.print(
+            f"[green]Total Space Saved:[/green] [bold]{format_size(saved)}[/bold]"
         )
     else:
-        # Growth scenario
         console.print(
-            f"[yellow]⚠ Warning:[/yellow] File size increased by [bold red]{format_size(abs(total_saved))}[/bold red]."
+            "[yellow]⚠ Warning:[/yellow] File size increased by "
+            f"[bold red]{format_size(abs(saved))}[/bold red]."
         )
         console.print(
-            "[dim]Note: This PDF is likely text-based. Rasterization (image-based compression) "
-            "is best for scanned documents, not digital text documents.[/dim]"
+            "[dim]Note: This PDF is likely text-based. Rasterization (image-based"
+            " compression) is best for scanned documents, not digital text"
+            " documents.[/dim]"
         )
 
 
@@ -176,90 +174,34 @@ def bundle_pdfs(
       max pdf bundle -d 300 -q 90       # Merge + Compress with high quality
       max pdf bundle -d 72 -q 50        # Merge + Heavy compression
     """
-    # Handle default to current directory
-    if inputs is None:
-        inputs = [Path(".")]
-
-    # 1. Resolve Inputs
-    try:
-        files = _resolve_files(inputs)
-    except Exception as e:
-        log_error(str(e))
-        raise typer.Exit(1) from None
-
-    # 2. Smart Output Logic
-    # Determine a base name for the file
-    if inputs[0].is_dir():
-        base_name = inputs[0].name
-        if not base_name:
-            base_name = inputs[0].absolute().name or inputs[0].parent.name
-        default_parent = inputs[0].parent
-    else:
-        base_name = inputs[0].stem
-        default_parent = inputs[0].parent
-
-    # Determine filename based on whether compression is used
-    if no_compress:
-        filename = f"{base_name}_merged.pdf"
-    else:
-        filename = f"{base_name}_bundled.pdf"
-
-    if output is None:
-        output = default_parent / filename
-    elif output.is_dir():
-        output = output / filename
-
-    # Show pipeline info
-    if no_compress:
-        console.print(f"[cyan]Pipeline: Merge ({len(files)} files)[/cyan]")
-    else:
-        console.print(
-            f"[cyan]Pipeline: Merge ({len(files)} files) -> Compress (DPI:{dpi}, Q:{quality})[/cyan]"
+    with console.status("Merging..." if no_compress else "Merging and compressing..."):
+        result = _run(
+            pdf_ops.bundle,
+            "Bundle operation failed",
+            exit_on_error=True,
+            inputs=inputs,
+            output=output,
+            dpi=dpi,
+            quality=quality,
+            no_compress=no_compress,
         )
-    console.print(f"[dim]Target: {output}[/dim]")
-
-    try:
-        with console.status("Merging and compressing..." if not no_compress else "Merging..."):
-            stats = _get_engine().bundle_pdfs(
-                files, output, compress=not no_compress, dpi=dpi, quality=quality
-            )
-    except Exception as e:
-        log_error(f"Bundle operation failed: {e}")
-        raise typer.Exit(1) from None
-
-    if not no_compress and stats["output_size"] > stats["input_size"]:
-        growth = stats["output_size"] - stats["input_size"]
+    if not result:
+        return
+    details = result.details
+    if details["grew"]:
+        growth = details["output_size"] - details["input_size"]
         console.print(
-            f"[yellow]⚠ Warning:[/yellow] Bundle size increased by [bold red]{format_size(growth)}[/bold red]."
+            "[yellow]⚠ Warning:[/yellow] Bundle size increased by "
+            f"[bold red]{format_size(growth)}[/bold red]."
         )
         console.print(
-            "[dim]Note: Consider using lower quality or 'compress' command separately.[/dim]"
+            "[dim]Note: Consider using lower quality or 'compress' command"
+            " separately.[/dim]"
         )
-
     log_success("Bundle created successfully!")
-    console.print(f"Path: [bold]{output}[/bold]")
-    console.print(f"Size: {format_size(stats['output_size'])}")
-    console.print(f"Pages: [bold]{stats['page_count']}[/bold]")
-
-
-def _resolve_files(inputs: list[Path]) -> list[Path]:
-    """Helper to turn input arguments into a sorted list of PDF paths."""
-    files = []
-
-    # If the user passed a single directory
-    if len(inputs) == 1 and inputs[0].is_dir():
-        from max_cli.core.engines.pdf_engine import find_pdfs
-
-        files = find_pdfs(inputs[0])
-
-    else:
-        # Explicit list of files
-        files = [f for f in inputs if f.exists() and f.suffix.lower() == ".pdf"]
-
-    if not files:
-        raise ValueError("No PDF files found in input.")
-
-    return files
+    console.print(f"Path: [bold]{escape(str(result.output_files[0]))}[/bold]")
+    console.print(f"Size: {format_size(details['output_size'])}")
+    console.print(f"Pages: [bold]{details['page_count']}[/bold]")
 
 
 @app.command("split")
@@ -296,76 +238,26 @@ def split_pdf(
       max pdf split file.pdf -c 10             Split into chunks of 10 pages each
       max pdf split file.pdf --remove -s 5 -e 10  Remove pages 5-10
     """
-    if not target.exists() or not target.is_file():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    try:
-        eng = _get_engine()
-        total_pages = eng.get_page_count(target)
-    except Exception as e:
-        log_error(f"Failed to read PDF: {e}")
-        raise typer.Exit(1) from None
-
+    result = _run(
+        pdf_ops.split,
+        "Split failed",
+        exit_on_error=True,
+        target=target,
+        start=start,
+        end=end,
+        output=output,
+        chunks=chunks,
+        remove=remove,
+        list_pages=list_pages,
+    )
+    if result is None:
+        return
     if list_pages:
-        console.print(f"[cyan]'{target.name}' has [bold]{total_pages}[/bold] pages.")
+        console.print(f"[cyan]{escape(result.message)}[/cyan]")
         return
-
-    # Handle chunk mode
-    if chunks > 0:
-        output_dir = target.parent
-        if output and output.is_dir():
-            output_dir = output
-
-        output_dir.mkdir(exist_ok=True)
-
-        console.print(f"[cyan]Splitting into chunks of {chunks} pages...")
-        files = eng.split_into_chunks(target, output_dir, chunks)
-
-        console.print(f"[green]Created [bold]{len(files)}[/bold] files:")
-        for f in files:
-            size = f.stat().st_size
-            console.print(f"  {f.name} ({format_size(size)})")
-
-        log_success(f"Split into {len(files)} chunks")
-        return
-
-    # Resolve end to last page
-    if end == -1 or end > total_pages:
-        end = total_pages
-
-    # Validate range
-    if start < 1 or start > end:
-        log_error(f"Invalid range: {start}-{end}. Document has {total_pages} pages.")
-        raise typer.Exit(1)
-
-    # Determine output path
-    if not output:
-        if remove:
-            output = target.parent / f"{target.stem}_without_p{start}-{end}.pdf"
-        else:
-            output = target.parent / f"{target.stem}_p{start}-{end}.pdf"
-
-    # Show what we're doing
-    if remove:
-        console.print(f"[cyan]Removing pages {start}-{end} from '{target.name}'...")
-        action_text = "Removed"
-    else:
-        console.print(f"[cyan]Extracting pages {start}-{end} from '{target.name}'...")
-        action_text = "Extracted"
-
-    try:
-        count = eng.split_by_range(target, output, start, end, keep=not remove)
-
-        size = output.stat().st_size
-        console.print(f"{action_text} [bold]{count}[/bold] pages -> {output.name}")
-        console.print(f"Size: {format_size(size)}")
-        log_success(f"Saved to: {output}")
-
-    except ValueError as e:
-        log_error(str(e))
-    except Exception as e:
-        log_error(f"Split failed: {e}")
+    for path in result.output_files:
+        console.print(f"  {escape(path.name)} ({format_size(path.stat().st_size)})")
+    log_success(escape(result.message))
 
 
 @app.command("stamp")
@@ -378,13 +270,12 @@ def stamp_pdf(
     """
     Add a watermark (e.g., 'CONFIDENTIAL') to the center of every page.
     """
-    if not output:
-        output = target.parent / f"{target.stem}_stamped.pdf"
-
-    console.print(f"[cyan]Stamping '{text}' onto {target.name}...[/cyan]")
-    eng = _get_engine()
-    eng.watermark_pdf(target, output, text=text)
-    log_success(f"Stamped PDF saved to: {output}")
+    console.print(
+        f"[cyan]Stamping '{escape(text)}' onto {escape(target.name)}...[/cyan]"
+    )
+    _success(
+        _run(pdf_ops.stamp, "Stamp failed", target=target, text=text, output=output)
+    )
 
 
 @app.command("lock")
@@ -399,12 +290,15 @@ def lock_pdf(
     """
     Encrypt a PDF with a password.
     """
-    if not output:
-        output = target.parent / f"{target.stem}_locked.pdf"
-
-    eng = _get_engine()
-    eng.set_password(target, output, password)
-    log_success(f"Encrypted file saved to: {output}")
+    _success(
+        _run(
+            pdf_ops.lock,
+            "Encryption failed",
+            target=target,
+            password=password,
+            output=output,
+        )
+    )
 
 
 @app.command("rip")
@@ -417,19 +311,15 @@ def rip_content(
     """
     Extract all images from inside the PDF.
     """
-    if not output_dir:
-        output_dir = target.parent / f"{target.stem}_assets"
-
-    output_dir.mkdir(exist_ok=True)
-
-    console.print(f"Extracting images from [bold]{target.name}[/bold]...")
-    eng = _get_engine()
-    count = eng.extract_assets(target, output_dir)
-
-    if count > 0:
-        log_success(f"Extracted [bold]{count}[/bold] images to: {output_dir}")
+    result = _run(
+        pdf_ops.rip, "Extraction failed", target=target, output_dir=output_dir
+    )
+    if result is None:
+        return
+    if result.details["count"]:
+        log_success(escape(result.message))
     else:
-        console.print("[yellow]No images found in this PDF.[/yellow]")
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
 
 
 @app.command("ocr")
@@ -449,27 +339,22 @@ def ocr_pdf(
     Requires pytesseract and Tesseract OCR installed.
     Install: pip install max-cli[ocr]
     """
-    if not output:
-        output = target.parent / f"{target.stem}.txt"
-
-    console.print(f"[cyan]Running OCR on {target.name} (lang={lang})...[/cyan]")
-
+    console.print(f"[cyan]Running OCR on {escape(target.name)} (lang={lang})...[/cyan]")
     try:
-        eng = _get_engine()
-        text = eng.ocr_pdf(target, output, lang=lang)
-        char_count = len(text)
-
-        log_success(f"Text extracted to: {output}")
-        console.print(f"Extracted [bold]{char_count}[/bold] characters")
-
+        result = pdf_ops.ocr(target, lang=lang, output=output, engine=_get_engine())
+    except ResourceNotFoundError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
     except RuntimeError as e:
-        log_error(str(e))
-        console.print(
-            # "\[" keeps Rich from reading [ocr] as a style tag.
-            "[yellow]Tip: Install OCR dependencies with: pip install max-cli\\[ocr][/yellow]"
-        )
+        # The engine raises RuntimeError when pytesseract or Tesseract is missing.
+        log_error(escape(str(e)))
+        console.print(OCR_TIP)
+        return
     except Exception as e:
-        log_error(f"OCR failed: {e}")
+        log_error(escape(f"OCR failed: {e}"))
+        return
+    log_success(escape(result.message))
+    console.print(f"Extracted [bold]{result.details['characters']}[/bold] characters")
 
 
 @app.command("form-data")
@@ -479,24 +364,17 @@ def extract_form(
     """
     Extract data from PDF form fields.
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    console.print(f"[cyan]Extracting form data from {target.name}...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        form_data = eng.extract_form_data(target)
-        if form_data:
-            console.print("[bold]Form Fields:[/bold]")
-            for name, value in form_data.items():
-                console.print(f"  {name}: [green]{value}[/green]")
-            log_success(f"Found {len(form_data)} form fields")
-        else:
-            console.print("[yellow]No form fields found in this PDF.[/yellow]")
-    except Exception as e:
-        log_error(f"Failed to extract form data: {e}")
+    result = _run(pdf_ops.form_data, "Failed to extract form data", target=target)
+    if result is None:
+        return
+    fields = result.details["fields"]
+    if not fields:
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
+        return
+    console.print("[bold]Form Fields:[/bold]")
+    for name, value in fields.items():
+        console.print(f"  {escape(str(name))}: [green]{escape(str(value))}[/green]")
+    log_success(escape(result.message))
 
 
 @app.command("form-fill")
@@ -515,30 +393,15 @@ def fill_form(
 
     Example: max pdf form-fill form.pdf -f name="John" -f email="john@example.com"
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    if not output:
-        output = target.parent / f"{target.stem}_filled.pdf"
-
-    field_values = {}
-    for f in field:
-        if "=" in f:
-            key, value = f.split("=", 1)
-            field_values[key] = value
-        else:
-            log_error(f"Invalid field format: {f}. Use fieldname=value")
-            raise typer.Exit(1)
-
-    console.print(f"[cyan]Filling {len(field_values)} fields...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        eng.fill_form(target, output, field_values)
-        log_success(f"Filled form saved to: {output}")
-    except Exception as e:
-        log_error(f"Failed to fill form: {e}")
+    _success(
+        _run(
+            pdf_ops.form_fill,
+            "Failed to fill form",
+            target=target,
+            field=field,
+            output=output,
+        )
+    )
 
 
 @app.command("form-flatten")
@@ -549,21 +412,14 @@ def flatten_form(
     """
     Flatten PDF form (convert fields to regular content).
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    if not output:
-        output = target.parent / f"{target.stem}_flattened.pdf"
-
-    console.print("[cyan]Flattening form...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        eng.flatten_form(target, output)
-        log_success(f"Flattened form saved to: {output}")
-    except Exception as e:
-        log_error(f"Failed to flatten form: {e}")
+    _success(
+        _run(
+            pdf_ops.form_flatten,
+            "Failed to flatten form",
+            target=target,
+            output=output,
+        )
+    )
 
 
 @app.command("optimize")
@@ -580,35 +436,25 @@ def optimize_pdf(
     """
     Optimize PDF (remove unused objects, compress images, linearize).
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    if not output:
-        output = target.parent / f"{target.stem}_optimized.pdf"
-
-    orig_size = target.stat().st_size
-
-    console.print("[cyan]Optimizing PDF...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        eng.optimize_pdf(
-            target,
-            output,
-            compress_images=not no_compress,
-            linearize=not no_linearize,
+    result = _success(
+        _run(
+            pdf_ops.optimize,
+            "Optimization failed",
+            target=target,
+            output=output,
+            no_compress=no_compress,
+            no_linearize=no_linearize,
         )
-
-        new_size = output.stat().st_size
-        reduction = ((orig_size - new_size) / orig_size) * 100
-
-        log_success(f"Optimized PDF saved to: {output}")
-        console.print(
-            f"Size: {format_size(orig_size)} -> [green]{format_size(new_size)}[/green] (-{reduction:.1f}%)"
-        )
-    except Exception as e:
-        log_error(f"Optimization failed: {e}")
+    )
+    if result is None:
+        return
+    original_size = result.details["original_size"]
+    new_size = result.details["new_size"]
+    reduction = (original_size - new_size) / original_size * 100 if original_size else 0
+    console.print(
+        f"Size: {format_size(original_size)} -> "
+        f"[green]{format_size(new_size)}[/green] (-{reduction:.1f}%)"
+    )
 
 
 @app.command("compare")
@@ -619,30 +465,17 @@ def compare_pdfs(
     """
     Compare two PDFs and show differences.
     """
-    if not file1.exists():
-        log_error(f"File not found: {file1}")
-        raise typer.Exit(1)
-    if not file2.exists():
-        log_error(f"File not found: {file2}")
-        raise typer.Exit(1)
-
-    console.print(f"[cyan]Comparing {file1.name} vs {file2.name}...[/cyan]")
-
-    try:
-        eng = _get_engine()
-        result = eng.compare_pdfs(file1, file2)
-
-        if result["pages_equal"] and not result["differences"]:
-            console.print("[green]✓ PDFs are identical![/green]")
-        else:
-            console.print("[yellow]⚠ PDFs have differences:[/yellow]")
-            for diff in result["differences"]:
-                console.print(f"  - {diff}")
-
-            if result["pages_equal"]:
-                console.print("\n[green]Page count and content match.[/green]")
-            else:
-                console.print("\n[red]PDFs are different.[/red]")
-
-    except Exception as e:
-        log_error(f"Comparison failed: {e}")
+    result = _run(pdf_ops.compare, "Comparison failed", file1=file1, file2=file2)
+    if result is None:
+        return
+    details = result.details
+    if details["identical"]:
+        console.print("[green]✓ PDFs are identical![/green]")
+        return
+    console.print("[yellow]⚠ PDFs have differences:[/yellow]")
+    for difference in details["differences"]:
+        console.print(f"  - {escape(difference)}")
+    if details["pages_equal"]:
+        console.print("\n[green]Page count and content match.[/green]")
+    else:
+        console.print("\n[red]PDFs are different.[/red]")

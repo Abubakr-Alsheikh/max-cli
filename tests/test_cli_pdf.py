@@ -82,7 +82,6 @@ class TestMerge:
         )
 
         assert result.exit_code == 0, result.output
-        assert "Merging 2 files" in result.output
         assert "Merged 4 pages" in result.output
         assert _page_count(output_path) == 4
 
@@ -132,7 +131,7 @@ class TestSplit:
         )
 
         assert result.exit_code == 0, result.output
-        assert "Extracted 2 pages -> multi_p2-3.pdf" in result.output
+        assert "Extracted pages 2-3: 2 pages saved to:" in result.output
         assert _page_count(dummy_pdf_multi.parent / "multi_p2-3.pdf") == 2
 
     def test_remove_drops_range(self, dummy_pdf_multi):

@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from max_cli.common.exceptions import ProcessingError, ValidationError
 from max_cli.core.catalog import get_action
-from max_cli.core.catalog.spec import PATH_KINDS, Action, Param, ParamKind
+from max_cli.core.catalog.spec import (
+    LIST_SEPARATOR,
+    PATH_KINDS,
+    Action,
+    Param,
+    ParamKind,
+)
 from max_cli.core.engines.task_queue import TaskItem, TaskType, register_executor
 
 if TYPE_CHECKING:
@@ -66,13 +72,30 @@ def coerce_args(action: Action, raw_args: Mapping[str, Any]) -> dict[str, Any]:
     args: dict[str, Any] = {}
     for param in action.params:
         value = raw_args.get(param.name)
-        if _is_empty(value):
+        if param.multiple and not _is_empty(value):
+            items = _list_items(value)
+            value = [_coerce(action, param, item) for item in items] or None
+        if _is_empty(value) or value == []:
             if param.required:
                 raise ValidationError(f"{action.id}: '{param.name}' is required")
             args[param.name] = param.resolved_default()
+        elif param.multiple:
+            args[param.name] = value
         else:
             args[param.name] = _coerce(action, param, value)
     return args
+
+
+def _list_items(value: Any) -> list[Any]:
+    """A list as given, or form text split on LIST_SEPARATOR, blanks dropped."""
+    items = (
+        value if isinstance(value, (list, tuple)) else str(value).split(LIST_SEPARATOR)
+    )
+    return [
+        item.strip() if isinstance(item, str) else item
+        for item in items
+        if not _is_empty(item)
+    ]
 
 
 def _operation(action: Action) -> Callable[..., "ActionResult"]:
