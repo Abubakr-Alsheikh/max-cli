@@ -22,7 +22,7 @@ QUEUE_OPTION = "queue"
 # Groups whose Typer flags match their catalog entries. `max grab download`
 # calls its operation too, but keeps flags such as --video/--audio and
 # --no-meta that scripts rely on, so only its operation is checked.
-CLI_CHECKED_GROUPS = ("video", "images")
+CLI_CHECKED_GROUPS = ("video", "images", "pdf")
 
 
 def _cli_commands(group_name: str) -> dict[str, Any]:
@@ -68,6 +68,10 @@ def test_cli_options_match_the_catalog(group_name: str, action: Action):
     for param in action.params:
         cli_param = cli_params[param.name]
         assert cli_param.required == param.required, param.name
+        takes_list = (
+            bool(getattr(cli_param, "multiple", False)) or cli_param.nargs == -1
+        )
+        assert takes_list == param.multiple, param.name
         if not param.required:
             # A Setting default: the CLI read the same setting at import time.
             expected = _normalize(param.resolved_default())

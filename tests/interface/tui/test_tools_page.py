@@ -250,3 +250,27 @@ async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
         # A Setting default shows the user's configured value.
         quality = form.query_one("#field-quality", Input).value
         assert quality == str(settings.DEFAULT_QUALITY)
+
+
+@pytest.mark.asyncio
+async def test_password_fields_are_masked():
+    app = FormApp(get_action("pdf.lock"))
+    async with app.run_test(size=(100, 40)):
+        assert app.query_one("#field-password", Input).password
+
+
+@pytest.mark.asyncio
+async def test_browse_adds_to_a_list_field(tmp_path):
+    first, second = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    app = FormApp(get_action("pdf.merge"))
+    async with app.run_test(size=(100, 60)) as pilot:
+        field = app.query_one("#field-inputs", Input)
+        field.value = str(first)
+
+        app.query_one("#browse-inputs", Button).press()
+        await pilot.pause()
+        app.screen.query_one("#picker-path", Input).value = str(second)
+        app.screen.query_one("#picker-ok", Button).press()
+        await pilot.pause()
+
+        assert field.value == f"{first}; {second}"

@@ -36,14 +36,6 @@ class TestPresetHelpers:
         assert presets.sibling_path(clip, "_cut") == Path("videos/clip_cut.mov")
 
 
-class TestTuiMapping:
-    def test_pdf_merge_folder_uses_natural_order(self, tmp_path):
-        for name in ["10.pdf", "2.pdf", "_temp.pdf", "notes.txt"]:
-            (tmp_path / name).write_bytes(b"")
-        params = _map("pdf", "merge", {"inputs": tmp_path})
-        assert [p.name for p in params["input_paths"]] == ["2.pdf", "10.pdf"]
-
-
 class TestEngineHelpers:
     def test_concat_txt_list(self, tmp_path):
         listing = tmp_path / "list.txt"

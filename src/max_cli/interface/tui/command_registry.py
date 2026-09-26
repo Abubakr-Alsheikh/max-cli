@@ -126,71 +126,6 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
             ],
         },
     },
-    "pdf": {
-        "merge": {
-            "label": "Merge PDFs",
-            "icon": "\U0001f4c4",
-            "category": "pdf",
-            "engine": "PDFEngine",
-            "method": "merge_pdfs",
-            "description": "Combine multiple PDFs into one",
-            "has_queue_option": False,
-            "fields": [
-                _f("inputs", "path_folder", "Input PDFs", required=True),
-                _f("output", "path_output", "Output PDF", required=True),
-            ],
-        },
-        "compress": {
-            "label": "Compress PDF",
-            "icon": "\U0001f4e6",
-            "category": "pdf",
-            "engine": "PDFEngine",
-            "method": "compress_pdf",
-            "description": "Compress PDF by rasterizing pages",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input PDF", required=True),
-                _f("dpi", "int", "DPI", default=presets.PDF_COMPRESS_DPI),
-                _f(
-                    "quality",
-                    "int",
-                    "JPEG Quality",
-                    default=presets.PDF_COMPRESS_QUALITY,
-                ),
-            ],
-        },
-        "split": {
-            "label": "Split PDF",
-            "icon": "\u2702",
-            "category": "pdf",
-            "engine": "PDFEngine",
-            "method": "split_pdf",
-            "description": "Extract specific pages from a PDF",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Input PDF", required=True),
-                _f("start", "int", "Start Page"),
-                _f("end", "int", "End Page"),
-                _f("output", "path_output", "Output PDF"),
-            ],
-        },
-        "split_range": {
-            "label": "Split PDF by Range",
-            "icon": "\u2702",
-            "category": "pdf",
-            "engine": "PDFEngine",
-            "method": "split_by_range",
-            "description": "Extract or remove a page range from a PDF",
-            "has_queue_option": False,
-            "fields": [
-                _f("input_path", "path", "Input PDF", required=True),
-                _f("start", "int", "Start Page", required=True),
-                _f("end", "int", "End Page", required=True),
-                _f("keep", "bool", "Keep Range (uncheck to remove)", default=True),
-                _f("output_path", "path_output", "Output PDF"),
-            ],
-        },
-    },
     "audio": {
         "set": {
             "label": "Set Audio Metadata",
@@ -308,7 +243,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
 
 # `video` and `grab` moved to the command catalog (core/catalog); the Tools
 # and Download pages use it.
-CATEGORIES: list[str] = ["files", "pdf", "audio", "ai"]
+CATEGORIES: list[str] = ["files", "audio", "ai"]
 
 
 class CommandRegistry:

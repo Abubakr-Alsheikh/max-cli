@@ -18,6 +18,7 @@ from textual.widgets import Button, Collapsible, Input, Label, Select, Static, S
 
 from max_cli.common.exceptions import MaxError
 from max_cli.core.catalog.spec import (
+    LIST_SEPARATOR,
     PATH_KINDS,
     Action,
     Danger,
@@ -44,7 +45,11 @@ def _initial_text(param: Param) -> str:
     if param.required:
         return ""
     default = param.resolved_default()
-    return "" if default is None else str(default)
+    if default is None:
+        return ""
+    if param.multiple and isinstance(default, (list, tuple)):
+        return f"{LIST_SEPARATOR} ".join(str(item) for item in default)
+    return str(default)
 
 
 class ActionForm(Vertical):
@@ -163,10 +168,14 @@ class ActionForm(Vertical):
             input_type = "integer"
         elif param.kind == ParamKind.FLOAT:
             input_type = "number"
+        placeholder = "Required" if param.required else "Optional"
+        if param.multiple:
+            placeholder += f"; separate several with {LIST_SEPARATOR}"
         text_input = Input(
             value=_initial_text(param),
-            placeholder="Required" if param.required else "Optional",
+            placeholder=placeholder,
             type=input_type,
+            password=param.kind == ParamKind.SECRET,
             id=widget_id,
         )
         if param.kind in PATH_KINDS:
@@ -221,7 +230,12 @@ class ActionForm(Vertical):
         start = current if current.is_dir() else current.parent
 
         def _picked(path: Optional[Path]) -> None:
-            if path is not None:
+            if path is None:
+                return
+            if param.multiple and field.value.strip():
+                # Browse adds to a list instead of replacing it.
+                field.value = f"{field.value.rstrip().rstrip(LIST_SEPARATOR)}{LIST_SEPARATOR} {path}"
+            else:
                 field.value = str(path)
 
         from max_cli.interface.tui.widgets.dialogs import PathPicker

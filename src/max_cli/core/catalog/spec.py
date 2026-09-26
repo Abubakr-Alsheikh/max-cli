@@ -20,9 +20,12 @@ class ParamKind(str, Enum):
     FOLDER = "folder"
     OUTPUT = "output"  # a file the action writes
     URL = "url"
+    SECRET = "secret"  # text the dashboard masks, e.g. a password
 
 
 PATH_KINDS = frozenset({ParamKind.FILE, ParamKind.FOLDER, ParamKind.OUTPUT})
+# Separates the values of a `multiple` param typed into one form field.
+LIST_SEPARATOR = ";"
 
 
 class Danger(str, Enum):
@@ -76,6 +79,9 @@ class Param:
         str, ...
     ] = ()  # CLI spellings such as ("--format", "-f"); empty = positional
     advanced: bool = False
+    # Takes a list: repeated options (-f a -f b) or several arguments on the
+    # CLI, a JSON array from the agent, LIST_SEPARATOR-separated form text.
+    multiple: bool = False
 
     @property
     def required(self) -> bool:

@@ -18,9 +18,14 @@ def _param_schema(param: Param) -> dict[str, Any]:
     }
     if param.kind == ParamKind.CHOICE:
         schema["enum"] = list(param.choices)
+    if param.kind == ParamKind.SECRET:
+        schema["format"] = "password"
     default = None if param.required else param.resolved_default()
     if default is not None:
         schema["default"] = str(default) if schema["type"] == "string" else default
+    if param.multiple:
+        description = schema.pop("description")
+        schema = {"type": "array", "items": schema, "description": description}
     return schema
 
 

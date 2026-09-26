@@ -2,6 +2,8 @@
 
 Most `max pdf` commands take one PDF and accept `-o` to set the output path. Without `-o`, Max writes a new file next to the input.
 
+A missing input file stops any command with exit code 1. The dashboard's Tools page has a form for each command. The AI agent will get every command except `lock`, so it never sees your password.
+
 ## merge
 
 Combine several PDFs into one.
@@ -10,7 +12,7 @@ Combine several PDFs into one.
 max pdf merge [INPUTS]... [--output OUTPUT]
 ```
 
-`INPUTS` is a list of files or a single folder. Without `--output`, Max names the result `<first file>_merged.pdf`, or `<folder>_merged.pdf` inside the folder.
+`INPUTS` is a list of files or a single folder. Without `--output`, Max names the result `<first file>_merged.pdf`, or `<folder>_merged.pdf` inside the folder. Max leaves an earlier merge result out of the inputs, so running the command twice gives the same file.
 
 **Examples:**
 
