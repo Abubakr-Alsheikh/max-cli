@@ -249,7 +249,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - *Shows: Every destructive file operation is recorded; `max files undo` reverses the last group atomically. Auto-backups protect deletes.*
 
 - **TUI Dashboard Pattern**:
-  - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command, graceful fallback if textual missing)
+  - Entry: `src/max_cli/interface/tui/dashboard.py` (`max dashboard` command). A bare `max` runs it too when stdin and stdout are a terminal: `LazyTyperGroup.parse_args` in `core/cli/lazy_group.py` (roadmap D2). Scripts and pipes still get help
   - App: `src/max_cli/interface/tui/app.py` (Textual App with a sidebar of 10 sections: Home, Download, Queue, History, Files, Tools, Analytics, Config, System, Chat. The sidebar's `SECTIONS` list drives which panels exist; keys `q` quit, `r` refresh, `ctrl+b` toggle sidebar)
   - Widgets: `src/max_cli/interface/tui/widgets/` (Sidebar, HomePanel, DownloadPanel, QueuePanel, HistoryPanel, FilesPanel, ToolsPanel, AnalyticsPanel, ConfigPanel, SystemPanel, ChatPanel)
   - Forms: `widgets/action_form.py` builds a form from a catalog `Action`: every option with its CLI default, advanced options folded away, Browse for paths, a confirmation for `MOVES`/`OVERWRITES`/`DELETES`, and a thread worker for the run. `widgets/dialogs.py` holds `ConfirmDialog` and `PathPicker`. The Tools page (`widgets/tools_panel.py`) shows one form per catalog action; other pages reuse `ActionForm` (pass `include=` and `embedded=True` to place chosen fields inside a page's own layout)
@@ -258,7 +258,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - Executor: `src/max_cli/interface/tui/command_executor.py` (direct engine method calls, lazy engine loading, handles None/int/Path/dict return types)
   - Activity: `src/max_cli/interface/tui/activity_log.py` (unified activity logging across all operations, filtering by category)
   - Tests: `tests/interface/tui/` (Textual Pilot API for simulating interactions)
-  - *Shows: Optional dependency (`max-cli[tui]`), interactive command execution, unified activity log, file browser, AI chat, keyboard shortcuts, loading states, config-aware defaults, graceful degradation.*
+  - *Shows: Required dependencies (`textual`, `psutil`; the `tui` extra is empty and kept for old install commands), interactive command execution, unified activity log, file browser, AI chat, keyboard shortcuts, loading states, config-aware defaults, graceful degradation.*
 
 ## 8. Escalation & Discovery
 

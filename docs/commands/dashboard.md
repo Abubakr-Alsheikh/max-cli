@@ -1,24 +1,21 @@
 # TUI Dashboard
 
-`max dashboard` opens an interactive terminal dashboard. You can download media, watch the task queue, browse files, edit settings and chat with the AI from one screen.
-
-## Installation
-
-The dashboard needs the `tui` extra, which installs `textual` and `psutil`:
-
-```bash
-pip install max-cli[tui]
-```
+Type `max` on its own to open the interactive terminal dashboard. You can download media, run tools, watch the task queue, browse files, edit settings and chat with the AI from one screen.
 
 ## Usage
 
 ```bash
-max dashboard
+max              # opens the dashboard
+max dashboard    # the same, by name
 ```
+
+A bare `max` opens the dashboard only when you run it in a terminal. In a script, a pipe or CI it prints the help text, so nothing waits for key presses.
+
+The dashboard comes with the base install. Older instructions say `pip install max-cli[tui]`; that command still works.
 
 ## Sections
 
-A sidebar on the left switches between nine sections. Click a section, or move to it with `Tab` and press `Enter`.
+A sidebar on the left switches between ten sections. Click a section, or move to it with `Tab` and press `Enter`.
 
 | Section | What it does |
 |---------|--------------|
@@ -27,6 +24,7 @@ A sidebar on the left switches between nine sections. Click a section, or move t
 | **Queue** | Live task queue; refreshes every 2 seconds |
 | **History** | Finished tasks, with filters |
 | **Files** | File browser with quick actions |
+| **Tools** | A form for each command, with all its options |
 | **Analytics** | Live usage and system monitoring |
 | **Config** | View and edit your settings |
 | **System** | Disk usage of `~/.max_cli/` and system info |
@@ -46,13 +44,17 @@ The Queue and History sections read the same task store as `max queue` and `max 
 
 ## Troubleshooting
 
-### "The TUI dashboard requires the 'textual' library"
+### "The dashboard needs the 'textual' library, which is missing"
 
-You ran `max dashboard` without the TUI extra. Install it:
+Your install is broken or partly removed. Reinstall Max:
 
 ```bash
-pip install max-cli[tui]
+pip install --upgrade max-cli
 ```
+
+### `max` prints help instead of opening the dashboard
+
+`max` opens the dashboard only when both its input and its output are a terminal. Run it directly, without `|` or `>`, or run `max dashboard`.
 
 ### Dashboard not refreshing
 
