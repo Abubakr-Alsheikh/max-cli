@@ -142,6 +142,7 @@ def compress_images(...):
 - [ ] Type checking does not regress: `python scripts/mypy_baseline.py` passes. CI fails if the mypy error count rises above `mypy-baseline.txt`. After you fix errors, run it with `--update` to lock in the lower count. Ignore missing stubs per package in `mypy.ini`, never globally.
 - [ ] Code is formatted and linted cleanly (`ruff check . && ruff format .`)
 - [ ] `PLANS/active/` markdown files are updated if fulfilling a planned task.
+- [ ] Before you open a PR, run `python scripts/ci_local.py --full` on a clean tree. It runs ruff, the mypy ratchet and the tests with coverage on Python 3.9 to 3.12 in fresh uv virtualenvs, then builds the package. The guard hook refuses `gh pr create` until HEAD has passed it. The quick mode (no flag) covers pushes; `--install-hook` makes `git push` run it. `tests/test_ci_local.py` fails when the script's Python versions or coverage floor drift from `.github/workflows/ci.yml`, so change both together.
 
 ### Git & Task Standards
 
@@ -153,7 +154,7 @@ def compress_images(...):
 `.claude/settings.json` wires hooks that enforce this file mechanically:
 
 - **PostToolUse `check_rules.py`**: after every Python edit it runs `ruff check --fix`. It also runs `ruff format`, but only on files that were already formatted at HEAD. Then it runs AST checks for this file's rules: lazy heavy imports, no UI or print in core, layering, `os.path`, `shell=True`, utf-8 encoding, `/tmp`, hardcoded ffmpeg, silent broad excepts, `extractall` filter, direct `write_text` (use `max_cli.common.atomic`), reason-less `# type: ignore`, and Python 3.9 syntax. It blocks only violations the edit *introduced* compared with HEAD. Run `python .claude/hooks/check_rules.py --audit src/max_cli` for a full debt report.
-- **PreToolUse `guard.py`**: denies `--no-verify`, force-push and `.env` edits. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
+- **PreToolUse `guard.py`**: denies `--no-verify`, force-push, `.env` edits, and `gh pr create` before `scripts/ci_local.py --full` has passed for HEAD. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
 - **Stop `stop_gate.py`**: when Python changed during the session, it runs `ruff check` plus `pytest -x` before the agent may finish. It blocks once, then warns.
 
 Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes) and `max-plans` (PLANS lifecycle). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.

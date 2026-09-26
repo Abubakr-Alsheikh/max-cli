@@ -797,6 +797,9 @@ ruff format .
 
 # Type check
 mypy src/
+
+# Run the GitHub CI checks locally before you push
+python scripts/ci_local.py --full
 ```
 
 ### Documentation

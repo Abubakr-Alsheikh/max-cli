@@ -43,6 +43,8 @@ htmlcov/
 .nox/
 .coverage
 .coverage.*
+# scripts/ci_local.py --full: per-Python venvs, logs and build output
+.ci-venvs/
 .cache
 nosetests.xml
 coverage.xml
