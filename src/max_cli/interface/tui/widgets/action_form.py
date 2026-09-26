@@ -5,6 +5,7 @@ options fold away, help sits under each field, and path fields get a Browse
 button. The action runs in a thread worker, so the dashboard never freezes.
 """
 
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -85,12 +86,31 @@ class ActionForm(Vertical):
     }
     """
 
-    def __init__(self, action: Action, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        action: Action,
+        include: Optional[Collection[str]] = None,
+        embedded: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        """`include` limits the form to those parameters, in the catalog's order.
+
+        An `embedded` form has no title and no buttons: a page places it
+        inside its own layout and reads `values()` itself.
+        """
         super().__init__(**kwargs)
         self.action = action
+        self.embedded = embedded
+        self.params = tuple(
+            param for param in action.params if include is None or param.name in include
+        )
 
     def compose(self) -> ComposeResult:
         action = self.action
+        if self.embedded:
+            for param in self.params:
+                yield self._field(param)
+            return
         yield Static(
             f"max {action.group} {action.name}: {action.summary}", classes="form-title"
         )
@@ -99,8 +119,8 @@ class ActionForm(Vertical):
                 f"Careful: this {DANGER_NOTES[action.danger]}. You'll be asked first.",
                 classes="form-danger",
             )
-        basic = [param for param in action.params if not param.advanced]
-        advanced = [param for param in action.params if param.advanced]
+        basic = [param for param in self.params if not param.advanced]
+        advanced = [param for param in self.params if param.advanced]
         for param in basic:
             yield self._field(param)
         if advanced:
@@ -156,7 +176,7 @@ class ActionForm(Vertical):
     def values(self) -> dict[str, Any]:
         """What the user entered, keyed by parameter name. Blank means default."""
         values: dict[str, Any] = {}
-        for param in self.action.params:
+        for param in self.params:
             widget = self.query_one(f"#field-{param.name}")
             if isinstance(widget, Switch):
                 values[param.name] = widget.value

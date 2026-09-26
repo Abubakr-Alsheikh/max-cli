@@ -17,7 +17,6 @@ CLI_APPS = {
     "pdf": "max_cli.interface.cli_pdf",
     "audio": "max_cli.interface.cli_audio",
     "files": "max_cli.interface.cli_files",
-    "grab": "max_cli.interface.cli_network",
     "ai": "max_cli.interface.cli_ai",
 }
 

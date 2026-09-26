@@ -58,44 +58,6 @@ def _f(
 
 
 COMMANDS: dict[str, dict[str, CommandSchema]] = {
-    "grab": {
-        "download": {
-            "label": "Download Media",
-            "icon": "\u2b07",
-            "category": "grab",
-            "engine": "NetworkEngine",
-            "method": "download_media",
-            "description": "Download video or audio from a URL",
-            "has_queue_option": True,
-            "fields": [
-                _f(
-                    "url",
-                    "str",
-                    "URL",
-                    required=True,
-                    help="YouTube, Vimeo, or other supported URL",
-                ),
-                _f("audio_only", "bool", "Audio Only", default=False),
-                _f(
-                    "quality",
-                    "select",
-                    "Quality",
-                    default="h",
-                    options=["ss", "s", "m", "h", "x"],
-                ),
-                _f("resolution", "int", "Resolution", help="Custom height in pixels"),
-                _f("subtitles", "bool", "Subtitles", default=False),
-                _f("include_metadata", "bool", "Include Metadata", default=True),
-                _f(
-                    "output_path",
-                    "path_folder",
-                    "Output Directory",
-                    default="~/Max Downloads",
-                ),
-                _f("queue", "bool", "Add to Queue", default=False),
-            ],
-        },
-    },
     "images": {
         "compress": {
             "label": "Compress Image",
@@ -425,8 +387,9 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
 }
 
 
-# `video` moved to the command catalog (core/catalog); the Tools page shows it.
-CATEGORIES: list[str] = ["grab", "images", "files", "pdf", "audio", "ai"]
+# `video` and `grab` moved to the command catalog (core/catalog); the Tools
+# and Download pages use it.
+CATEGORIES: list[str] = ["images", "files", "pdf", "audio", "ai"]
 
 
 class CommandRegistry:

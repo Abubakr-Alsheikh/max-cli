@@ -1,43 +1,207 @@
-"""Interactive download panel for the TUI dashboard."""
+"""Download page: paste a link, see what it is, pick a quality, download.
 
+Simple mode shows only the link, a preview with quality choices and the
+folder. Advanced mode adds every other `grab download` option, taken from the
+command catalog. Each download gets its own row with progress and a real
+Cancel. See PLANS/active/grab-page-redesign.md.
+"""
+
+import threading
+import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
+from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.reactive import reactive
 from textual.widgets import (
     Button,
-    Checkbox,
     DataTable,
     Input,
     Label,
     ProgressBar,
     RadioButton,
     RadioSet,
-    Select,
     Static,
 )
-from textual.worker import Worker, WorkerState
 
+from max_cli.common.utils import format_size
 from max_cli.config import settings
+from max_cli.core.catalog import get_action
 from max_cli.core.engines.download_history import DownloadHistory
+from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
+from max_cli.interface.tui.widgets.action_form import ActionForm
 
-_BITRATE_OPTIONS = {
-    "64k": "ss",
-    "128k": "s",
-    "192k": "m",
-    "320k": "x",
-}
-_BITRATE_LABELS = list(_BITRATE_OPTIONS.keys())
+GRAB_ACTION_ID = "grab.download"
+# Advanced mode shows these catalog options. The quality choices above them
+# already cover quality, media type and (for odd heights) resolution.
+ADVANCED_FIELDS = (
+    "resolution",
+    "playlist_items",
+    "no_playlist",
+    "subtitles",
+    "include_metadata",
+    "strip_playlist",
+    "player_client",
+)
+PROGRESS_REFRESH_SECONDS = 0.25
+SLOT_POLL_SECONDS = 0.2
+MODE_PREF = "download_mode"
+FOLDER_PREF = "download_folder"
+
+
+@dataclass
+class QualityChoice:
+    label: str
+    values: dict[str, Any]  # quality / resolution / media_type for grab.download
+
+
+DEFAULT_CHOICES = [
+    QualityChoice("Best", {"media_type": "video", "quality": "x"}),
+    QualityChoice("1080p", {"media_type": "video", "quality": "h"}),
+    QualityChoice("720p", {"media_type": "video", "quality": "m"}),
+    QualityChoice("480p", {"media_type": "video", "quality": "s"}),
+    QualityChoice("Audio (MP3)", {"media_type": "audio", "quality": "h"}),
+]
+
+
+def _with_size(label: str, size: Optional[int]) -> str:
+    return f"{label} ~{format_size(size)}" if size else label
+
+
+def choices_for(media: Any) -> list[QualityChoice]:
+    """Quality choices for a probed video: its real heights, sizes, and audio."""
+    choices = [QualityChoice("Best", {"media_type": "video", "quality": "x"})]
+    for option in media.qualities:
+        values: dict[str, Any] = {"media_type": "video"}
+        if option.quality_code:
+            values["quality"] = option.quality_code
+        else:
+            values["resolution"] = option.height
+        choices.append(
+            QualityChoice(_with_size(option.label, option.size_bytes), values)
+        )
+    choices.append(
+        QualityChoice(
+            _with_size("Audio (MP3)", media.audio_size_bytes),
+            {"media_type": "audio", "quality": "h"},
+        )
+    )
+    return choices
+
+
+def _default_choice_index(choices: list[QualityChoice]) -> int:
+    last = DownloadHistory().get_last_settings()
+    wants_audio = last.get("audio_only", settings.GRAB_DEFAULT_TYPE == "audio")
+    quality = last.get("quality") or settings.GRAB_QUALITY
+    for index, choice in enumerate(choices):
+        if wants_audio and choice.values.get("media_type") == "audio":
+            return index
+        if not wants_audio and choice.values.get("quality") == quality:
+            return index
+    return 0
+
+
+def _duration(seconds: Optional[float]) -> str:
+    if not seconds:
+        return ""
+    minutes, secs = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}:{minutes:02}:{secs:02}" if hours else f"{minutes}:{secs:02}"
+
+
+@dataclass
+class DownloadJob:
+    job_id: int
+    url: str
+    values: dict[str, Any]
+    title: str
+    cancel: threading.Event = field(default_factory=threading.Event)
+    output_folder: Optional[Path] = None
+
+
+class DownloadRow(Vertical):
+    """One download: title, progress bar, speed and time left, and its buttons."""
+
+    DEFAULT_CSS = """
+    DownloadRow {
+        height: auto;
+        border: round $border;
+        padding: 0 1;
+        margin-bottom: 1;
+    }
+    DownloadRow .row-head {
+        height: auto;
+    }
+    DownloadRow .row-title {
+        width: 1fr;
+    }
+    DownloadRow .row-info {
+        color: $text-muted;
+    }
+    DownloadRow Button {
+        min-width: 12;
+    }
+    """
+
+    def __init__(self, job: DownloadJob) -> None:
+        super().__init__(id=f"job-{job.job_id}")
+        self.job = job
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(classes="row-head"):
+            yield Static(escape(self.job.title), classes="row-title")
+            yield Button("Cancel", id=f"cancel-{self.job.job_id}", variant="error")
+        yield ProgressBar(total=100, show_eta=False)
+        yield Static("Waiting for a free slot...", classes="row-info")
+
+    def _info(self, text: str) -> None:
+        self.query_one(".row-info", Static).update(text)
+
+    def set_title(self, title: str) -> None:
+        self.job.title = title
+        self.query_one(".row-title", Static).update(escape(title))
+
+    def set_started(self) -> None:
+        self._info("Starting...")
+
+    def set_progress(self, percent: float, speed: float, eta: int) -> None:
+        self.query_one(ProgressBar).progress = percent
+        parts = [f"{percent:.0f}%"]
+        if speed:
+            parts.append(f"{format_size(speed)}/s")
+        if eta:
+            parts.append(f"{_duration(eta)} left")
+        self._info("  ".join(parts))
+
+    def _swap_button(
+        self, label: str, button_id: str, variant: str = "default"
+    ) -> None:
+        head = self.query_one(".row-head", Horizontal)
+        for button in head.query(Button):
+            button.remove()
+        head.mount(Button(label, id=button_id, variant=variant))  # type: ignore[arg-type]  # variant is one of Textual's literals
+
+    def set_done(self, message: str, size_bytes: int) -> None:
+        self.query_one(ProgressBar).progress = 100
+        size = f"  {format_size(size_bytes)}" if size_bytes else ""
+        self._info(f"[green]Done.[/green] {escape(message)}{size}")
+        self._swap_button("Open folder", f"open-{self.job.job_id}", "success")
+
+    def set_failed(self, error: str) -> None:
+        self._info(f"[red]Failed:[/red] {escape(error)}")
+        self._swap_button("Retry", f"retry-{self.job.job_id}", "warning")
+
+    def set_cancelled(self) -> None:
+        self._info("[yellow]Cancelled.[/yellow] Partial files were removed.")
+        self._swap_button("Retry", f"retry-{self.job.job_id}", "warning")
 
 
 class DownloadPanel(Vertical):
-    """Download media panel with form, progress, and history."""
-
-    _progress_active: reactive[bool] = reactive(False)
+    """The Download page."""
 
     DEFAULT_CSS = """
     DownloadPanel {
@@ -45,581 +209,453 @@ class DownloadPanel(Vertical):
         overflow-y: auto;
         padding: 0 1;
     }
-
-    #download-url {
+    #dl-header, #dl-link-row, #dl-folder-row, #dl-actions {
+        height: auto;
+    }
+    #dl-title {
         width: 1fr;
+    }
+    #dl-mode {
+        layout: horizontal;
+        height: auto;
+        width: auto;
+    }
+    #dl-url, #dl-output {
+        width: 1fr;
+    }
+    #dl-preview {
+        height: auto;
+        border: round $accent;
+        padding: 0 1;
         margin: 1 0;
     }
-
-    #download-type {
-        margin: 0 0 1 0;
+    #dl-preview-meta {
+        color: $text-muted;
     }
-
-    #download-quality-section,
-    #download-bitrate-section {
+    #dl-quality {
+        layout: horizontal;
         height: auto;
-        margin: 0 0 1 0;
+        width: 100%;
     }
-    #download-quality-section > Label,
-    #download-bitrate-section > Label {
-        width: 10;
-        margin-right: 1;
+    #dl-folder-row Label {
+        padding: 1 1 0 0;
     }
-    #download-quality-section > Select {
-        width: 16;
-        margin-right: 2;
-    }
-    #download-quality-section > Input {
-        width: 10;
-    }
-
-    #download-options {
+    #dl-advanced {
         height: auto;
-        margin: 0 0 1 0;
-    }
-    #download-options Checkbox {
-        margin-right: 2;
-    }
-
-    #output-row {
-        height: auto;
-        margin: 0 0 1 0;
-    }
-    #output-row Input {
-        width: 1fr;
-    }
-
-    #download-actions {
-        height: auto;
+        border: round $border;
         margin: 1 0;
     }
-    #btn-download {
-        width: 1fr;
-    }
-    #btn-queue {
-        width: 1fr;
-    }
-
-    #download-progress-section {
-        height: auto;
-        border: solid $accent;
-        background: $surface;
-        padding: 1;
+    #dl-status {
         margin: 1 0;
     }
-    #download-progress-filename {
+    #dl-jobs {
+        height: auto;
+    }
+    .section-title {
+        margin-top: 1;
         text-style: bold;
-        margin: 1 0;
-    }
-    #download-progress-info {
-        height: auto;
-    }
-
-    #download-status {
-        height: auto;
-        margin: 1 0;
-    }
-
-    #download-history-title {
-        margin: 1 0 0 0;
-        border-bottom: solid $accent;
     }
     #download-history-table {
         height: auto;
-        min-height: 5;
-    }
-
-    #download-duplicate-warning {
-        height: auto;
-        margin: 0 0 1 0;
+        max-height: 16;
     }
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._current_url: str = ""
-        self._cancel_requested: bool = False
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._action = get_action(GRAB_ACTION_ID)
+        self._choices: list[QualityChoice] = list(DEFAULT_CHOICES)
+        self._jobs: dict[int, DownloadJob] = {}
+        self._next_job_id = 1
+        self._slots = threading.BoundedSemaphore(settings.GRAB_MAX_CONCURRENT)
 
-    # ------------------------------------------------------------------
-    # Compose
-    # ------------------------------------------------------------------
+    # --- layout ---------------------------------------------------------
 
     def compose(self) -> ComposeResult:
-        yield Static("[bold]Download Media[/bold]", id="download-title")
-
-        yield Input(
-            placeholder="https://youtube.com/watch?v=...",
-            id="download-url",
-        )
-        yield Static("", id="download-duplicate-warning")
-
-        yield Label("Type:")
-        with RadioSet(id="download-type"):
-            is_audio_default = settings.GRAB_DEFAULT_TYPE == "audio"
-            yield RadioButton("Video", id="type-video", value=not is_audio_default)
-            yield RadioButton("Audio Only", id="type-audio", value=is_audio_default)
-
-        with Horizontal(id="download-quality-section"):
-            yield Label("Quality:")
-            quality_map: dict[str, str] = {
-                "ss": "ss",
-                "s": "s",
-                "m": "m",
-                "h": "h",
-                "x": "x",
-            }
-            default_quality = quality_map.get(settings.GRAB_QUALITY.lower()[0], "h")
-            yield Select(
-                [
-                    ("360p", "ss"),
-                    ("480p", "s"),
-                    ("720p", "m"),
-                    ("1080p", "h"),
-                    ("4K", "x"),
-                ],
-                value=default_quality,
-                id="download-quality",
-                allow_blank=False,
-            )
-            yield Label("Res:")
+        prefs = load_prefs()
+        advanced = prefs.get(MODE_PREF) == "advanced"
+        with Horizontal(id="dl-header"):
+            yield Static("[bold cyan]Download[/bold cyan]", id="dl-title")
+            with RadioSet(id="dl-mode"):
+                yield RadioButton("Simple", id="mode-simple", value=not advanced)
+                yield RadioButton("Advanced", id="mode-advanced", value=advanced)
+        with Horizontal(id="dl-link-row"):
             yield Input(
-                placeholder="px",
-                id="download-resolution",
-                type="integer",
+                placeholder="Paste a YouTube link (Ctrl+V), then press Enter",
+                id="dl-url",
             )
-
-        with Horizontal(id="download-bitrate-section"):
-            yield Label("Bitrate:")
-            default_bitrate = (
-                settings.GRAB_QUALITY.lower()[0]
-                if settings.GRAB_QUALITY.lower()[0] in ("ss", "s", "m", "h", "x")
-                else "m"
+            yield Button("Check", id="btn-check")
+        yield Static("", id="dl-duplicate")
+        with Vertical(id="dl-preview"):
+            yield Static(
+                "[dim]Paste a link and press Check to see what it is.[/dim]",
+                id="dl-preview-title",
             )
-            bitrate_labels = {"ss": "64k", "s": "128k", "m": "192k", "x": "320k"}
-            yield Select(
-                [(b, b) for b in _BITRATE_LABELS],
-                value=bitrate_labels.get(default_bitrate, "192k"),
-                id="download-bitrate",
-                allow_blank=False,
-            )
-
-        with Horizontal(id="download-options"):
-            yield Checkbox("Subtitles", id="download-subtitles")
-            yield Checkbox(
-                "Metadata",
-                id="download-metadata",
-                value=settings.GRAB_INCLUDE_METADATA,
-            )
-            yield Checkbox("No Playlist", id="download-no-playlist")
-
-        with Horizontal(id="output-row"):
+            yield Static("", id="dl-preview-meta")
+            yield Label("Quality")
+            yield self._quality_set(self._choices)
+        with Horizontal(id="dl-folder-row"):
+            yield Label("Save to")
             yield Input(
-                value=str(settings.GRAB_DEFAULT_PATH),
-                id="download-output",
+                value=prefs.get(FOLDER_PREF) or str(settings.GRAB_DEFAULT_PATH),
+                id="dl-output",
             )
-            yield Button("Browse", id="btn-browse-output", variant="default")
-
-        with Horizontal(id="download-actions"):
-            yield Button("Download Now", id="btn-download", variant="primary")
-            yield Button("Queue", id="btn-queue", variant="default")
-
-        with Vertical(id="download-progress-section"):
-            yield ProgressBar(id="download-progress-bar", total=100)
-            yield Static("", id="download-progress-filename")
-            with Horizontal(id="download-progress-info"):
-                yield Static("", id="download-progress-speed")
-                yield Button("Cancel", id="btn-cancel-download", variant="error")
-
-        yield Static("Status: Ready", id="download-status")
-        yield Static("[bold]History[/bold]", id="download-history-title")
+            yield Button("Browse", id="btn-browse-output")
+        with Vertical(id="dl-advanced"):
+            yield ActionForm(self._action, include=ADVANCED_FIELDS, embedded=True)
+        with Horizontal(id="dl-actions"):
+            yield Button("Download", id="btn-download", variant="success")
+            yield Button("Add to queue", id="btn-queue", variant="primary")
+        yield Static("", id="dl-status")
+        yield Static("Downloads", classes="section-title")
+        with Vertical(id="dl-jobs"):
+            yield Static("[dim]Nothing downloading.[/dim]", id="dl-jobs-empty")
+        yield Static("History", classes="section-title")
         yield DataTable(id="download-history-table", cursor_type="row")
-        with Horizontal(id="download-history-actions"):
-            yield Button("Clear History", id="btn-clear-history", variant="default")
+        with Horizontal():
+            yield Button("Clear history", id="btn-clear-history")
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
+    def _quality_set(self, choices: list[QualityChoice]) -> RadioSet:
+        selected = _default_choice_index(choices)
+        return RadioSet(
+            *[
+                RadioButton(choice.label, value=index == selected)
+                for index, choice in enumerate(choices)
+            ],
+            id="dl-quality",
+        )
 
     def on_mount(self) -> None:
-        self._apply_last_settings()
-        self._sync_visibility()
+        self._sync_mode()
         self._load_history()
 
-    def _sync_visibility(self) -> None:
-        is_audio = self.query_one("#type-audio", RadioButton).value
-        self.query_one("#download-quality-section").display = not is_audio
-        self.query_one("#download-bitrate-section").display = is_audio
+    # --- mode -------------------------------------------------------------
 
-    @on(RadioSet.Changed, "#download-type")
-    def _on_type_changed(self, event: RadioSet.Changed) -> None:
-        is_audio = event.pressed.id == "type-audio"
-        self.query_one("#download-quality-section").display = not is_audio
-        self.query_one("#download-bitrate-section").display = is_audio
+    def _advanced(self) -> bool:
+        return self.query_one("#mode-advanced", RadioButton).value
 
-    def _apply_last_settings(self) -> None:
-        history = DownloadHistory()
-        last = history.get_last_settings()
-        if not last:
-            return
+    def _sync_mode(self) -> None:
+        self.query_one("#dl-advanced").display = self._advanced()
 
-        audio_only = last.get("audio_only", False)
-        quality = last.get("quality", "")
-        subtitles = last.get("subtitles", False)
-        include_metadata = last.get("include_metadata", settings.GRAB_INCLUDE_METADATA)
-        no_playlist = last.get("no_playlist", False)
-        last_bitrate = last.get("bitrate", "")
+    @on(RadioSet.Changed, "#dl-mode")
+    def _on_mode(self) -> None:
+        self._sync_mode()
+        save_pref(MODE_PREF, "advanced" if self._advanced() else "simple")
 
-        if audio_only:
-            self.query_one("#type-audio", RadioButton).value = True
-            self.query_one("#type-video", RadioButton).value = False
+    # --- link and preview -------------------------------------------------
 
-        quality_map = {"ss": "ss", "s": "s", "m": "m", "h": "h", "x": "x"}
-        if quality in quality_map:
-            self.query_one("#download-quality", Select).value = quality
+    def _url(self) -> str:
+        return self.query_one("#dl-url", Input).value.strip()
 
-        if last_bitrate in _BITRATE_OPTIONS:
-            self.query_one("#download-bitrate", Select).value = last_bitrate
-
-        self.query_one("#download-subtitles", Checkbox).value = subtitles
-        self.query_one("#download-metadata", Checkbox).value = include_metadata
-        self.query_one("#download-no-playlist", Checkbox).value = no_playlist
-
-    # ------------------------------------------------------------------
-    # URL Input — duplicate detection
-    # ------------------------------------------------------------------
-
-    @on(Input.Changed, "#download-url")
+    @on(Input.Changed, "#dl-url")
     def _on_url_changed(self, event: Input.Changed) -> None:
         url = event.value.strip()
-        warning = self.query_one("#download-duplicate-warning", Static)
-        if not url:
-            warning.update("")
-            return
-
-        history = DownloadHistory()
-        existing = history.is_already_downloaded(url)
+        warning = self.query_one("#dl-duplicate", Static)
+        existing = DownloadHistory().is_already_downloaded(url) if url else None
         if existing:
-            title = existing.get("title", url)
-            warning.update(f"[yellow]\u26a0 Previously downloaded: {title}[/yellow]")
-            last_output = history.get_last_output_path(url)
-            if last_output:
-                self.query_one("#download-output", Input).value = last_output
+            title = escape(existing.get("title") or url)
+            warning.update(f"[yellow]You downloaded this before: {title}[/yellow]")
         else:
             warning.update("")
 
-    # ------------------------------------------------------------------
-    # Button Handlers
-    # ------------------------------------------------------------------
+    @on(Input.Submitted, "#dl-url")
+    @on(Button.Pressed, "#btn-check")
+    def _on_check(self) -> None:
+        url = self._url()
+        if not url:
+            self._set_status("[yellow]Paste a link first.[/yellow]")
+            return
+        self.query_one("#dl-preview-title", Static).update(
+            "[cyan]Checking the link...[/cyan]"
+        )
+        self.query_one("#dl-preview-meta", Static).update("")
+        self.run_worker(
+            lambda: self._probe(url), thread=True, exclusive=True, group="probe"
+        )
+
+    def _probe(self, url: str) -> None:
+        from max_cli.core.operations import grab
+
+        try:
+            media = grab.probe(url)
+        except Exception as e:
+            self.app.call_from_thread(self._show_probe_error, str(e))
+            return
+        self.app.call_from_thread(self._show_preview, media)
+
+    def _show_probe_error(self, error: str) -> None:
+        self.query_one("#dl-preview-title", Static).update(
+            f"[red]Couldn't read this link.[/red] {escape(error)}"
+        )
+
+    def _show_preview(self, media: Any) -> None:
+        title = self.query_one("#dl-preview-title", Static)
+        meta = self.query_one("#dl-preview-meta", Static)
+        if media.is_playlist:
+            title.update(f"[bold]{escape(media.title)}[/bold]")
+            meta.update(
+                f"Playlist, {len(media.entries)} items"
+                + (f"  by {escape(media.uploader)}" if media.uploader else "")
+                + ". All items will be downloaded."
+            )
+            self.call_later(self._set_choices, list(DEFAULT_CHOICES))
+            return
+        title.update(f"[bold]{escape(media.title)}[/bold]")
+        details = [escape(media.uploader), _duration(media.duration)]
+        meta.update("  ".join(part for part in details if part))
+        self.call_later(self._set_choices, choices_for(media))
+
+    async def _set_choices(self, choices: list[QualityChoice]) -> None:
+        self._choices = choices
+        # Wait for the old set to go, or the new one's id clashes with it.
+        await self.query_one("#dl-quality", RadioSet).remove()
+        await self.query_one("#dl-preview", Vertical).mount(self._quality_set(choices))
+
+    def _chosen(self) -> QualityChoice:
+        index = self.query_one("#dl-quality", RadioSet).pressed_index
+        return (
+            self._choices[index]
+            if 0 <= index < len(self._choices)
+            else self._choices[0]
+        )
+
+    # --- folder -----------------------------------------------------------
+
+    @on(Button.Pressed, "#btn-browse-output")
+    def _on_browse(self) -> None:
+        from max_cli.interface.tui.widgets.dialogs import PathPicker
+
+        field = self.query_one("#dl-output", Input)
+        start = Path(field.value).expanduser() if field.value else Path.home()
+
+        def _picked(path: Optional[Path]) -> None:
+            if path is not None:
+                field.value = str(path)
+
+        self.app.push_screen(PathPicker(start, pick_folder=True), _picked)
+
+    # --- download ---------------------------------------------------------
+
+    def _download_values(self) -> dict[str, Any]:
+        values: dict[str, Any] = {"url": self._url()}
+        output = self.query_one("#dl-output", Input).value.strip()
+        if output:
+            values["output"] = output
+        values.update(self._chosen().values)
+        if self._advanced():
+            form = self.query_one("#dl-advanced ActionForm", ActionForm)
+            for name, value in form.values().items():
+                if value not in (None, ""):
+                    values[name] = value
+        return values
+
+    def _set_status(self, text: str) -> None:
+        self.query_one("#dl-status", Static).update(text)
 
     @on(Button.Pressed, "#btn-download")
     def _on_download(self) -> None:
-        self._start_download(queue=False)
+        from max_cli.common.exceptions import MaxError
+        from max_cli.core.catalog.runner import coerce_args
+
+        values = self._download_values()
+        try:
+            coerce_args(self._action, values)
+        except MaxError as e:
+            self._set_status(f"[red]{escape(str(e))}[/red]")
+            return
+        folder = self.query_one("#dl-output", Input).value.strip()
+        if folder:
+            save_pref(FOLDER_PREF, folder)
+        self._start_job(values)
+        self.query_one("#dl-url", Input).value = ""
+        self._set_status("")
 
     @on(Button.Pressed, "#btn-queue")
     def _on_queue(self) -> None:
-        self._start_download(queue=True)
+        from max_cli.common.exceptions import MaxError
+        from max_cli.core.catalog.runner import enqueue_action
 
-    @on(Button.Pressed, "#btn-browse-output")
-    def _on_browse_output(self) -> None:
-        self.notify("Type or paste the output directory path", severity="information")
+        try:
+            task = enqueue_action(self._action, self._download_values())
+        except MaxError as e:
+            self._set_status(f"[red]{escape(str(e))}[/red]")
+            return
+        self._set_status(f"[green]Added to the queue[/green] (ID: {task.id}).")
 
-    @on(Button.Pressed, "#btn-cancel-download")
-    def _on_cancel_download(self) -> None:
-        self._cancel_requested = True
-        self._set_status("Cancelling...", "warning")
+    def _title_for(self, url: str) -> str:
+        from max_cli.core.operations import grab
+
+        return grab._cached_title(url) or url
+
+    def _start_job(self, values: dict[str, Any]) -> DownloadJob:
+        job = DownloadJob(
+            job_id=self._next_job_id,
+            url=values["url"],
+            values=values,
+            title=self._title_for(values["url"]),
+        )
+        self._next_job_id += 1
+        self._jobs[job.job_id] = job
+        self.query_one("#dl-jobs-empty").display = False
+        self.query_one("#dl-jobs", Vertical).mount(DownloadRow(job))
+        self.run_worker(lambda: self._run_job(job), thread=True, group="downloads")
+        return job
+
+    def _row(self, job: DownloadJob) -> DownloadRow:
+        return self.query_one(f"#job-{job.job_id}", DownloadRow)
+
+    def _row_call(self, job: DownloadJob, method: str, *args: Any) -> None:
+        """Update a job's row. Workers call this through call_from_thread."""
+        getattr(self._row(job), method)(*args)
+
+    def _run_job(self, job: DownloadJob) -> None:
+        """Runs in a thread worker: wait for a slot, download, report back."""
+        from max_cli.common.exceptions import OperationCancelled
+        from max_cli.core.catalog.runner import run_action
+
+        while not self._slots.acquire(timeout=SLOT_POLL_SECONDS):
+            if job.cancel.is_set():
+                self.app.call_from_thread(self._row_call, job, "set_cancelled")
+                return
+        try:
+            if job.cancel.is_set():
+                self.app.call_from_thread(self._row_call, job, "set_cancelled")
+                return
+            self.app.call_from_thread(self._row_call, job, "set_started")
+            last_update = 0.0
+
+            def on_progress(status: dict[str, Any]) -> None:
+                nonlocal last_update
+                title = (status.get("info_dict") or {}).get("title")
+                if title and title != job.title:
+                    self.app.call_from_thread(self._row_call, job, "set_title", title)
+                if status.get("status") != "downloading":
+                    return
+                now = time.monotonic()
+                if now - last_update < PROGRESS_REFRESH_SECONDS:
+                    return
+                last_update = now
+                total = (
+                    status.get("total_bytes") or status.get("total_bytes_estimate") or 0
+                )
+                percent = (
+                    status.get("downloaded_bytes", 0) / total * 100 if total else 0.0
+                )
+                self.app.call_from_thread(
+                    self._row_call,
+                    job,
+                    "set_progress",
+                    percent,
+                    float(status.get("speed") or 0),
+                    int(status.get("eta") or 0),
+                )
+
+            try:
+                result = run_action(
+                    self._action,
+                    job.values,
+                    should_cancel=job.cancel.is_set,
+                    progress_hook=on_progress,
+                )
+            except OperationCancelled:
+                self.app.call_from_thread(self._row_call, job, "set_cancelled")
+            except Exception as e:
+                self.app.call_from_thread(self._row_call, job, "set_failed", str(e))
+            else:
+                if result.output_files:
+                    job.output_folder = result.output_files[0].parent
+                self.app.call_from_thread(
+                    self._row_call,
+                    job,
+                    "set_done",
+                    result.message,
+                    int(result.details.get("size_bytes") or 0),
+                )
+        finally:
+            self._slots.release()
+            self.app.call_from_thread(self._load_history)
+
+    @on(Button.Pressed)
+    def _on_row_button(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ""
+        kind, _, number = button_id.partition("-")
+        if kind not in ("cancel", "retry", "open") or not number.isdigit():
+            return
+        job = self._jobs.get(int(number))
+        if job is None:
+            return
+        event.stop()
+        if kind == "cancel":
+            job.cancel.set()
+            event.button.disabled = True
+            event.button.label = "Cancelling..."
+        elif kind == "retry":
+            self._row(job).remove()
+            self._start_job(dict(job.values))
+        elif kind == "open":
+            from max_cli.common.utils import open_in_file_manager
+
+            folder = job.output_folder or Path(
+                job.values.get("output") or settings.GRAB_DEFAULT_PATH
+            )
+            open_in_file_manager(Path(folder).expanduser())
+
+    # --- history ----------------------------------------------------------
+
+    def _load_history(self) -> None:
+        table = self.query_one("#download-history-table", DataTable)
+        table.clear(columns=True)
+        table.add_column("", width=2)
+        table.add_column("Title", width=40)
+        table.add_column("Size", width=10)
+        table.add_column("Source", width=16)
+        table.add_column("When", width=10)
+        for entry in DownloadHistory().get_recent(limit=50):
+            ok = entry.get("status") == "completed"
+            files = entry.get("output_files") or []
+            title = entry.get("title") or (Path(files[0]).name if files else "")
+            table.add_row(
+                "[green]✓[/green]" if ok else "[red]✗[/red]",
+                escape(title),
+                format_size(entry.get("file_size") or 0)
+                if entry.get("file_size")
+                else "-",
+                entry.get("domain", ""),
+                self._format_relative_time(entry.get("timestamp", "")),
+            )
 
     @on(Button.Pressed, "#btn-clear-history")
     def _on_clear_history(self) -> None:
-        history = DownloadHistory()
-        count = history.clear_history()
-        self._load_history()
-        self._set_status(f"Cleared {count} history entries", "info")
+        from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 
-    # ------------------------------------------------------------------
-    # Download Execution
-    # ------------------------------------------------------------------
+        def _answered(confirmed: Optional[bool]) -> None:
+            if not confirmed:
+                return
+            count = DownloadHistory().clear_history()
+            self._load_history()
+            self._set_status(f"Cleared {count} history entries.")
 
-    def _start_download(self, queue: bool) -> None:
-        url = self.query_one("#download-url", Input).value.strip()
-        if not url:
-            self._set_status("Please enter a URL", "error")
-            return
-
-        values = self._collect_form_values()
-        self._current_url = url
-        self._cancel_requested = False
-
-        self._progress_active = True
-        self.query_one("#download-progress-bar", ProgressBar).progress = 0
-        self.query_one("#download-progress-filename", Static).update("")
-        self.query_one("#download-progress-speed", Static).update("")
-
-        self.query_one("#btn-download", Button).disabled = True
-        self.query_one("#btn-queue", Button).disabled = True
-
-        from max_cli.common.events import get_emitter
-
-        get_emitter().subscribe(self._on_download_event)
-
-        self.app.run_worker(
-            lambda: self._download_worker(values=values, queue=queue),
-            name="_download_worker",
-            thread=True,
+        self.app.push_screen(
+            ConfirmDialog(
+                "Clear the download history? Your files stay where they are."
+            ),
+            _answered,
         )
-
-    def _download_worker(self, values: dict[str, Any], queue: bool) -> dict[str, Any]:
-        from max_cli.interface.tui.command_executor import CommandExecutor
-
-        executor = CommandExecutor()
-        result = executor.execute(
-            category="grab",
-            command="download",
-            values=values,
-            queue=queue,
-        )
-        return {"result": result, "values": values, "queue": queue}
-
-    # ------------------------------------------------------------------
-    # Progress Events
-    # ------------------------------------------------------------------
-
-    def _on_download_event(self, event: Any) -> None:
-        from max_cli.common.events import (
-            DownloadCompleteEvent,
-            DownloadProgressEvent,
-        )
-
-        if isinstance(event, DownloadProgressEvent) and event.url == self._current_url:
-            self.app.call_from_thread(self._update_progress_ui, event)
-        elif (
-            isinstance(event, DownloadCompleteEvent) and event.url == self._current_url
-        ):
-            self.app.call_from_thread(
-                self._set_status,
-                f"Download complete: {event.filename}",
-                "success",
-            )
-
-    def _update_progress_ui(self, event: Any) -> None:
-        if self._cancel_requested:
-            return
-
-        self.query_one(
-            "#download-progress-bar", ProgressBar
-        ).progress = event.percentage
-        self.query_one("#download-progress-filename", Static).update(
-            f"Downloading: {event.filename or '...'}"
-        )
-
-        speed_str = (
-            self._format_speed(event.speed)
-            if hasattr(event, "speed") and event.speed
-            else ""
-        )
-        eta_str = ""
-        if hasattr(event, "eta") and event.eta:
-            eta_str = f"ETA: {event.eta}s"
-        parts = [p for p in [speed_str, eta_str] if p]
-        self.query_one("#download-progress-speed", Static).update(
-            " | ".join(parts) if parts else ""
-        )
-        self.query_one("#download-status", Static).update(
-            f"[cyan]Status: Downloading... {event.percentage:.1f}%[/cyan]"
-        )
-
-    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.name == "_download_worker":
-            if event.state == WorkerState.SUCCESS:
-                result = event.worker.result
-                if isinstance(result, dict):
-                    self._on_download_finished(result)
-            elif event.state == WorkerState.ERROR:
-                error = (
-                    str(event.worker.error) if event.worker.error else "Unknown error"
-                )
-                self._on_download_error(error)
-
-    def _on_download_finished(self, data: dict[str, Any]) -> None:
-        from max_cli.common.events import get_emitter
-
-        get_emitter().unsubscribe(self._on_download_event)
-
-        result = data.get("result")
-        values = data.get("values", {})
-
-        history = DownloadHistory()
-        output_files: list[str] = []
-        if result and hasattr(result, "output_files"):
-            output_files = result.output_files or []
-
-        if result and hasattr(result, "success") and result.success:
-            history.record_download(
-                url=values.get("url", ""),
-                title="",
-                output_files=output_files,
-                settings_used=values,
-                file_size=0,
-                status="completed",
-            )
-        else:
-            history.record_download(
-                url=values.get("url", ""),
-                title="",
-                output_files=[],
-                settings_used=values,
-                file_size=0,
-                status="failed",
-            )
-
-        self._progress_active = False
-
-        if result and result.success:
-            self._set_status(f"Downloaded: {values.get('url', '')[:50]}", "success")
-        else:
-            err = (
-                result.error if result and hasattr(result, "error") else "Unknown error"
-            )
-            self._set_status(f"Failed: {err}", "error")
-
-        self._load_history()
-        self.query_one("#btn-download", Button).disabled = False
-        self.query_one("#btn-queue", Button).disabled = False
-
-    def _on_download_error(self, error: str) -> None:
-        from max_cli.common.events import get_emitter
-
-        get_emitter().unsubscribe(self._on_download_event)
-        self._progress_active = False
-        self._set_status(f"Error: {error}", "error")
-        self.query_one("#btn-download", Button).disabled = False
-        self.query_one("#btn-queue", Button).disabled = False
-
-    # ------------------------------------------------------------------
-    # Reactive watcher
-    # ------------------------------------------------------------------
-
-    def watch__progress_active(self, active: bool) -> None:
-        section = self.query_one("#download-progress-section", Vertical)
-        section.display = active
-
-    # ------------------------------------------------------------------
-    # History
-    # ------------------------------------------------------------------
-
-    def _load_history(self) -> None:
-        history = DownloadHistory()
-        entries = history.get_recent(limit=50)
-        table = self.query_one("#download-history-table", DataTable)
-
-        table.clear()
-        table.add_column("Status", width=4)
-        table.add_column("File", width=30)
-        table.add_column("Size", width=10)
-        table.add_column("Source", width=20)
-        table.add_column("When", width=12)
-
-        for entry in entries:
-            status_icon = "\u2713" if entry.get("status") == "completed" else "\u2717"
-            status_color = "green" if entry.get("status") == "completed" else "red"
-
-            filename = ""
-            output_files = entry.get("output_files", [])
-            if output_files:
-                filename = Path(output_files[0]).name
-
-            size = self._format_size(entry.get("file_size", 0))
-            domain = entry.get("domain", "")
-
-            rel_time = self._format_relative_time(entry.get("timestamp", ""))
-
-            table.add_row(
-                f"[{status_color}]{status_icon}[/{status_color}]",
-                filename,
-                size,
-                domain,
-                rel_time,
-            )
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _format_size(bytes_val: int) -> str:
-        if not bytes_val:
-            return "-"
-        units = ["B", "KB", "MB", "GB", "TB"]
-        size = float(bytes_val)
-        unit = "B"
-        for u in units:
-            unit = u
-            if size < 1024.0:
-                break
-            size /= 1024.0
-        if unit == "B":
-            return f"{int(size)} {unit}"
-        return f"{size:.1f} {unit}"
-
-    @staticmethod
-    def _format_speed(speed: float) -> str:
-        if speed <= 0:
-            return ""
-        return DownloadPanel._format_size(int(speed)) + "/s"
 
     @staticmethod
     def _format_relative_time(timestamp_raw: str) -> str:
         if not timestamp_raw:
             return ""
         try:
-            dt = datetime.fromisoformat(timestamp_raw)
-            delta = datetime.now() - dt
-            seconds = delta.total_seconds()
-            if seconds < 60:
-                return "just now"
-            if seconds < 3600:
-                return f"{int(seconds // 60)}m ago"
-            if seconds < 86400:
-                return f"{int(seconds // 3600)}h ago"
-            return f"{int(seconds // 86400)}d ago"
+            seconds = (
+                datetime.now() - datetime.fromisoformat(timestamp_raw)
+            ).total_seconds()
         except (ValueError, TypeError):
             return ""
-
-    def _set_status(self, message: str, level: str = "info") -> None:
-        status = self.query_one("#download-status", Static)
-        colors = {
-            "success": "green",
-            "error": "red",
-            "info": "cyan",
-            "warning": "yellow",
-        }
-        color = colors.get(level, "white")
-        status.update(f"[{color}]Status: {message}[/{color}]")
-
-    def _collect_form_values(self) -> dict[str, Any]:
-        url = self.query_one("#download-url", Input).value.strip()
-        is_audio = self.query_one("#type-audio", RadioButton).value
-        quality = self.query_one("#download-quality", Select).value
-        bitrate_val = self.query_one("#download-bitrate", Select).value
-        resolution = self.query_one("#download-resolution", Input).value.strip()
-        subtitles = self.query_one("#download-subtitles", Checkbox).value
-        metadata = self.query_one("#download-metadata", Checkbox).value
-        no_playlist = self.query_one("#download-no-playlist", Checkbox).value
-        output = self.query_one("#download-output", Input).value.strip()
-
-        if is_audio:
-            selected = str(bitrate_val) if bitrate_val != Select.BLANK else "192k"
-            eff_quality = _BITRATE_OPTIONS.get(selected, "m")
-        else:
-            eff_quality = str(quality) if quality != Select.BLANK else "h"
-
-        return {
-            "url": url,
-            "audio_only": is_audio,
-            "quality": eff_quality,
-            "bitrate": bitrate_val if is_audio else "",
-            "resolution": int(resolution) if resolution else None,
-            "subtitles": subtitles,
-            "include_metadata": metadata,
-            "no_playlist": no_playlist,
-            "output_path": output,
-        }
+        if seconds < 60:
+            return "just now"
+        if seconds < 3600:
+            return f"{int(seconds // 60)}m ago"
+        if seconds < 86400:
+            return f"{int(seconds // 3600)}h ago"
+        return f"{int(seconds // 86400)}d ago"
