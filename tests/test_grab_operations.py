@@ -1,5 +1,6 @@
 """`core/operations/grab.py` and the engine features it needs (grab-page-redesign.md, G1)."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -293,3 +294,35 @@ def test_catalog_download_resolves_setting_defaults(tmp_path, monkeypatch):
     assert args["quality"] == "m"
     assert args["output"] == settings.GRAB_DEFAULT_PATH
     assert isinstance(args["output"], Path)
+
+
+class TestTokenHelperTimeout:
+    TIMEOUT = subprocess.TimeoutExpired(["deno", "run", "--allow-read=C:/cache"], 15)
+
+    def test_probe_retries_once_then_succeeds(self):
+        ydl = MagicMock()
+        ydl.__enter__.return_value = ydl
+        ydl.extract_info.side_effect = [self.TIMEOUT, VIDEO_INFO]
+        with patch("yt_dlp.YoutubeDL", return_value=ydl):
+            info = NetworkEngine().probe_info(VIDEO_URL)
+
+        assert info["title"] == "Trailer"
+        assert ydl.extract_info.call_count == 2
+
+    def test_probe_gives_a_readable_error_after_two_timeouts(self):
+        ydl = MagicMock()
+        ydl.__enter__.return_value = ydl
+        ydl.extract_info.side_effect = [self.TIMEOUT, self.TIMEOUT]
+        with patch("yt_dlp.YoutubeDL", return_value=ydl):
+            with pytest.raises(RuntimeError, match="token helper") as error:
+                NetworkEngine().probe_info(VIDEO_URL)
+
+        assert "--allow-read" not in str(error.value)
+
+    def test_download_timeout_is_readable(self, tmp_path):
+        def run(opts):
+            raise self.TIMEOUT
+
+        with patch("yt_dlp.YoutubeDL", side_effect=_fake_ydl([], run)):
+            with pytest.raises(RuntimeError, match="token helper"):
+                NetworkEngine().download_media(VIDEO_URL, tmp_path)

@@ -8,7 +8,6 @@ from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchema
 
 ENGINE_MODULE_MAP: dict[str, str] = {
-    "NetworkEngine": "max_cli.core.engines.network_engine",
     "ImageEngine": "max_cli.core.engines.image_processor",
     "FileOrganizer": "max_cli.core.engines.file_organizer",
     "PDFEngine": "max_cli.core.engines.pdf_engine",
@@ -24,7 +23,6 @@ PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
     ("files", "order"): {"start": "start_index"},
     ("files", "shred"): {"target": "path"},
-    ("grab", "download"): {"resolution": "custom_height"},
     ("images", "compress"): {"target": "input_path", "output": "output_path"},
     ("images", "resize"): {"target": "input_path", "output": "output_path"},
     ("images", "convert"): {"target": "input_path", "output": "output_path"},
@@ -158,12 +156,6 @@ class CommandExecutor:
             output_path = _default_output_path(category, command, input_path, params)
             if output_path is not None:
                 mapped["output_path"] = output_path
-
-        if category == "grab" and command == "download":
-            from max_cli.core.engines.network_engine import DEFAULT_DOWNLOAD_DIR
-
-            output_dir = mapped.get("output_path") or DEFAULT_DOWNLOAD_DIR
-            mapped["output_path"] = Path(str(output_dir).replace("~", str(Path.home())))
 
         return mapped
 
@@ -320,7 +312,6 @@ class CommandExecutor:
         from max_cli.core.engines.task_queue import TaskType
 
         type_map: dict[tuple[str, str], TaskType] = {
-            ("grab", "download"): TaskType.DOWNLOAD,
             ("pdf", "merge"): TaskType.PDF_MERGE,
             ("pdf", "compress"): TaskType.PDF_COMPRESS,
             ("files", "smart_sort"): TaskType.FILE_ORGANIZE,

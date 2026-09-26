@@ -1,5 +1,8 @@
 import base64
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -38,3 +41,15 @@ def encode_image_to_base64(image_path: Path) -> str:
 
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+def open_in_file_manager(path: Path) -> None:
+    """Show a folder (or the folder holding a file) in the system file manager."""
+    folder = path if path.is_dir() else path.parent
+    if sys.platform == "win32":
+        # os.startfile exists only on Windows, so mypy on other systems can't see it.
+        getattr(os, "startfile")(str(folder))  # noqa: B009
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(folder)], check=False)
+    else:
+        subprocess.run(["xdg-open", str(folder)], check=False)

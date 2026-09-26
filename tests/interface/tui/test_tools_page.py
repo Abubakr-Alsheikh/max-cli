@@ -223,7 +223,8 @@ async def test_files_page_video_compress_opens_the_prefilled_form(dummy_video):
         await pilot.pause()
         await pilot.pause()
 
-        assert app.query_one("#tools-panel").display
-        form = app.query_one(ActionForm)
+        tools = app.query_one("#tools-panel")
+        assert tools.display
+        form = tools.query_one(ActionForm)
         assert form.action.id == "video.compress"
-        assert app.query_one("#field-target", Input).value == str(dummy_video)
+        assert form.query_one("#field-target", Input).value == str(dummy_video)

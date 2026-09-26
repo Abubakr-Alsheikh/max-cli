@@ -5,13 +5,14 @@ options fold away, help sits under each field, and path fields get a Browse
 button. The action runs in a thread worker, so the dashboard never freezes.
 """
 
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.widget import Widget
 from textual.widgets import Button, Collapsible, Input, Label, Select, Static, Switch
 
@@ -24,6 +25,7 @@ from max_cli.core.catalog.spec import (
     ParamKind,
 )
 from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.interface.tui.text import markup
 
 CONFIRM_DANGERS = frozenset({Danger.MOVES, Danger.OVERWRITES, Danger.DELETES})
 DANGER_NOTES = {
@@ -62,10 +64,13 @@ class ActionForm(Vertical):
     }
     ActionForm .form-field {
         height: auto;
+        width: 1fr;
         margin-top: 1;
     }
     ActionForm .form-help {
         color: $text-muted;
+        width: 1fr;
+        height: auto;
     }
     ActionForm .path-row {
         height: auto;
@@ -85,12 +90,31 @@ class ActionForm(Vertical):
     }
     """
 
-    def __init__(self, action: Action, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        action: Action,
+        include: Optional[Collection[str]] = None,
+        embedded: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        """`include` limits the form to those parameters, in the catalog's order.
+
+        An `embedded` form has no title and no buttons: a page places it
+        inside its own layout and reads `values()` itself.
+        """
         super().__init__(**kwargs)
         self.action = action
+        self.embedded = embedded
+        self.params = tuple(
+            param for param in action.params if include is None or param.name in include
+        )
 
     def compose(self) -> ComposeResult:
         action = self.action
+        if self.embedded:
+            for param in self.params:
+                yield self._field(param)
+            return
         yield Static(
             f"max {action.group} {action.name}: {action.summary}", classes="form-title"
         )
@@ -99,8 +123,8 @@ class ActionForm(Vertical):
                 f"Careful: this {DANGER_NOTES[action.danger]}. You'll be asked first.",
                 classes="form-danger",
             )
-        basic = [param for param in action.params if not param.advanced]
-        advanced = [param for param in action.params if param.advanced]
+        basic = [param for param in self.params if not param.advanced]
+        advanced = [param for param in self.params if param.advanced]
         for param in basic:
             yield self._field(param)
         if advanced:
@@ -117,7 +141,7 @@ class ActionForm(Vertical):
         return Vertical(
             Label(_field_label(param)),
             self._input(param),
-            Static(escape(param.help), classes="form-help"),
+            Static(Content(param.help), classes="form-help"),
             classes="form-field",
         )
 
@@ -156,7 +180,7 @@ class ActionForm(Vertical):
     def values(self) -> dict[str, Any]:
         """What the user entered, keyed by parameter name. Blank means default."""
         values: dict[str, Any] = {}
-        for param in self.action.params:
+        for param in self.params:
             widget = self.query_one(f"#field-{param.name}")
             if isinstance(widget, Switch):
                 values[param.name] = widget.value
@@ -176,7 +200,7 @@ class ActionForm(Vertical):
         elif isinstance(widget, Select):
             widget.value = value
 
-    def _set_status(self, text: str) -> None:
+    def _set_status(self, text: "str | Content") -> None:
         self.query_one("#form-status", Static).update(text)
 
     def _set_busy(self, busy: bool) -> None:
@@ -225,7 +249,7 @@ class ActionForm(Vertical):
         try:
             coerce_args(self.action, values)
         except MaxError as e:
-            self._set_status(f"[red]{escape(str(e))}[/red]")
+            self._set_status(markup("[red]$error[/red]", error=e))
             return
 
         if self.action.danger not in CONFIRM_DANGERS:
@@ -262,7 +286,7 @@ class ActionForm(Vertical):
         try:
             task = enqueue_action(self.action, values)
         except MaxError as e:
-            self._set_status(f"[red]{escape(str(e))}[/red]")
+            self._set_status(markup("[red]$error[/red]", error=e))
             return
         self._set_status(
             f"[green]Queued[/green] (ID: {task.id}). See the Queue page for progress."
@@ -293,8 +317,8 @@ class ActionForm(Vertical):
     def _finish(self, ok: bool, message: str) -> None:
         self._set_busy(False)
         if ok:
-            self._set_status(f"[green]Done.[/green] {escape(message)}")
+            self._set_status(markup("[green]Done.[/green] $message", message=message))
             self.notify(message)
         else:
-            self._set_status(f"[red]Failed:[/red] {escape(message)}")
+            self._set_status(markup("[red]Failed:[/red] $message", message=message))
             self.notify(message, severity="error")

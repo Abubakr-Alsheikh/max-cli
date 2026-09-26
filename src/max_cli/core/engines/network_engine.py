@@ -17,6 +17,12 @@ QUALITY_MAP: dict[str, dict[str, Union[str, int]]] = {
 
 DEFAULT_DOWNLOAD_DIR = Path.home() / "Max Downloads"
 POT_PROVIDER_PACKAGE = "bgutil-ytdlp-pot-provider"
+POT_TIMEOUT_ATTEMPTS = 2
+POT_TIMEOUT_MESSAGE = (
+    "The YouTube token helper (bgutil POT provider) didn't answer in time. "
+    "Try again; it's often slow on its first start. If it keeps failing, run "
+    "`max grab pot-setup` or pick another player client in Advanced mode."
+)
 POT_PROVIDER_VERSION = "1.3.1"
 POT_SERVER_DIR = Path.home() / "bgutil-ytdlp-pot-provider"
 POT_SERVER_URL = (
@@ -159,16 +165,25 @@ class NetworkEngine:
             return ydl.extract_info(url, download=False)
 
     def probe_info(self, url: str) -> dict[str, Any]:
-        """Full info for a video, or a playlist with its items listed but not resolved."""
+        """Full info for a video, or a playlist with its items listed but not resolved.
+
+        The YouTube token helper (bgutil POT provider) often needs longer than
+        its 15-second limit on its first start, so a timeout gets one retry.
+        """
         import yt_dlp
 
         ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist"}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                return ydl.extract_info(url, download=False) or {}
-            except yt_dlp.utils.DownloadError as e:
-                msg = str(e).replace("ERROR: ", "")
-                raise RuntimeError(f"Couldn't read the link: {msg}") from e
+        for attempt in range(POT_TIMEOUT_ATTEMPTS):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    return ydl.extract_info(url, download=False) or {}
+                except subprocess.TimeoutExpired as e:
+                    if attempt + 1 == POT_TIMEOUT_ATTEMPTS:
+                        raise RuntimeError(POT_TIMEOUT_MESSAGE) from e
+                except yt_dlp.utils.DownloadError as e:
+                    msg = str(e).replace("ERROR: ", "")
+                    raise RuntimeError(f"Couldn't read the link: {msg}") from e
+        return {}
 
     def get_quality_info(
         self, quality: str, custom_height: Optional[int] = None
@@ -350,6 +365,9 @@ class NetworkEngine:
             except yt_dlp.utils.DownloadCancelled:
                 _remove_partial_files(partial_paths)
                 raise OperationCancelled("Download cancelled") from None
+            except subprocess.TimeoutExpired as e:
+                _remove_partial_files(partial_paths)
+                raise RuntimeError(POT_TIMEOUT_MESSAGE) from e
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e).replace("ERROR: ", "")
                 raise RuntimeError(f"Download failed: {msg}") from e
