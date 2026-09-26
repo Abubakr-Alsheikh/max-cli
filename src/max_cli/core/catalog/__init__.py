@@ -14,6 +14,7 @@ from max_cli.core.catalog.spec import Action, Group, Surface
 # Group name -> module holding its GROUP. Add a group here when you port it.
 GROUP_MODULES: dict[str, str] = {
     "video": "max_cli.core.catalog.groups.video",
+    "grab": "max_cli.core.catalog.groups.grab",
 }
 
 

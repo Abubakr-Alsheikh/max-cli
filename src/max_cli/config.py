@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     GRAB_DEFAULT_PATH: Path = Path.home() / "Max Downloads"
     GRAB_DEFAULT_TYPE: str = "video"  # "video" or "audio"
     GRAB_QUEUE_ENABLED: bool = False
+    GRAB_MAX_CONCURRENT: int = Field(default=3, ge=1, le=8)  # dashboard downloads at once
 
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]

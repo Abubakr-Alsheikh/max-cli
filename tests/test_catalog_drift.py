@@ -15,10 +15,13 @@ import typer
 
 from max_cli.core.catalog import GROUP_MODULES, load_group
 from max_cli.core.catalog.runner import _operation
-from max_cli.core.catalog.spec import Action
+from max_cli.core.catalog.spec import Action, Setting
 from max_cli.core.cli.registry import _GROUPS
 
 QUEUE_OPTION = "queue"
+# Groups whose Typer commands call their operations. `grab` joins in
+# grab-page-redesign.md phase G5; until then only its operations are checked.
+CLI_CHECKED_GROUPS = ("video",)
 
 
 def _cli_commands(group_name: str) -> dict[str, Any]:
@@ -40,9 +43,10 @@ CASES = [
     for group_name in GROUP_MODULES
     for action in load_group(group_name).actions
 ]
+CLI_CASES = [case for case in CASES if case[0] in CLI_CHECKED_GROUPS]
 
 
-@pytest.mark.parametrize("group_name", list(GROUP_MODULES))
+@pytest.mark.parametrize("group_name", CLI_CHECKED_GROUPS)
 def test_every_visible_command_has_an_action(group_name):
     commands = set(_cli_commands(group_name))
     actions = {action.name for action in load_group(group_name).actions}
@@ -50,7 +54,7 @@ def test_every_visible_command_has_an_action(group_name):
 
 
 @pytest.mark.parametrize(
-    "group_name, action", CASES, ids=[action.id for _, action in CASES]
+    "group_name, action", CLI_CASES, ids=[action.id for _, action in CLI_CASES]
 )
 def test_cli_options_match_the_catalog(group_name: str, action: Action):
     command = _cli_commands(group_name)[action.name]
@@ -86,5 +90,8 @@ def test_operation_arguments_match_the_catalog(group_name: str, action: Action):
         op_default = op_params[param.name].default
         if param.required:
             assert op_default is inspect.Parameter.empty, param.name
+        elif isinstance(param.default, Setting):
+            # The operation reads the setting itself when given None.
+            assert op_default is None, param.name
         else:
             assert _normalize(op_default) == param.default, param.name

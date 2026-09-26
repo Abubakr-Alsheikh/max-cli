@@ -69,7 +69,7 @@ def coerce_args(action: Action, raw_args: Mapping[str, Any]) -> dict[str, Any]:
         if _is_empty(value):
             if param.required:
                 raise ValidationError(f"{action.id}: '{param.name}' is required")
-            args[param.name] = param.default
+            args[param.name] = param.resolved_default()
         else:
             args[param.name] = _coerce(action, param, value)
     return args

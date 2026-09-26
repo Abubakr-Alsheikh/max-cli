@@ -18,8 +18,9 @@ def _param_schema(param: Param) -> dict[str, Any]:
     }
     if param.kind == ParamKind.CHOICE:
         schema["enum"] = list(param.choices)
-    if not param.required and param.default is not None:
-        schema["default"] = param.default
+    default = None if param.required else param.resolved_default()
+    if default is not None:
+        schema["default"] = str(default) if schema["type"] == "string" else default
     return schema
 
 

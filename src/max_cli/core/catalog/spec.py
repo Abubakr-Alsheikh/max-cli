@@ -54,6 +54,18 @@ REQUIRED: Any = _Required()
 
 
 @dataclass(frozen=True)
+class Setting:
+    """A default read from the user's config when the action runs, e.g. Setting("GRAB_QUALITY")."""
+
+    name: str
+
+    def value(self) -> Any:
+        from max_cli.config import settings
+
+        return getattr(settings, self.name)
+
+
+@dataclass(frozen=True)
 class Param:
     name: str  # the operation's argument name
     kind: ParamKind
@@ -68,6 +80,12 @@ class Param:
     @property
     def required(self) -> bool:
         return self.default is REQUIRED
+
+    def resolved_default(self) -> Any:
+        """The default with any Setting read from the config."""
+        if isinstance(self.default, Setting):
+            return self.default.value()
+        return self.default
 
 
 @dataclass(frozen=True)

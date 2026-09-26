@@ -18,7 +18,6 @@ from textual.widgets import Button, Collapsible, Input, Label, Select, Static, S
 from max_cli.common.exceptions import MaxError
 from max_cli.core.catalog.spec import (
     PATH_KINDS,
-    REQUIRED,
     Action,
     Danger,
     Param,
@@ -40,9 +39,10 @@ def _field_label(param: Param) -> str:
 
 
 def _initial_text(param: Param) -> str:
-    if param.default is REQUIRED or param.default is None:
+    if param.required:
         return ""
-    return str(param.default)
+    default = param.resolved_default()
+    return "" if default is None else str(default)
 
 
 class ActionForm(Vertical):
@@ -123,13 +123,14 @@ class ActionForm(Vertical):
 
     def _input(self, param: Param) -> Widget:
         widget_id = f"field-{param.name}"
+        default = None if param.required else param.resolved_default()
         if param.kind == ParamKind.BOOL:
-            return Switch(value=bool(param.default is True), id=widget_id)
+            return Switch(value=default is True, id=widget_id)
         if param.kind == ParamKind.CHOICE:
-            has_default = param.default in param.choices
+            has_default = default in param.choices
             return Select(
                 [(choice, choice) for choice in param.choices],
-                value=param.default if has_default else Select.BLANK,
+                value=default if has_default else Select.BLANK,
                 allow_blank=not has_default,
                 id=widget_id,
             )

@@ -28,6 +28,12 @@ class ProcessingError(MaxError):
     pass
 
 
+class OperationCancelled(MaxError):
+    """Raised when the user cancels a running operation."""
+
+    pass
+
+
 class NetworkError(MaxError):
     """Raised when network operations fail."""
 

@@ -217,9 +217,9 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - Interface: `src/max_cli/interface/cli_images.py` (uses EventSubscriber)
   - *Shows: Core emits pure events, interface translates to Rich progress bars. Core stays 100% UI-agnostic.*
 
-- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`):
+- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`, and `grab download` without its CLI yet):
   - Operation: `src/max_cli/core/operations/video.py`. One function per command. It does the output naming, input checks and engine calls, and returns `ActionResult`. It takes an optional `engine`, so the CLI can pass one that asks before downloading FFmpeg.
-  - Catalog: `src/max_cli/core/catalog/groups/video.py`. One `Action` per command: its params (kind, default, CLI spellings), `danger`, `queueable` and `surfaces`. Catalog modules import no engines.
+  - Catalog: `src/max_cli/core/catalog/groups/video.py`. One `Action` per command: its params (kind, default, CLI spellings), `danger`, `queueable` and `surfaces`. A default of `Setting("GRAB_QUALITY")` reads the user's config when the action runs; the operation then takes `None` for it. Catalog modules import no engines.
   - Interface: `src/max_cli/interface/cli_media.py` parses options, calls the operation through `_run` and prints the result.
   - Runner: `src/max_cli/core/catalog/runner.py`. `coerce_args` turns form strings or agent JSON into typed arguments, `run_action` calls the operation, and `enqueue_action` queues it as one `TaskType.ACTION` task.
   - Tests: `tests/test_catalog_drift.py` fails when a CLI command, its catalog entry and its operation disagree on options, spellings or defaults. When you change a command in a ported group, change all three.

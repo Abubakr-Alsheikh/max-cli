@@ -29,6 +29,7 @@ CONFIG_SECTIONS = {
         "GRAB_STRIP_PLAYLIST",
         "GRAB_INCLUDE_METADATA",
         "GRAB_QUEUE_ENABLED",
+        "GRAB_MAX_CONCURRENT",
     ],
     "General": [
         "DEFAULT_QUALITY",

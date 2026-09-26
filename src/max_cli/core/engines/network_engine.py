@@ -158,6 +158,18 @@ class NetworkEngine:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
 
+    def probe_info(self, url: str) -> dict[str, Any]:
+        """Full info for a video, or a playlist with its items listed but not resolved."""
+        import yt_dlp
+
+        ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist"}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                return ydl.extract_info(url, download=False) or {}
+            except yt_dlp.utils.DownloadError as e:
+                msg = str(e).replace("ERROR: ", "")
+                raise RuntimeError(f"Couldn't read the link: {msg}") from e
+
     def get_quality_info(
         self, quality: str, custom_height: Optional[int] = None
     ) -> dict[str, Any]:
@@ -188,7 +200,15 @@ class NetworkEngine:
         subtitles: bool = False,
         custom_height: Optional[int] = None,
         player_client: Optional[str] = None,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> dict[str, Any]:
+        """Download `url` into `output_path`.
+
+        Returns the output folder and `files`, the final paths on disk (after
+        merging and audio extraction). `should_cancel` is polled on every
+        progress update; when it returns True the download stops, partial
+        files are removed and OperationCancelled is raised.
+        """
         import yt_dlp
 
         from max_cli.common.events import (
@@ -196,6 +216,7 @@ class NetworkEngine:
             DownloadProgressEvent,
             get_emitter,
         )
+        from max_cli.common.exceptions import OperationCancelled
 
         q = quality.lower()[0]
 
@@ -204,9 +225,23 @@ class NetworkEngine:
         audio_bitrate = quality_info["bitrate"]
 
         emitter = get_emitter()
+        # Final path per video: the progress hook reports each downloaded
+        # file, and post-processors (merge, extract audio) report the renamed
+        # result, which replaces it.
+        final_paths: dict[str, str] = {}
+        partial_paths: set[str] = set()
 
         def _yt_dlp_hook(d: dict) -> None:
             status = d.get("status")
+            filename = d.get("filename") or ""
+            if filename:
+                partial_paths.add(filename)
+            # Checked after recording the file, so a cancel can clean it up.
+            if should_cancel is not None and should_cancel():
+                raise yt_dlp.utils.DownloadCancelled("Cancelled by user")
+            if status == "finished" and filename:
+                video_id = (d.get("info_dict") or {}).get("id") or filename
+                final_paths.setdefault(video_id, filename)
             if status == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
                 downloaded = d.get("downloaded_bytes", 0)
@@ -234,6 +269,11 @@ class NetworkEngine:
                     )
                 )
 
+        def _postprocessor_hook(d: dict) -> None:
+            info = d.get("info_dict") or {}
+            if d.get("status") == "finished" and info.get("filepath"):
+                final_paths[info.get("id") or info["filepath"]] = info["filepath"]
+
         ydl_opts: dict[str, Any] = {
             "outtmpl": str(output_path / "%(title)s.%(ext)s"),
             "quiet": True,
@@ -248,6 +288,7 @@ class NetworkEngine:
             "file_access_retries": 5,
             "extractor_retries": 5,
             "progress_hooks": [_yt_dlp_hook],
+            "postprocessor_hooks": [_postprocessor_hook],
         }
 
         if progress_hook:
@@ -306,13 +347,31 @@ class NetworkEngine:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 ydl.download([url])
+            except yt_dlp.utils.DownloadCancelled:
+                _remove_partial_files(partial_paths)
+                raise OperationCancelled("Download cancelled") from None
             except yt_dlp.utils.DownloadError as e:
                 msg = str(e).replace("ERROR: ", "")
                 raise RuntimeError(f"Download failed: {msg}") from e
         return {
             "output_path": str(output_path),
+            "files": [path for path in final_paths.values() if Path(path).is_file()],
             "message": f"Downloaded: {url[:50]}",
         }
+
+
+PARTIAL_SUFFIXES = (".part", ".ytdl")
+
+
+def _remove_partial_files(reported_paths: set[str]) -> None:
+    """Delete yt-dlp's leftovers for a cancelled download: only .part and .ytdl files."""
+    for reported in reported_paths:
+        path = Path(reported)
+        candidates = [path] if path.suffix in PARTIAL_SUFFIXES else []
+        candidates += [path.with_name(path.name + suffix) for suffix in PARTIAL_SUFFIXES]
+        for candidate in candidates:
+            if candidate.suffix in PARTIAL_SUFFIXES:
+                candidate.unlink(missing_ok=True)
 
 
 def strip_playlist_params(url: str) -> str:
