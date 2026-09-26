@@ -13,7 +13,6 @@ import typer
 from max_cli.interface.tui.command_registry import CommandRegistry
 
 CLI_APPS = {
-    "video": "max_cli.interface.cli_media",
     "images": "max_cli.interface.cli_images",
     "pdf": "max_cli.interface.cli_pdf",
     "audio": "max_cli.interface.cli_audio",
@@ -66,16 +65,3 @@ def test_tui_defaults_match_cli(category, command, schema):
         and field["default"] != cli_defaults[field["name"]]
     }
     assert mismatches == {}, f"TUI default vs CLI default: {mismatches}"
-
-
-def test_video_compress_levels_come_from_presets():
-    from max_cli.core.presets import VIDEO_CRF_BY_LEVEL
-    from max_cli.interface.tui.command_executor import CommandExecutor
-
-    schema = CommandRegistry.get_command("video", "compress")
-    executor = CommandExecutor()
-    for level, crf in VIDEO_CRF_BY_LEVEL.items():
-        params = executor._map_engine_params(
-            "video", "compress", {"level": level}, schema
-        )
-        assert params["crf"] == crf

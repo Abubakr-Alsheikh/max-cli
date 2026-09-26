@@ -2,15 +2,25 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 
 class FilesPanel(Vertical):
     """File browser with navigation and quick actions."""
+
+    class OpenAction(Message):
+        """Open a Tools form for a catalog action, prefilled with `values`."""
+
+        def __init__(self, action_id: str, values: dict[str, Any]) -> None:
+            super().__init__()
+            self.action_id = action_id
+            self.values = values
 
     FILE_ICONS: dict[str, str] = {
         "video": "\U0001f3ac",
@@ -251,8 +261,10 @@ class FilesPanel(Vertical):
                         "images", "compress", {"target": str(full_path)}
                     )
                 elif ext in {".mp4", ".mkv", ".avi", ".mov"}:
-                    self._execute_quick_action(
-                        "video", "compress", {"target": str(full_path)}
+                    # Video compression takes minutes and has options worth
+                    # seeing, so open its form instead of running blind.
+                    self.post_message(
+                        self.OpenAction("video.compress", {"target": str(full_path)})
                     )
                 else:
                     self.notify(

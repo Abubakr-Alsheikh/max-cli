@@ -123,13 +123,13 @@ Each step is one PR, with tests first.
    - Add `core/catalog` (the types, the lazy group loader and the JSON Schema builder) and `core/operations/video.py`.
    - Port the `video` group: 15 thin commands, and 6 of them are broken in the dashboard today.
    - Add the CLI drift test for `video`, and make the `video` CLI call the operations.
-2. **Generic dashboard form.** Build the form widget from the catalog and use it for `video`. Remove the `video` entries from `command_registry.py`.
-3. **The heavy groups.** Move the orchestration into operations, one group per PR:
+2. **Generic dashboard form.** Build the form widget from the catalog and use it for `video`. Remove the `video` entries from `command_registry.py`. Done 2026-09-26, branch `feat/dashboard-tools-page`.
+3. **The heavy groups** (after the grab work below). Move the orchestration into operations, one group per PR:
    - `images` (batching and output naming);
    - `pdf` (folder compress, the split modes);
    - `files` (transaction log, `smart-sort`'s two engines);
    - `audio` (the batch loop).
-4. **`grab download`.**
+4. **`grab download`: next, by the maintainer's choice.**
    - Split out a core `download` operation: retries, URL cleaning and playlist rules.
    - The CLI keeps its interactive prompt loop, and the dashboard's Download page calls the operation.
 5. **Agent tool views:** `list_groups`, `load_group` and JSON Schema. Test that the first prompt holds only the group list, and measure the tokens. This step feeds roadmap Step 4.
@@ -150,3 +150,7 @@ Each step is one PR, with tests first.
   - The old `VIDEO_COMPRESS` and `VIDEO_DENOISE` executors stay, so tasks already in a queue still run.
   - The `Setting(...)` default marker waits until a ported group needs it (`grab`). `video` has no config-based defaults.
   - Every video operation now checks that its input exists, so a missing file exits 1 with "File not found" before FFmpeg starts.
+- 2026-09-26, build step 2:
+  - The Tools page lists every catalog action the dashboard may run. `ActionForm` builds each form, and the Files page's video Compress button opens the prefilled form instead of running with fixed settings.
+  - The `video` entries and their special cases left `command_registry.py` and `command_executor.py`. The tests that covered them moved to `tests/test_catalog.py`.
+- 2026-09-26: The maintainer moved `grab` ahead of the other groups: "we will focus more then in the grab page to let it be more useful and flexible to work with and easier, because it's now the most important feature because it download from youtube, so I want to let the UI and UX be so good". Build step 4 comes next, together with a redesign of the Download page.

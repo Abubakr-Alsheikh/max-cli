@@ -10,8 +10,9 @@ from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
-from max_cli.interface.tui.widgets.sidebar import Sidebar
+from max_cli.interface.tui.widgets.sidebar import SECTIONS, Sidebar
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
+from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 
 class MaxDashboardApp(App):
@@ -429,6 +430,7 @@ class MaxDashboardApp(App):
                 yield QueuePanel(id="queue-panel")
                 yield HistoryPanel(id="history-panel")
                 yield FilesPanel(id="files-panel")
+                yield ToolsPanel(id="tools-panel")
                 yield AnalyticsPanel(id="analytics-panel")
                 yield ConfigPanel(id="config-panel")
                 yield SystemPanel(id="system-panel")
@@ -442,19 +444,8 @@ class MaxDashboardApp(App):
         self.set_interval(2.0, self._refresh_active_panel)
 
     def _show_panel(self, section_id: str) -> None:
-        for panel_id in [
-            "home-panel",
-            "download-panel",
-            "queue-panel",
-            "history-panel",
-            "files-panel",
-            "analytics-panel",
-            "config-panel",
-            "system-panel",
-            "chat-panel",
-        ]:
-            widget = self.query_one(f"#{panel_id}")
-            widget.display = False
+        for known_id, _icon, _label in SECTIONS:
+            self.query_one(f"#{known_id}-panel").display = False
         target_id = f"{section_id}-panel"
         try:
             target = self.query_one(f"#{target_id}")
@@ -542,6 +533,12 @@ class MaxDashboardApp(App):
         sidebar = self.query_one(Sidebar)
         sidebar.set_active("chat")
         self._show_panel("chat")
+
+    def on_files_panel_open_action(self, message: FilesPanel.OpenAction) -> None:
+        """The Files page hands a selected file to a Tools form."""
+        self.query_one(Sidebar).set_active("tools")
+        self._show_panel("tools")
+        self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
 
     def on_home_panel_command_selected(
         self, message: HomePanel.CommandSelected

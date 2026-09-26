@@ -137,6 +137,7 @@ DASHBOARD_SECTIONS = [
     "queue",
     "history",
     "files",
+    "tools",
     "analytics",
     "config",
     "system",

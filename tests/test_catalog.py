@@ -20,6 +20,7 @@ from max_cli.core.catalog.schema import action_schema
 from max_cli.core.catalog.spec import Surface
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskType, get_executor
+from max_cli.core.presets import DEFAULT_VIDEO_PRESET, VIDEO_CRF_BY_LEVEL
 
 
 def test_unknown_group_and_action_raise_key_error():
@@ -114,6 +115,40 @@ def test_run_action_passes_typed_args_to_the_operation(dummy_video):
     engine.get_thumbnail.assert_called_once_with(dummy_video, output_path, "00:00:05")
     assert result.ok
     assert result.output_files == [output_path]
+
+
+@pytest.mark.parametrize("level, crf", list(VIDEO_CRF_BY_LEVEL.items()))
+def test_dashboard_compress_uses_the_cli_crf_and_naming(tmp_path, level, crf):
+    """Moved from the old TUI executor tests: same CRF and file name as the CLI."""
+    source = tmp_path / "clip.mov"
+    source.write_bytes(b"x")
+    engine = MagicMock()
+
+    run_action(
+        get_action("video.compress"),
+        {"target": str(source), "level": level},
+        engine=engine,
+    )
+
+    engine.compress_video.assert_called_once_with(
+        source, tmp_path / "clip_compressed.mp4", crf=crf, preset=DEFAULT_VIDEO_PRESET
+    )
+
+
+def test_dashboard_concat_accepts_a_glob_like_the_cli(tmp_path):
+    for name in ["b.mp4", "a.mp4"]:
+        (tmp_path / name).write_bytes(b"")
+    engine = MagicMock()
+
+    run_action(
+        get_action("video.concat"),
+        {"target": str(tmp_path / "*.mp4"), "method": "fast"},
+        engine=engine,
+    )
+
+    inputs = engine.concatenate_videos.call_args.args[0]
+    assert [path.name for path in inputs] == ["a.mp4", "b.mp4"]
+    assert engine.concatenate_videos.call_args.kwargs["method"] == "concat"
 
 
 class TestQueue:
