@@ -37,6 +37,7 @@ TYPECHECK_PYTHON = "3.11"
 COVERAGE_MIN = 70
 PACKAGE_EXTRAS = ".[dev,tui]"
 WORK_DIR = REPO_ROOT / ".ci-venvs"
+LOG_DIR = WORK_DIR / "logs"
 STAMP_NAME = "ci-local.json"
 ZERO_SHA = "0" * 40
 FAILURE_TAIL_LINES = 40
@@ -145,18 +146,29 @@ def venv_python(venv: Path) -> Path:
     return venv / "bin" / "python"
 
 
-def run_tests_on(version: str) -> StepResult:
-    """Fresh venv, install as CI does, run the tests in their own temp folders."""
-    name = f"pytest (Python {version}, fresh venv)"
+def test_step_name(version: str) -> str:
+    return f"pytest (Python {version}, fresh venv)"
+
+
+def create_venv(version: str) -> StepResult | None:
+    """Make the venv once; later runs reuse it. None when it already exists.
+
+    Call this for one version at a time: parallel uv processes queue on one
+    lock while uv downloads a Python, and time out.
+    """
     venv = WORK_DIR / f"py{version}"
-    python = venv_python(venv)
-    if not python.exists():
-        created = run_step(
-            name,
-            ["uv", "venv", str(venv), "--python", version, "--managed-python", "-q"],
-        )
-        if not created.ok:
-            return created
+    if venv_python(venv).exists():
+        return None
+    return run_step(
+        test_step_name(version),
+        ["uv", "venv", str(venv), "--python", version, "--managed-python", "-q"],
+    )
+
+
+def run_tests_on(version: str) -> StepResult:
+    """Install as CI does, then run the tests in their own temp folders."""
+    name = test_step_name(version)
+    python = venv_python(WORK_DIR / f"py{version}")
     installed = run_step(
         name,
         ["uv", "pip", "install", "-q", "--python", str(python), "-e", PACKAGE_EXTRAS],
@@ -197,23 +209,37 @@ def full_steps() -> list[StepResult]:
     for name, command in lint:
         print(f"... {name}", flush=True)
         results.append(run_step(name, command))
-    print(
-        f"... pytest on Python {', '.join(PYTHON_VERSIONS)} in parallel, and build",
-        flush=True,
-    )
-    with ThreadPoolExecutor(max_workers=len(PYTHON_VERSIONS) + 1) as pool:
-        jobs = [pool.submit(run_tests_on, version) for version in PYTHON_VERSIONS]
+    ready = []
+    for version in PYTHON_VERSIONS:
+        created = create_venv(version)
+        if created is None or created.ok:
+            ready.append(version)
+        else:
+            results.append(created)
+    print(f"... pytest on Python {', '.join(ready)} in parallel, and build", flush=True)
+    with ThreadPoolExecutor(max_workers=len(ready) + 1) as pool:
+        jobs = [pool.submit(run_tests_on, version) for version in ready]
         jobs.append(pool.submit(build_package))
         results.extend(job.result() for job in jobs)
     return results
 
 
+def log_path(step_name: str) -> Path:
+    words = "".join(
+        char if char.isalnum() or char == "." else " " for char in step_name
+    )
+    return LOG_DIR / f"{'-'.join(words.lower().split())}.log"
+
+
 def report(results: list[StepResult]) -> bool:
+    """Save each step's full output, show the end of each failure, then a summary."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     print()
     for result in results:
+        log_path(result.name).write_text(result.output, encoding="utf-8")
         if not result.ok:
             tail = result.output.strip().splitlines()[-FAILURE_TAIL_LINES:]
-            print(f"--- {result.name} failed ---")
+            print(f"--- {result.name} failed; full log: {log_path(result.name)} ---")
             print("\n".join(tail))
             print()
     for result in results:

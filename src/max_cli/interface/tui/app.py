@@ -1,5 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
+from textual.widget import Widget
 from textual.widgets import Footer
 
 from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
@@ -13,6 +14,16 @@ from max_cli.interface.tui.widgets.queue_panel import QueuePanel
 from max_cli.interface.tui.widgets.sidebar import SECTIONS, Sidebar
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
 from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
+
+# Panels whose data changes on its own (queue, history, disk use ...).
+REFRESHABLE_PANEL_IDS = (
+    "#queue-panel",
+    "#history-panel",
+    "#system-panel",
+    "#files-panel",
+    "#home-panel",
+    "#analytics-panel",
+)
 
 
 class MaxDashboardApp(App):
@@ -453,16 +464,20 @@ class MaxDashboardApp(App):
         except Exception:
             self.query_one("#home-panel").display = True
 
+    def _refreshable_panels(self) -> list[Widget]:
+        """Panels with live data, in refresh order.
+
+        Empty once the app starts shutting down and its widgets are gone; the
+        2-second refresh timer can still fire then.
+        """
+        return [
+            panel
+            for panel_id in REFRESHABLE_PANEL_IDS
+            for panel in self.query(panel_id)
+        ]
+
     def _refresh_active_panel(self) -> None:
-        for panel_id, _section in [
-            ("#queue-panel", "queue"),
-            ("#history-panel", "history"),
-            ("#system-panel", "system"),
-            ("#files-panel", "files"),
-            ("#home-panel", "home"),
-            ("#analytics-panel", "analytics"),
-        ]:
-            panel = self.query_one(panel_id)
+        for panel in self._refreshable_panels():
             if panel.display:
                 if hasattr(panel, "refresh_data"):
                     panel.refresh_data()
@@ -472,15 +487,7 @@ class MaxDashboardApp(App):
         self.query_one(Sidebar).toggle_mode()
 
     def action_refresh(self) -> None:
-        for panel_id in [
-            "#queue-panel",
-            "#history-panel",
-            "#system-panel",
-            "#files-panel",
-            "#home-panel",
-            "#analytics-panel",
-        ]:
-            panel = self.query_one(panel_id)
+        for panel in self._refreshable_panels():
             if hasattr(panel, "refresh_data"):
                 panel.refresh_data()
 
