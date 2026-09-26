@@ -8,7 +8,17 @@ from max_cli.core.catalog.spec import Action, Group, Param, ParamKind, Setting
 
 OPS = "max_cli.core.operations.grab"
 QUALITY_CHOICES = ("ss", "s", "m", "h", "x")
-PLAYER_CLIENTS = ("auto", "default", "web", "tv", "ios", "android")
+# Same list as the CLI's --player-client (cli_network.PlayerClient).
+PLAYER_CLIENTS = (
+    "auto",
+    "default",
+    "web",
+    "tv",
+    "ios",
+    "android",
+    "mweb",
+    "tv_embedded",
+)
 
 GROUP = Group(
     name="grab",

@@ -217,7 +217,7 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
   - Interface: `src/max_cli/interface/cli_images.py` (uses EventSubscriber)
   - *Shows: Core emits pure events, interface translates to Rich progress bars. Core stays 100% UI-agnostic.*
 
-- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`, and `grab download` without its CLI yet):
+- **Command Catalog Pattern** (roadmap Step 2, `PLANS/active/command-catalog.md`; ported groups: `video`, and `grab download`, whose CLI calls the operation but keeps its own flags):
   - Operation: `src/max_cli/core/operations/video.py`. One function per command. It does the output naming, input checks and engine calls, and returns `ActionResult`. It takes an optional `engine`, so the CLI can pass one that asks before downloading FFmpeg.
   - Catalog: `src/max_cli/core/catalog/groups/video.py`. One `Action` per command: its params (kind, default, CLI spellings), `danger`, `queueable` and `surfaces`. A default of `Setting("GRAB_QUALITY")` reads the user's config when the action runs; the operation then takes `None` for it. Catalog modules import no engines.
   - Interface: `src/max_cli/interface/cli_media.py` parses options, calls the operation through `_run` and prints the result.

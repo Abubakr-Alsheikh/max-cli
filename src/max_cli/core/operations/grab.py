@@ -19,7 +19,17 @@ if TYPE_CHECKING:
 # Height -> the --quality code that asks for it. Other heights go through
 # --resolution.
 QUALITY_CODES = {360: "ss", 480: "s", 720: "m", 1080: "h", 2160: "x"}
-PLAYER_CLIENTS = ("auto", "default", "web", "tv", "ios", "android")
+# Same list as the CLI's --player-client (cli_network.PlayerClient).
+PLAYER_CLIENTS = (
+    "auto",
+    "default",
+    "web",
+    "tv",
+    "ios",
+    "android",
+    "mweb",
+    "tv_embedded",
+)
 MEDIA_TYPES = ("video", "audio")
 PROBE_CACHE_SIZE = 64
 

@@ -19,8 +19,9 @@ from max_cli.core.catalog.spec import Action, Setting
 from max_cli.core.cli.registry import _GROUPS
 
 QUEUE_OPTION = "queue"
-# Groups whose Typer commands call their operations. `grab` joins in
-# grab-page-redesign.md phase G5; until then only its operations are checked.
+# Groups whose Typer flags match their catalog entries. `max grab download`
+# calls its operation too, but keeps flags such as --video/--audio and
+# --no-meta that scripts rely on, so only its operation is checked.
 CLI_CHECKED_GROUPS = ("video",)
 
 
