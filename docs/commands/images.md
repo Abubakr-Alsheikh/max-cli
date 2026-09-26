@@ -3,7 +3,11 @@
 Every `max images` command takes a file or a folder. With no path, it works on the current folder. Max never overwrites your originals:
 
 - For a single file, Max writes `<name>_opt.<ext>` next to it.
-- For a folder, Max writes the results to a sibling folder named `<folder>_optimized`.
+- For a folder, Max writes the results to a sibling folder named `<folder>_optimized`. It reads the folder's own images, not those in subfolders.
+
+If an image fails (a damaged file, for example), Max reports it and carries on with the rest. A missing path, a folder with no images, or an unknown `--to` format stops the command with exit code 1.
+
+The dashboard's Tools page has a form for each command, and the Files page's Compress button opens it filled in for the selected image.
 
 All commands process files in parallel. Use `-j` to set the number of workers (default: `MAX_WORKERS` from your config, 4 unless you change it).
 
@@ -65,7 +69,7 @@ max images convert [TARGET] --to FORMAT [-j WORKERS]
 
 **Options:**
 
-- `--to` - Target format: `webp`, `jpg` or `png` (required)
+- `--to` - Target format: `webp`, `jpg` (or `jpeg`) or `png` (required)
 - `-j` - Number of parallel workers (default: 4)
 
 **Example:**

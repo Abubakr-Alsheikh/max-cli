@@ -13,7 +13,6 @@ import typer
 from max_cli.interface.tui.command_registry import CommandRegistry
 
 CLI_APPS = {
-    "images": "max_cli.interface.cli_images",
     "pdf": "max_cli.interface.cli_pdf",
     "audio": "max_cli.interface.cli_audio",
     "files": "max_cli.interface.cli_files",

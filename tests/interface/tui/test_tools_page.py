@@ -15,6 +15,7 @@ from textual.widgets import (
     Switch,
 )
 
+from max_cli.config import settings
 from max_cli.core.catalog import get_action
 from max_cli.core.catalog.spec import Action, Danger, Param, ParamKind
 from max_cli.core.engines.task_manager import get_task_manager
@@ -228,3 +229,24 @@ async def test_files_page_video_compress_opens_the_prefilled_form(dummy_video):
         form = tools.query_one(ActionForm)
         assert form.action.id == "video.compress"
         assert form.query_one("#field-target", Input).value == str(dummy_video)
+
+
+@pytest.mark.asyncio
+async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
+    from max_cli.interface.tui.app import MaxDashboardApp
+    from max_cli.interface.tui.widgets.files_panel import FilesPanel
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.query_one(FilesPanel).post_message(
+            FilesPanel.OpenAction("images.compress", {"target": str(dummy_image)})
+        )
+        await pilot.pause()
+        await pilot.pause()
+
+        form = app.query_one("#tools-panel").query_one(ActionForm)
+        assert form.action.id == "images.compress"
+        assert form.query_one("#field-target", Input).value == str(dummy_image)
+        # A Setting default shows the user's configured value.
+        quality = form.query_one("#field-quality", Input).value
+        assert quality == str(settings.DEFAULT_QUALITY)

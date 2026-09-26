@@ -1,16 +1,26 @@
+"""`max images`: parse options, call core/operations/images.py, print the result.
+
+The catalog entries in core/catalog/groups/images.py describe the same
+commands; tests/test_catalog_drift.py fails when the two disagree.
+"""
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
 
-from max_cli.common.concurrent import process_batch_parallel
-from max_cli.common.events import get_emitter
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.config import settings
+from max_cli.core.operations import images as images_ops
 from max_cli.core.presets import STRIP_IMAGE_METADATA
-from max_cli.interface.event_subscriber import EventSubscriber
+
+if TYPE_CHECKING:
+    from max_cli.core.operations.result import ActionResult
 
 app = typer.Typer()
+
+SUMMARY_ROWS = 15
 
 
 def _get_engine():
@@ -19,20 +29,55 @@ def _get_engine():
     return ImageEngine()
 
 
-def _resolve_batch(target: Path) -> tuple[list[Path], Path]:
-    engine = _get_engine()
-    # Resolve first: Path(".").name is "", which made the folder "_optimized".
-    target = target.resolve()
-    if target.is_file():
-        return [target], target.parent
-    files = [
-        f
-        for f in target.iterdir()
-        if f.is_file() and f.suffix.lower() in engine.SUPPORTED_EXTENSIONS
-    ]
-    out_dir = target.parent / f"{target.name}_optimized"
-    out_dir.mkdir(exist_ok=True)
-    return files, out_dir
+def _run(operation: Callable[..., "ActionResult"], label: str, **kwargs: Any) -> None:
+    """Run an images operation with a progress bar, then print its summary.
+
+    Bad input (a missing path, no size for resize) exits 1 before any work.
+    """
+    from max_cli.common.events import get_emitter
+    from max_cli.interface.event_subscriber import EventSubscriber
+
+    emitter = get_emitter()
+    subscriber = EventSubscriber(emitter)
+    subscriber.subscribe()
+    try:
+        with subscriber.create_progress_context(0, f"{label}..."):
+            result = operation(engine=_get_engine(), emitter=emitter, **kwargs)
+    except (ResourceNotFoundError, ValidationError) as e:
+        log_error(str(e))
+        raise typer.Exit(1) from None
+    finally:
+        subscriber.unsubscribe()
+    _print_result(result, label)
+
+
+def _print_result(result: "ActionResult", label: str) -> None:
+    from rich import box
+    from rich.table import Table
+    from rich.text import Text
+
+    for failure in result.details.get("failed", []):
+        # Plain Text: file names like "cat [red].png" are not markup.
+        console.print(Text(f"Error {failure['file']}: {failure['error']}", "red"))
+    processed = result.details.get("processed", [])
+    if processed:
+        table = Table(title=f"{label} Summary", box=box.ROUNDED)
+        table.add_column("File", style="cyan")
+        table.add_column("Original", justify="right")
+        table.add_column("Final", justify="right", style="green")
+        table.add_column("Saved", justify="right", style="bold yellow")
+        for row in processed[:SUMMARY_ROWS]:
+            table.add_row(
+                Text(row["file_name"]),
+                row["original_size"],
+                row["final_size"],
+                f"{row['reduction_pct']}%",
+            )
+        console.print(table)
+    if result.ok:
+        log_success(result.message)
+    else:
+        log_error(result.message)
 
 
 @app.command("compress")
@@ -58,19 +103,17 @@ def compress_images(
     """
     All-in-one optimizer. Compress, resize, and convert formats in one go.
     """
-    files, out_dir = _resolve_batch(target)
-
-    _run_batch(
-        files,
-        out_dir,
+    _run(
+        images_ops.compress,
         "Optimizing",
-        workers=workers,
+        target=target,
         quality=quality,
         scale=scale,
         max_dim=max_dim,
-        force_format="jpg" if force_jpeg else None,
-        quantize_png=quantize,
-        strip_exif=strip,
+        force_jpeg=force_jpeg,
+        quantize=quantize,
+        strip=strip,
+        workers=workers,
     )
 
 
@@ -86,18 +129,14 @@ def resize_images(
     ),
 ):
     """Specialized command for adjusting image dimensions."""
-    if not any([width, height, scale]):
-        log_error("Specify --width, --height, or --scale.")
-        return
-    files, out_dir = _resolve_batch(target)
-    _run_batch(
-        files,
-        out_dir,
+    _run(
+        images_ops.resize,
         "Resizing",
-        workers=workers,
+        target=target,
         width=width,
         height=height,
         scale=scale,
+        workers=workers,
     )
 
 
@@ -111,8 +150,7 @@ def convert_images(
     ),
 ):
     """Bulk convert images to a new format."""
-    files, out_dir = _resolve_batch(target)
-    _run_batch(files, out_dir, "Converting", workers=workers, force_format=to)
+    _run(images_ops.convert, "Converting", target=target, to=to, workers=workers)
 
 
 @app.command("strip")
@@ -124,63 +162,4 @@ def strip_metadata(
     ),
 ):
     """Remove GPS and EXIF data from images for privacy."""
-    files, out_dir = _resolve_batch(target)
-    _run_batch(files, out_dir, "Stripping", workers=workers, strip_exif=True)
-
-
-def _run_batch(
-    files: list[Path], out_dir: Path, action: str, workers: int = 4, **kwargs
-):
-    from rich import box
-    from rich.table import Table
-
-    engine = _get_engine()
-
-    def process_file(f: Path) -> dict:
-        if len(files) == 1:
-            out_path = out_dir / f"{f.stem}_opt{f.suffix}"
-        else:
-            out_path = out_dir / f.name
-        return engine.process_single_image(f, out_path, **kwargs)
-
-    emitter = get_emitter()
-    subscriber = EventSubscriber(emitter)
-    subscriber.subscribe()
-
-    with subscriber.create_progress_context(len(files), f"{action}..."):
-        if workers > 1 and len(files) > 1:
-            results = process_batch_parallel(
-                files, process_file, max_workers=workers, emitter=emitter, action=action
-            )
-        else:
-            results = []
-            for f in files:
-                try:
-                    stats = process_file(f)
-                    results.append(stats)
-                except Exception as e:
-                    console.print(f"[red]Error {f.name}: {e}[/red]")
-                    results.append({"error": str(e), "item": f, "success": False})
-
-    subscriber.unsubscribe()
-
-    stats_list = [r for r in results if "error" not in r]
-    if not stats_list:
-        return
-
-    table = Table(title=f"{action} Summary", box=box.ROUNDED)
-    table.add_column("File", style="cyan")
-    table.add_column("Original", justify="right")
-    table.add_column("Final", justify="right", style="green")
-    table.add_column("Saved", justify="right", style="bold yellow")
-
-    for s in stats_list[:15]:
-        table.add_row(
-            s["file_name"],
-            s["original_size"],
-            s["final_size"],
-            f"{s['reduction_pct']}%",
-        )
-
-    console.print(table)
-    log_success(f"Output saved to: {out_dir}")
+    _run(images_ops.strip, "Stripping", target=target, workers=workers)

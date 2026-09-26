@@ -8,7 +8,6 @@ from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchema
 
 ENGINE_MODULE_MAP: dict[str, str] = {
-    "ImageEngine": "max_cli.core.engines.image_processor",
     "FileOrganizer": "max_cli.core.engines.file_organizer",
     "PDFEngine": "max_cli.core.engines.pdf_engine",
     "AudioMetadataEngine": "max_cli.core.engines.audio_metadata_engine",
@@ -23,9 +22,6 @@ PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
     ("files", "order"): {"start": "start_index"},
     ("files", "shred"): {"target": "path"},
-    ("images", "compress"): {"target": "input_path", "output": "output_path"},
-    ("images", "resize"): {"target": "input_path", "output": "output_path"},
-    ("images", "convert"): {"target": "input_path", "output": "output_path"},
 }
 
 
@@ -140,9 +136,6 @@ class CommandExecutor:
                     files = [f.name for f in value.iterdir() if f.is_file()][:20]
                     ai_engine = self._get_engine("AIEngine")
                     mapped["categories"] = ai_engine.categorize_files(files)
-                continue
-            if category == "images" and key in _IMAGE_FLAG_NAMES:
-                mapped[_IMAGE_FLAG_NAMES[key]] = value
                 continue
             mapped[name_map.get(key, key)] = value
 
@@ -495,14 +488,7 @@ _VALUE_CONVERTERS: dict[tuple[str, str], dict[str, Callable[[Any], dict[str, Any
     ("audio", "set"): {"track": lambda track: {"tracknumber": str(track)}},
     ("pdf", "merge"): {"inputs": _pdf_inputs},
     ("audio", "organize"): {"targets": _audio_inputs},
-    ("images", "convert"): {"to_format": lambda fmt: {"force_format": fmt}},
-    ("images", "compress"): {
-        "force_jpeg": lambda force: {"force_format": "jpg"} if force else {}
-    },
 }
-
-_IMAGE_FLAG_NAMES = {"strip": "strip_exif", "quantize": "quantize_png"}
-
 
 def _page_range(start: Optional[int], end: Optional[int]) -> Optional[str]:
     if start is not None and end is not None:
@@ -521,11 +507,4 @@ def _default_output_path(
     sibling = presets.sibling_path
     if category == "pdf" and command == "compress":
         return sibling(input_path, "_compressed", "pdf")
-    if category == "images":
-        if command == "compress":
-            return sibling(input_path, "_compressed", "jpg")
-        if command == "resize":
-            return sibling(input_path, "_resized")
-        if command == "convert":
-            return sibling(input_path, extension=params.get("to_format", "webp"))
     return None

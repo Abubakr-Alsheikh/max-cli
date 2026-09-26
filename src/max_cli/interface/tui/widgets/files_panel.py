@@ -256,13 +256,13 @@ class FilesPanel(Vertical):
             full_path = self._current_path / file_path
             if full_path.is_file():
                 ext = full_path.suffix.lower()
+                # Open the prefilled form: it shows the options and where the
+                # result goes before anything runs.
                 if ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
-                    self._execute_quick_action(
-                        "images", "compress", {"target": str(full_path)}
+                    self.post_message(
+                        self.OpenAction("images.compress", {"target": str(full_path)})
                     )
                 elif ext in {".mp4", ".mkv", ".avi", ".mov"}:
-                    # Video compression takes minutes and has options worth
-                    # seeing, so open its form instead of running blind.
                     self.post_message(
                         self.OpenAction("video.compress", {"target": str(full_path)})
                     )
