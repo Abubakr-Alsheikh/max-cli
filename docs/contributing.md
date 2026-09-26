@@ -63,7 +63,8 @@ mypy src/
 # Quick: ruff, the mypy ratchet, and the tests with the 70% coverage floor (about 2 minutes)
 python scripts/ci_local.py
 
-# Full: the tests on Python 3.9, 3.10, 3.11 and 3.12 in fresh virtualenvs, plus the package build.
+# Full (about 4 minutes): the tests on Python 3.9, 3.10, 3.11 and 3.12 in fresh virtualenvs,
+# two at a time, plus the package build. A step that hangs stops after 10 minutes.
 # Needs uv, which downloads any Python you don't have.
 python scripts/ci_local.py --full
 
