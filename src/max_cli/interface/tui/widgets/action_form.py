@@ -9,10 +9,10 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.widget import Widget
 from textual.widgets import Button, Collapsible, Input, Label, Select, Static, Switch
 
@@ -25,6 +25,7 @@ from max_cli.core.catalog.spec import (
     ParamKind,
 )
 from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.interface.tui.text import markup
 
 CONFIRM_DANGERS = frozenset({Danger.MOVES, Danger.OVERWRITES, Danger.DELETES})
 DANGER_NOTES = {
@@ -63,10 +64,13 @@ class ActionForm(Vertical):
     }
     ActionForm .form-field {
         height: auto;
+        width: 1fr;
         margin-top: 1;
     }
     ActionForm .form-help {
         color: $text-muted;
+        width: 1fr;
+        height: auto;
     }
     ActionForm .path-row {
         height: auto;
@@ -137,7 +141,7 @@ class ActionForm(Vertical):
         return Vertical(
             Label(_field_label(param)),
             self._input(param),
-            Static(escape(param.help), classes="form-help"),
+            Static(Content(param.help), classes="form-help"),
             classes="form-field",
         )
 
@@ -196,7 +200,7 @@ class ActionForm(Vertical):
         elif isinstance(widget, Select):
             widget.value = value
 
-    def _set_status(self, text: str) -> None:
+    def _set_status(self, text: "str | Content") -> None:
         self.query_one("#form-status", Static).update(text)
 
     def _set_busy(self, busy: bool) -> None:
@@ -245,7 +249,7 @@ class ActionForm(Vertical):
         try:
             coerce_args(self.action, values)
         except MaxError as e:
-            self._set_status(f"[red]{escape(str(e))}[/red]")
+            self._set_status(markup("[red]$error[/red]", error=e))
             return
 
         if self.action.danger not in CONFIRM_DANGERS:
@@ -282,7 +286,7 @@ class ActionForm(Vertical):
         try:
             task = enqueue_action(self.action, values)
         except MaxError as e:
-            self._set_status(f"[red]{escape(str(e))}[/red]")
+            self._set_status(markup("[red]$error[/red]", error=e))
             return
         self._set_status(
             f"[green]Queued[/green] (ID: {task.id}). See the Queue page for progress."
@@ -313,8 +317,8 @@ class ActionForm(Vertical):
     def _finish(self, ok: bool, message: str) -> None:
         self._set_busy(False)
         if ok:
-            self._set_status(f"[green]Done.[/green] {escape(message)}")
+            self._set_status(markup("[green]Done.[/green] $message", message=message))
             self.notify(message)
         else:
-            self._set_status(f"[red]Failed:[/red] {escape(message)}")
+            self._set_status(markup("[red]Failed:[/red] $message", message=message))
             self.notify(message, severity="error")

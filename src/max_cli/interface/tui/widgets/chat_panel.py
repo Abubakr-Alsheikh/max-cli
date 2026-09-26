@@ -3,13 +3,14 @@
 from functools import partial
 from typing import Any
 
-from rich.markup import escape
 from textual import on
 from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.content import Content
 from textual.events import Key
 from textual.widgets import Button, Input, Static
 
 from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.interface.tui.text import markup
 
 
 class ChatPanel(Vertical):
@@ -101,12 +102,18 @@ class ChatPanel(Vertical):
                 severity="information",
             )
 
-    def _add_message(self, sender: str, content: str) -> Static:
-        container = self.query_one("#chat-messages", Vertical)
+    @staticmethod
+    def _labelled(sender: str, content: "str | Content") -> Content:
+        """`Max: ...` or `You: ...`. A plain str is shown as typed, never parsed."""
         color = "cyan" if sender == "max" else "green"
         prefix = "Max" if sender == "max" else "You"
+        body = Content(content) if isinstance(content, str) else content
+        return Content.assemble((f"{prefix}: ", f"bold {color}"), body)
+
+    def _add_message(self, sender: str, content: "str | Content") -> Static:
+        container = self.query_one("#chat-messages", Vertical)
         msg = Static(
-            f"[bold {color}]{prefix}:[/bold {color}] {content}",
+            self._labelled(sender, content),
             classes=f"chat-msg chat-msg-{sender}",
         )
         container.mount(msg)
@@ -116,7 +123,9 @@ class ChatPanel(Vertical):
     def _process_request(self, message: str) -> None:
         self._history.append(message)
         self._history_index = -1
-        thinking_msg = self._add_message("max", "[dim]Thinking...[/dim]")
+        thinking_msg = self._add_message(
+            "max", Content.from_markup("[dim]Thinking...[/dim]")
+        )
         # The AI call takes seconds; on the UI thread it froze the dashboard
         # and the "Thinking..." line never painted.
         self.run_worker(
@@ -138,20 +147,24 @@ class ChatPanel(Vertical):
             self.app.call_from_thread(
                 self._show_reply,
                 thinking_msg,
-                "[yellow]AI engine not available. "
-                "Configure your API key in settings.[/yellow]",
+                Content.from_markup(
+                    "[yellow]AI engine not available. "
+                    "Configure your API key in settings.[/yellow]"
+                ),
             )
             return
         except Exception as e:
             self.app.call_from_thread(
-                self._show_reply, thinking_msg, f"[red]Error: {escape(str(e))}[/red]"
+                self._show_reply,
+                thinking_msg,
+                markup("[red]Error: $error[/red]", error=e),
             )
             return
 
         thought = response.get("thought") or "I'm not sure how to help with that."
         command = response.get("command")
         self.app.call_from_thread(
-            self._show_reply, thinking_msg, escape(thought), command
+            self._show_reply, thinking_msg, Content(thought), command
         )
         ActivityLog().add_entry(
             category="ai",
@@ -161,12 +174,13 @@ class ChatPanel(Vertical):
         )
 
     def _show_reply(
-        self, thinking_msg: Static, reply: str, command: "str | None" = None
+        self, thinking_msg: Static, reply: Content, command: "str | None" = None
     ) -> None:
-        thinking_msg.update(f"[bold cyan]Max:[/bold cyan] {reply}")
+        thinking_msg.update(self._labelled("max", reply))
         if command:
             self._add_message(
-                "max", f"Suggested command: [bold]{escape(command)}[/bold]"
+                "max",
+                markup("Suggested command: [bold]$command[/bold]", command=command),
             )
             container = self.query_one("#chat-messages", Vertical)
             btn_id = f"exec-cmd-{len(container.children)}"

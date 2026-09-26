@@ -96,8 +96,8 @@ Chosen for the first round:
    - Link box with Paste and Check, and the preview card for a single video with quality chips.
    - Browse opens `PathPicker`.
    - A Downloads list with real Cancel.
-3. [ ] **G3: playlists.** The item picker (all, none, a range, single items), passed through as `playlist_items`.
-4. [ ] **G4: several at once.** The concurrency limit, Retry, Open folder and history clear with confirmation shipped with G2. Left: pasting several links at once.
+3. [x] **G3: playlists.** Done 2026-09-26 in the page redesign (PR #21). The item picker (all, none, a range, single items), passed through as `playlist_items`.
+4. [x] **G4: several at once.** Done 2026-09-26 (PR #21): paste several links and each becomes a download. The concurrency limit, Retry, Open folder and history clear with confirmation shipped with G2.
 5. [ ] **G5: CLI.** `max grab download` calls the same operation; the CLI's interactive prompt stays.
 
 ## Decisions
@@ -115,3 +115,14 @@ Chosen for the first round:
   - Each download is a `DownloadRow`, run by a thread worker that waits for one of `GRAB_MAX_CONCURRENT` slots.
   - The old `grab` entries left `command_registry.py` and `command_executor.py`.
   - The page has no Paste button. Ctrl+V pastes into the link box, and reading the system clipboard would need a new dependency.
+- 2026-09-26, maintainer feedback on G2: pressing Check crashed with a `MarkupError`, and the page was "not good in using it or looking at it".
+  - **The crash.** The YouTube token helper (bgutil) timed out, and its error quoted a command line full of `[`. Neither Rich's nor Textual's `escape()` makes such text safe, so the dashboard now inserts untrusted text through `interface/tui/text.py:markup()`, using `$variables`, or as plain `Content`. The Download page, forms and chat all use it.
+  - **The timeout.** `probe_info` retries once on the helper's `TimeoutExpired`, then gives a readable message. Downloads give the same message.
+  - **The redesign.** The layout was checked with rendered screenshots (Textual SVG export to headless Chrome):
+    - Cards: Link, "What you'll get" and Advanced options.
+    - A Simple | Advanced toggle, and Video | Audio (MP3) buttons.
+    - Quality chips with rounded sizes, three per row, keeping your usual pick.
+    - A download button that says what it will do ("Download 1080p · 78 MB", "3 of 12 items").
+    - Tabs for Downloads, with a count of those running, and History, with Download again, Open folder and Clear.
+  - **Flow.** The link is checked on its own 0.6 s after a paste, and Enter downloads once it's checked.
+  - The sidebar is wider, so every label fits.

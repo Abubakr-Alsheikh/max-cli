@@ -24,7 +24,7 @@ class Sidebar(Vertical):
 
     DEFAULT_CSS = """
     Sidebar {
-        width: 14;
+        width: 17;
         layout: vertical;
         background: $surface;
         border-right: solid $border;
