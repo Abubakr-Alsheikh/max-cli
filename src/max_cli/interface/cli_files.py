@@ -6,7 +6,7 @@ commands; tests/test_catalog_drift.py fails when the two disagree.
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar
 
 import typer
 from rich.markup import escape
@@ -18,10 +18,9 @@ from max_cli.common.exceptions import MaxError, ResourceNotFoundError, Validatio
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.core.operations import files as files_ops
 
-if TYPE_CHECKING:
-    from max_cli.core.operations.result import ActionResult
-
 app = typer.Typer()
+
+Result = TypeVar("Result")
 
 ACTION_LIST_LIMIT = 20
 ACTION_LIST_HEAD = 10
@@ -41,10 +40,10 @@ def _get_ai_engine():
 
 
 def _run(
-    operation: Callable[..., "ActionResult"],
+    operation: Callable[..., Result],
     fail_message: Optional[str] = None,
     **kwargs: Any,
-) -> Optional["ActionResult"]:
+) -> Optional[Result]:
     """Call a files operation and report its errors.
 
     Bad input (a missing file, not a folder) exits 1. Other failures print
