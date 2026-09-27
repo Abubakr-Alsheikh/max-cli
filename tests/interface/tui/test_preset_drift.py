@@ -14,18 +14,14 @@ from max_cli.interface.tui.command_registry import CommandRegistry
 
 CLI_APPS = {
     "audio": "max_cli.interface.cli_audio",
-    "files": "max_cli.interface.cli_files",
     "ai": "max_cli.interface.cli_ai",
 }
 
 
 # Deliberate differences:
-# - dry_run: the dashboard previews file moves before running them.
 # - pattern: the dashboard sorts music into Artist/Album folders (maintainer's
 #   choice after a real problem with plain "artist").
 INTENDED_DIFFERENCES = {
-    ("files", "order", "dry_run"),
-    ("files", "smart_sort", "dry_run"),
     ("audio", "organize", "pattern"),
 }
 

@@ -1,13 +1,31 @@
+"""`max files`: parse options, ask before destructive steps, call
+core/operations/files.py, print the result.
+
+The catalog entries in core/catalog/groups/files.py describe the same
+commands; tests/test_catalog_drift.py fails when the two disagree.
+"""
+
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.text import Text
 
+from max_cli.common.exceptions import MaxError, ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.core.operations import files as files_ops
+
+if TYPE_CHECKING:
+    from max_cli.core.operations.result import ActionResult
 
 app = typer.Typer()
+
+ACTION_LIST_LIMIT = 20
+ACTION_LIST_HEAD = 10
+UNDO_HINT = "[dim]Undo with: max files undo[/dim]"
 
 
 def _get_organizer():
@@ -20,6 +38,37 @@ def _get_ai_engine():
     from max_cli.core.engines.ai_engine import AIEngine
 
     return AIEngine()
+
+
+def _run(
+    operation: Callable[..., "ActionResult"],
+    fail_message: Optional[str] = None,
+    **kwargs: Any,
+) -> Optional["ActionResult"]:
+    """Call a files operation and report its errors.
+
+    Bad input (a missing file, not a folder) exits 1. Other failures print
+    `fail_message` and return None; with no fail_message they exit 1.
+    """
+    try:
+        return operation(**kwargs)
+    except (ResourceNotFoundError, ValidationError) as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    except MaxError as e:
+        if fail_message is None:
+            log_error(escape(str(e)))
+            raise typer.Exit(1) from None
+        log_error(escape(f"{fail_message}: {e}"))
+        return None
+
+
+def _print_actions(actions: list[str]) -> None:
+    shown = actions[:ACTION_LIST_HEAD] if len(actions) > ACTION_LIST_LIMIT else actions
+    for action in shown:
+        console.print(f"  {escape(action)}")
+    if len(shown) < len(actions):
+        console.print(f"  ... and {len(actions) - len(shown)} more.")
 
 
 @app.command("order")
@@ -40,28 +89,16 @@ def order_files(
     Rename all files in a folder with a number prefix (e.g. 1_file.txt).
     Skips files that are already numbered.
     """
-
-    if not folder.is_dir():
-        log_error(f"'{folder}' is not a directory.")
-        raise typer.Exit(code=1)
-
-    # 1. Get stats first to show the user what will happen
-    try:
-        org = _get_organizer()
-        files = org.scan_directory(folder)
-    except Exception as e:
-        log_error(str(e))
-        raise typer.Exit(code=1) from None
-
-    if not files:
+    organizer = _get_organizer()
+    found = _run(files_ops.files_to_order, folder=folder, organizer=organizer)
+    if not found:
         console.print("[yellow]Folder is empty. Nothing to do.[/yellow]")
         return
 
-    # 2. Confirmation (Unless forced or dry-run)
     if not dry_run and not force:
         console.print(
             Panel(
-                Text(f"Target: {folder}\nFiles found: {len(files)}", justify="center"),
+                Text(f"Target: {folder}\nFiles found: {len(found)}", justify="center"),
                 title="[bold yellow]⚠ Bulk Rename Warning[/bold yellow]",
                 border_style="yellow",
             )
@@ -70,45 +107,32 @@ def order_files(
             console.print("[red]Aborted.[/red]")
             raise typer.Exit()
 
-    # 3. Execute
     console.print(
         f"[bold cyan]Processing files starting at index {start}...[/bold cyan]"
     )
-
-    txn = None
-    if not dry_run:
-        from max_cli.common.transaction_log import TransactionLog
-
-        txn = TransactionLog(command="files order")
-
-    results = _get_organizer().order_files(
-        folder, dry_run=dry_run, start_index=start, transaction_log=txn
+    result = _run(
+        files_ops.order,
+        folder=folder,
+        dry_run=dry_run,
+        start=start,
+        organizer=organizer,
     )
+    if result is None:
+        return
+    details = result.details
+    _print_actions(details["actions"])
 
-    if txn:
-        txn.save()
-
-    actions = results["actions"]
-    if len(actions) > 20:
-        for action in actions[:10]:
-            console.print(f"  {action}")
-        console.print(f"  ... and {len(actions) - 10} more.")
-    else:
-        for action in actions:
-            console.print(f"  {action}")
-
-    summary_color = "green" if not dry_run else "yellow"
-    console.print(f"\n[{summary_color}]Summary:[/ {summary_color}]")
-    console.print(f"  Files Processed: {results['renamed']}")
-    console.print(f"  Files Skipped:   {results['skipped']}")
-
+    summary_color = "yellow" if dry_run else "green"
+    console.print(f"\n[{summary_color}]Summary:[/{summary_color}]")
+    console.print(f"  Files Processed: {details['renamed']}")
+    console.print(f"  Files Skipped:   {details['skipped']}")
     if dry_run:
         console.print(
             "\n[bold yellow]This was a Dry Run. No files were changed.[/bold yellow]"
         )
     else:
-        log_success("File ordering complete!")
-        console.print("[dim]Undo with: max files undo[/dim]")
+        log_success(escape(result.message))
+        console.print(UNDO_HINT)
 
 
 @app.command("smart-sort")
@@ -122,40 +146,36 @@ def smart_sort(
     """
     AI-powered file organization. Groups files by content/meaning, not just extension.
     """
-    files = [
-        f.name for f in path.iterdir() if f.is_file() and not f.name.startswith(".")
-    ]
-
-    if not files:
-        console.print("[yellow]No files to organize.[/yellow]")
+    with console.status("[cyan]Analyzing files with AI...[/cyan]"):
+        result = _run(
+            files_ops.smart_sort,
+            "Smart sort failed",
+            path=path,
+            dry_run=dry_run,
+            organizer=_get_organizer(),
+            ai_engine=_LazyAIEngine(),
+        )
+    if result is None:
         return
-
-    console.print(f"[cyan]Analyzing {len(files)} files with AI...[/cyan]")
-
-    ai_eng = _get_ai_engine()
-    categories = ai_eng.categorize_files(files)
-
-    txn = None
-    if not dry_run:
-        from max_cli.common.transaction_log import TransactionLog
-
-        txn = TransactionLog(command="files smart-sort")
-
-    results = _get_organizer().smart_sort(
-        path, categories, dry_run=dry_run, transaction_log=txn
-    )
-
-    if txn:
-        txn.save()
-
-    for action in results["actions"]:
-        console.print(f"  {action}")
-
-    if not dry_run:
-        log_success(f"Successfully organized {results['moved']} files.")
-        console.print("[dim]Undo with: max files undo[/dim]")
+    details = result.details
+    if not details["actions"] and not details["moved"]:
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
+        return
+    for action in details["actions"]:
+        console.print(f"  {escape(action)}")
+    if dry_run:
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
     else:
-        console.print("[yellow]Dry run complete. No files moved.[/yellow]")
+        log_success(escape(result.message))
+        console.print(UNDO_HINT)
+
+
+class _LazyAIEngine:
+    """Builds the AI engine only if the folder has files to sort."""
+
+    def categorize_files(self, files: list[str]) -> dict[str, str]:
+        categories: dict[str, str] = _get_ai_engine().categorize_files(files)
+        return categories
 
 
 @app.command("duplicates")
@@ -175,59 +195,53 @@ def find_duplicates(
     """
     Find and optionally remove duplicate files based on content.
     """
-    if not folder.is_dir():
-        log_error(f"'{folder}' is not a directory.")
-        raise typer.Exit(code=1)
-
-    console.print(f"[cyan]Scanning for duplicates in {folder}...[/cyan]")
-
+    console.print(f"[cyan]Scanning for duplicates in {escape(str(folder))}...[/cyan]")
+    organizer = _get_organizer()
     try:
-        org = _get_organizer()
-        duplicates = org.find_duplicates(folder, recursive=recursive)
+        groups = files_ops.find_duplicates(folder, recursive, organizer=organizer)
+    except ValidationError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(code=1) from None
+    except MaxError as e:
+        log_error(escape(f"Error finding duplicates: {e}"))
+        return
 
-        if not duplicates:
-            console.print("[green]No duplicates found![/green]")
-            return
+    found = files_ops.duplicates(folder, recursive, organizer=organizer, groups=groups)
+    if not groups:
+        console.print(f"[green]{escape(found.message)}[/green]")
+        return
+    console.print(f"[yellow]{escape(found.message)}:[/yellow]\n")
+    for paths in found.details["groups"]:
+        console.print("[bold]Duplicate group:[/bold]")
+        for path in paths:
+            console.print(f"  {escape(path)}")
+        console.print()
 
-        total_dupes = sum(len(v) - 1 for v in duplicates.values())
-        console.print(
-            f"[yellow]Found {total_dupes} duplicate(s) in {len(duplicates)} group(s):[/yellow]\n"
-        )
+    if not delete:
+        console.print("[dim]Run with --delete to remove duplicates[/dim]")
+        return
+    count = found.details["duplicate_count"]
+    if not force and not Confirm.ask(
+        f"Delete {count} duplicate(s)? A backup is kept for undo."
+    ):
+        console.print("[dim]Cancelled. Nothing was deleted.[/dim]")
+        return
 
-        for paths in duplicates.values():
-            console.print("[bold]Duplicate group:[/bold]")
-            for p in paths:
-                console.print(f"  {p}")
-            console.print()
-
-        if delete and not force:
-            if not Confirm.ask(
-                f"Delete {total_dupes} duplicate(s)? A backup is kept for undo."
-            ):
-                console.print("[dim]Cancelled. Nothing was deleted.[/dim]")
-                return
-
-        if delete:
-            from max_cli.common.transaction_log import TransactionLog
-
-            txn = TransactionLog(command="files duplicates --delete")
-
-            results = org.delete_duplicates(
-                folder, duplicates, transaction_log=txn, auto_backup=True
-            )
-
-            txn.save()
-
-            log_success(f"Removed {results['removed']} duplicate(s).")
-            if results["errors"]:
-                for err in results["errors"]:
-                    console.print(f"  [red]{err}[/red]")
-            console.print("[dim]Undo with: max files undo[/dim]")
-        else:
-            console.print("[dim]Run with --delete to remove duplicates[/dim]")
-
-    except Exception as e:
-        log_error(f"Error finding duplicates: {e}")
+    result = _run(
+        files_ops.duplicates,
+        "Error deleting duplicates",
+        folder=folder,
+        recursive=recursive,
+        delete=True,
+        organizer=organizer,
+        groups=groups,
+    )
+    if result is None:
+        return
+    log_success(escape(result.message))
+    for error in result.details["errors"]:
+        console.print(f"  [red]{escape(str(error))}[/red]")
+    console.print(UNDO_HINT)
 
 
 @app.command("shred")
@@ -241,31 +255,26 @@ def secure_delete(
     """
     Securely delete a file by overwriting with random data before deletion.
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    if target.is_dir():
-        log_error("Cannot shred directories. Use rm -r instead.")
-        raise typer.Exit(1)
-
+    _run(files_ops.check_shred_target, target=target)
     if not force:
         console.print(
-            f"[red]⚠ This will PERMANENTLY destroy: {target.name}. "
+            f"[red]⚠ This will PERMANENTLY destroy: {escape(target.name)}. "
             "No backup is kept, and `max files undo` can't restore it.[/red]"
         )
         if not Confirm.ask("Are you sure?"):
             console.print("[yellow]Aborted.[/yellow]")
             return
 
-    console.print(f"[cyan]Shredding {target.name} ({passes} passes)...[/cyan]")
-
-    try:
-        # No backup and no undo record: a secure delete must not leave a copy.
-        _get_organizer().secure_delete(target, passes=passes)
-        log_success(f"File securely deleted: {target.name}")
-    except Exception as e:
-        log_error(f"Secure delete failed: {e}")
+    console.print(f"[cyan]Shredding {escape(target.name)} ({passes} passes)...[/cyan]")
+    result = _run(
+        files_ops.shred,
+        "Secure delete failed",
+        target=target,
+        passes=passes,
+        organizer=_get_organizer(),
+    )
+    if result:
+        log_success(escape(result.message))
 
 
 @app.command("preview")
@@ -278,83 +287,40 @@ def file_preview(
     """
     Show file metadata and preview content.
     """
-    from datetime import datetime
-
     from max_cli.common.utils import format_size
 
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
+    result = _run(files_ops.preview, target=target, lines=lines)
+    assert result is not None  # preview raises instead of returning None
+    info = result.details
 
-    stat = target.stat()
-
-    console.print(Panel(f"[bold cyan]{target.name}[/bold cyan]", border_style="cyan"))
-
-    console.print(f"[bold]Path:[/bold] {target.absolute()}")
-    console.print(f"[bold]Type:[/bold] {target.suffix or 'No extension'}")
-    console.print(f"[bold]Size:[/bold] {format_size(stat.st_size)}")
-    console.print(f"[bold]Created:[/bold] {datetime.fromtimestamp(stat.st_ctime)}")
-    console.print(f"[bold]Modified:[/bold] {datetime.fromtimestamp(stat.st_mtime)}")
-    console.print(f"[bold]Accessed:[/bold] {datetime.fromtimestamp(stat.st_atime)}")
-
+    console.print(Panel(Text(info["name"], style="bold cyan"), border_style="cyan"))
+    console.print(Text.assemble(("Path: ", "bold"), info["path"]))
+    console.print(Text.assemble(("Type: ", "bold"), info["type"]))
+    console.print(f"[bold]Size:[/bold] {format_size(info['size'])}")
+    console.print(f"[bold]Created:[/bold] {info['created']}")
+    console.print(f"[bold]Modified:[/bold] {info['modified']}")
+    console.print(f"[bold]Accessed:[/bold] {info['accessed']}")
     console.print()
 
-    text_extensions = {
-        ".txt",
-        ".md",
-        ".py",
-        ".js",
-        ".json",
-        ".yaml",
-        ".yml",
-        ".xml",
-        ".html",
-        ".css",
-        ".sh",
-        ".bat",
-        ".ps1",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".log",
-    }
-
-    if target.suffix.lower() in text_extensions:
-        try:
-            content = target.read_text(encoding="utf-8", errors="ignore")
-            preview_lines = content.splitlines()[:lines]
-            console.print("[bold]Preview:[/bold]")
-            for i, line in enumerate(preview_lines, 1):
-                console.print(f"{i:3}: {line}")
-            if len(content.splitlines()) > lines:
-                console.print(
-                    f"[dim]... and {len(content.splitlines()) - lines} more lines[/dim]"
-                )
-        except Exception as e:
-            console.print(f"[yellow]Could not read file content: {e}[/yellow]")
-    elif target.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
-        console.print("[bold]Image Dimensions:[/bold] (requires PIL)")
-        try:
-            from PIL import Image
-
-            with Image.open(target) as img:
-                console.print(f"  {img.width} x {img.height} pixels")
-                console.print(f"  Mode: {img.mode}")
-        except Exception:
-            console.print("  [dim]Could not read image info[/dim]")
-    elif target.suffix.lower() == ".pdf":
-        console.print("[bold]PDF Info:[/bold] (requires PyMuPDF)")
-        try:
-            import fitz
-
-            doc = fitz.open(target)
-            console.print(f"  Pages: {len(doc)}")
-            console.print(f"  Title: {doc.metadata.get('title', 'N/A')}")
-            console.print(f"  Author: {doc.metadata.get('author', 'N/A')}")
-        except Exception:
-            console.print("  [dim]Could not read PDF info[/dim]")
-    else:
-        console.print("[dim]Preview not available for this file type[/dim]")
+    if "lines" in info:
+        console.print("[bold]Preview:[/bold]")
+        for number, line in enumerate(info["lines"], 1):
+            console.print(Text(f"{number:3}: {line}"))
+        if info["more_lines"]:
+            console.print(f"[dim]... and {info['more_lines']} more lines[/dim]")
+    elif "image" in info:
+        image = info["image"]
+        console.print("[bold]Image Dimensions:[/bold]")
+        console.print(f"  {image['width']} x {image['height']} pixels")
+        console.print(f"  Mode: {image['mode']}")
+    elif "pdf" in info:
+        pdf = info["pdf"]
+        console.print("[bold]PDF Info:[/bold]")
+        console.print(f"  Pages: {pdf['pages']}")
+        console.print(Text(f"  Title: {pdf['title']}"))
+        console.print(Text(f"  Author: {pdf['author']}"))
+    if "note" in info:
+        console.print(f"[dim]{escape(info['note'])}[/dim]")
 
 
 @app.command("backup")
@@ -365,16 +331,15 @@ def backup_file(
     """
     Create a backup of a file.
     """
-    if not target.exists():
-        log_error(f"File not found: {target}")
-        raise typer.Exit(1)
-
-    try:
-        org = _get_organizer()
-        backup_path = org.create_backup(target, label=label)
-        log_success(f"Backup created: {backup_path}")
-    except Exception as e:
-        log_error(f"Backup failed: {e}")
+    result = _run(
+        files_ops.backup,
+        "Backup failed",
+        target=target,
+        label=label,
+        organizer=_get_organizer(),
+    )
+    if result:
+        log_success(escape(result.message))
 
 
 @app.command("backups")
@@ -388,33 +353,31 @@ def list_backups(
     """
     List and manage backups.
     """
-    from datetime import datetime
-
     from max_cli.common.utils import format_size
 
+    result = _run(
+        files_ops.backups,
+        "Restore failed" if restore else "Listing backups failed",
+        filter=filter,
+        restore=restore,
+        output=output,
+        organizer=_get_organizer(),
+    )
+    if result is None:
+        return
     if restore:
-        try:
-            org = _get_organizer()
-            restored = org.restore_backup(restore, output)
-            log_success(f"Restored: {restored}")
-        except Exception as e:
-            log_error(f"Restore failed: {e}")
+        log_success(escape(result.message))
         return
-
-    org = _get_organizer()
-    backups = org.list_backups(filter)
-
-    if not backups:
-        console.print("[yellow]No backups found.[/yellow]")
+    found = result.details["backups"]
+    if not found:
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
         return
-
-    console.print(f"[cyan]Found {len(backups)} backup(s):[/cyan]\n")
-
-    for b in backups:
-        console.print(f"[bold]{b['name']}[/bold]")
-        console.print(f"  Size: {format_size(b['size'])}")
-        console.print(f"  Created: {datetime.fromtimestamp(b['created'])}")
-        console.print(f"  Path: {b['path']}")
+    console.print(f"[cyan]{escape(result.message)}:[/cyan]\n")
+    for entry in found:
+        console.print(Text(entry["name"], style="bold"))
+        console.print(f"  Size: {format_size(entry['size'])}")
+        console.print(f"  Created: {entry['created']}")
+        console.print(Text(f"  Path: {entry['path']}"))
         console.print()
 
 
@@ -436,53 +399,44 @@ def cleanup_backups(
             console.print("[yellow]Aborted.[/yellow]")
             return
 
-    try:
-        org = _get_organizer()
-        removed = org.cleanup_old_backups(days)
-        log_success(f"Removed {removed} old backup(s)")
-    except Exception as e:
-        log_error(f"Cleanup failed: {e}")
+    result = _run(
+        files_ops.backup_cleanup,
+        "Cleanup failed",
+        days=days,
+        organizer=_get_organizer(),
+    )
+    if result:
+        log_success(escape(result.message))
 
 
 @app.command("undo")
 def undo_last():
     """Undo the last file operation (rename, move, delete)."""
-    from max_cli.common.transaction_log import TransactionError, TransactionLog
-
-    latest = TransactionLog.get_latest_group()
-    if not latest:
-        console.print("[yellow]No transaction history found. Nothing to undo.[/yellow]")
-        return
-
-    if latest["undo_status"] == "undone":
-        console.print(
-            f"[yellow]Last transaction ({latest['group_id']}) is already undone.[/yellow]"
-        )
-        console.print(
-            f"[dim]Command was: {latest['command']} at {latest['timestamp']}[/dim]"
-        )
-        return
-
-    console.print(
-        f"[cyan]Undoing: {latest['command']} "
-        f"({latest['operation_count']} operations)...[/cyan]"
-    )
+    from max_cli.common.transaction_log import TransactionError
 
     try:
-        txn = TransactionLog.load(latest["group_id"])
-        results = txn.undo()
-
-        for msg in results:
-            console.print(f"  [green]+[/green] {msg}")
-
-        log_success("Undo complete! Files have been restored.")
+        result = files_ops.undo()
     except TransactionError as e:
-        log_error(f"Undo failed: {e}")
+        log_error(escape(f"Undo failed: {e}"))
         console.print(
             "[yellow]Some files may have been partially restored. "
             "Check the transaction log for details.[/yellow]"
         )
         raise typer.Exit(code=1) from None
+
+    steps = result.details.get("steps")
+    if steps is None:
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
+        if "command" in result.details:
+            console.print(
+                f"[dim]Command was: {escape(result.details['command'])} "
+                f"at {result.details['timestamp']}[/dim]"
+            )
+        return
+    console.print(f"[cyan]Undid: {escape(result.details['command'])}[/cyan]")
+    for step in steps:
+        console.print(f"  [green]+[/green] {escape(step)}")
+    log_success(escape(result.message))
 
 
 @app.command("history")
@@ -496,47 +450,39 @@ def transaction_history(
     """Show recent file operation history."""
     from datetime import datetime
 
-    from max_cli.common.transaction_log import TransactionLog
-
-    groups = TransactionLog.list_groups()
+    result = files_ops.history(limit=limit, verbose=verbose)
+    groups = result.details["groups"]
     if not groups:
-        console.print("[yellow]No transaction history found.[/yellow]")
+        console.print(f"[yellow]{escape(result.message)}[/yellow]")
         return
 
-    console.print(
-        f"[cyan]Recent file operations (showing {min(limit, len(groups))}):[/cyan]\n"
-    )
-
-    for g in groups[:limit]:
-        status_icon = "✓" if g["undo_status"] == "undone" else "•"
-        status_color = "dim" if g["undo_status"] == "undone" else "cyan"
-
+    console.print(f"[cyan]{escape(result.message)}:[/cyan]\n")
+    for group in groups:
+        undone = group["undo_status"] == "undone"
+        status_icon = "✓" if undone else "•"
+        status_color = "dim" if undone else "cyan"
         try:
-            ts = datetime.fromisoformat(g["timestamp"])
-            time_str = ts.strftime("%Y-%m-%d %H:%M")
+            time_str = datetime.fromisoformat(group["timestamp"]).strftime(
+                "%Y-%m-%d %H:%M"
+            )
         except (ValueError, TypeError):
-            time_str = g["timestamp"]
+            time_str = group["timestamp"]
 
         console.print(
             f"  [{status_color}]{status_icon}[/{status_color}] "
-            f"[bold]{g['command']}[/bold] — {time_str}"
+            f"[bold]{escape(group['command'])}[/bold] — {time_str}"
         )
         console.print(
-            f"     ID: {g['group_id']} | "
-            f"Operations: {g['operation_count']} | "
-            f"Status: {g['status']}"
+            f"     ID: {group['group_id']} | "
+            f"Operations: {group['operation_count']} | "
+            f"Status: {group['status']}"
         )
-        if g["undo_status"]:
-            console.print(f"     Undo: {g['undo_status']}")
-
-        if verbose:
-            txn = TransactionLog.load(g["group_id"])
-            for op in txn.operations:
-                op_type = op["op_type"]
-                orig = op["original_path"] or "(none)"
-                new = op["new_path"] or "(none)"
-                console.print(f"       {op_type}: {orig} -> {new}")
-
+        if group["undo_status"]:
+            console.print(f"     Undo: {group['undo_status']}")
+        for step in group.get("operations", []):
+            original = step["original_path"] or "(none)"
+            new = step["new_path"] or "(none)"
+            console.print(Text(f"       {step['op_type']}: {original} -> {new}"))
         console.print()
 
     console.print("[dim]Undo the last operation with: max files undo[/dim]")

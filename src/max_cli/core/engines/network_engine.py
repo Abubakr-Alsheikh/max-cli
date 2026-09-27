@@ -25,9 +25,7 @@ POT_TIMEOUT_MESSAGE = (
 )
 POT_PROVIDER_VERSION = "1.3.1"
 POT_SERVER_DIR = Path.home() / "bgutil-ytdlp-pot-provider"
-POT_SERVER_URL = (
-    "https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
-)
+POT_SERVER_URL = "https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
 CANVAS_MIRROR_URL = (
     "https://registry.npmmirror.com/-/binary/canvas/v3.2.1/"
     "canvas-v3.2.1-napi-v7-win32-x64.tar.gz"
@@ -315,9 +313,7 @@ class NetworkEngine:
             ydl_opts["subtitleslangs"] = ["en", "all"]
 
         if player_client and player_client.lower() != "auto":
-            ydl_opts["extractor_args"] = {
-                "youtube": {"player_client": [player_client]}
-            }
+            ydl_opts["extractor_args"] = {"youtube": {"player_client": [player_client]}}
         elif self.pot_provider_available() and (
             "youtube.com" in url or "youtu.be" in url
         ):
@@ -386,7 +382,9 @@ def _remove_partial_files(reported_paths: set[str]) -> None:
     for reported in reported_paths:
         path = Path(reported)
         candidates = [path] if path.suffix in PARTIAL_SUFFIXES else []
-        candidates += [path.with_name(path.name + suffix) for suffix in PARTIAL_SUFFIXES]
+        candidates += [
+            path.with_name(path.name + suffix) for suffix in PARTIAL_SUFFIXES
+        ]
         for candidate in candidates:
             if candidate.suffix in PARTIAL_SUFFIXES:
                 candidate.unlink(missing_ok=True)

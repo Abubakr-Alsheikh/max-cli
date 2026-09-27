@@ -7,7 +7,6 @@ from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.command_registry import CommandRegistry, CommandSchema
 
 ENGINE_MODULE_MAP: dict[str, str] = {
-    "FileOrganizer": "max_cli.core.engines.file_organizer",
     "PDFEngine": "max_cli.core.engines.pdf_engine",
     "AudioMetadataEngine": "max_cli.core.engines.audio_metadata_engine",
     "AIEngine": "max_cli.core.engines.ai_engine",
@@ -16,8 +15,6 @@ ENGINE_MODULE_MAP: dict[str, str] = {
 PARAM_NAME_MAPS: dict[tuple[str, str], dict[str, str]] = {
     ("audio", "set"): {"target": "file_path"},
     ("audio", "organize"): {"targets": "source_paths", "output": "target_dir"},
-    ("files", "order"): {"start": "start_index"},
-    ("files", "shred"): {"target": "path"},
 }
 
 
@@ -123,13 +120,6 @@ class CommandExecutor:
                 continue
             if key in converters:
                 mapped.update(converters[key](value))
-                continue
-            if category == "files" and command == "smart_sort" and key == "path":
-                mapped["path"] = value
-                if "categories" not in params:
-                    files = [f.name for f in value.iterdir() if f.is_file()][:20]
-                    ai_engine = self._get_engine("AIEngine")
-                    mapped["categories"] = ai_engine.categorize_files(files)
                 continue
             mapped[name_map.get(key, key)] = value
 
@@ -287,11 +277,9 @@ class CommandExecutor:
     def _get_task_type(self, category: str, command: str) -> Any:
         from max_cli.core.engines.task_queue import TaskType
 
-        type_map: dict[tuple[str, str], TaskType] = {
-            ("files", "smart_sort"): TaskType.FILE_ORGANIZE,
-            ("files", "duplicates"): TaskType.FILE_DUPLICATES,
-        }
-        return type_map.get((category, command), TaskType.CUSTOM)
+        # Ported groups queue through the catalog (TaskType.ACTION); the
+        # commands left here have no task type of their own.
+        return TaskType.CUSTOM
 
     def execute_with_progress(
         self,

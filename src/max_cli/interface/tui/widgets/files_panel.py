@@ -275,18 +275,18 @@ class FilesPanel(Vertical):
         else:
             self.notify("Select a file to compress", severity="warning")
 
+    # These buttons open the prefilled form, which asks before moving or
+    # deleting anything. They used to run at once.
     @on(Button.Pressed, "#btn-organize")
     def _on_organize(self) -> None:
-        self.notify("This action will modify files. Proceeding...", severity="warning")
-        self._execute_quick_action(
-            "files", "smart-sort", {"path": str(self._current_path)}
+        self.post_message(
+            self.OpenAction("files.smart-sort", {"path": str(self._current_path)})
         )
 
     @on(Button.Pressed, "#btn-duplicates")
     def _on_duplicates(self) -> None:
-        self.notify("This action will modify files. Proceeding...", severity="warning")
-        self._execute_quick_action(
-            "files", "duplicates", {"folder": str(self._current_path)}
+        self.post_message(
+            self.OpenAction("files.duplicates", {"folder": str(self._current_path)})
         )
 
     @on(Button.Pressed, "#btn-backup")
@@ -308,7 +308,7 @@ class FilesPanel(Vertical):
             self.notify("Cannot backup directories", severity="warning")
             return
 
-        self._execute_quick_action("files", "backup", {"target": str(file_path)})
+        self.post_message(self.OpenAction("files.backup", {"target": str(file_path)}))
 
     @on(Button.Pressed, "#btn-preview")
     def _on_preview(self) -> None:
@@ -378,24 +378,3 @@ class FilesPanel(Vertical):
             )
         except Exception as e:
             self.notify(f"Undo failed: {e}", severity="error")
-
-    def _execute_quick_action(
-        self, category: str, command: str, values: dict[str, str]
-    ) -> None:
-        from max_cli.interface.tui.command_executor import CommandExecutor
-
-        if self._selected_files:
-            files = list(self._selected_files)
-            values["target"] = files[0] if len(files) == 1 else str(self._current_path)
-
-        executor = CommandExecutor()
-        try:
-            result = executor.execute(category=category, command=command, values=values)
-            self.notify(
-                f"{'Success' if result.success else 'Failed'}: {result.message}",
-                severity="information" if result.success else "error",
-            )
-            self._selected_files.clear()
-            self._load_directory()
-        except Exception as e:
-            self.notify(f"Error: {e}", severity="error")

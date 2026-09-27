@@ -17,6 +17,7 @@ GROUP_MODULES: dict[str, str] = {
     "grab": "max_cli.core.catalog.groups.grab",
     "images": "max_cli.core.catalog.groups.images",
     "pdf": "max_cli.core.catalog.groups.pdf",
+    "files": "max_cli.core.catalog.groups.files",
 }
 
 

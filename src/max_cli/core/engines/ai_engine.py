@@ -23,7 +23,9 @@ def find_searchable_files(folder: Path, extensions: list[str]) -> list[Path]:
 
     `extensions` are given without dots and matched case-insensitively.
     """
-    suffixes = {f".{ext.strip().lower().lstrip('.')}" for ext in extensions if ext.strip()}
+    suffixes = {
+        f".{ext.strip().lower().lstrip('.')}" for ext in extensions if ext.strip()
+    }
     return [
         path
         for path in folder.rglob("*")
@@ -111,7 +113,9 @@ class AIEngine:
                 data = json.loads(self._history_file.read_text(encoding="utf-8"))
                 self.history = data.get("history", [])
             except (OSError, ValueError, AttributeError):
-                logger.warning("Ignoring unreadable chat history %s", self._history_file)
+                logger.warning(
+                    "Ignoring unreadable chat history %s", self._history_file
+                )
                 self.history = []
 
     def _save_history(self) -> None:
@@ -543,9 +547,9 @@ If the request is unrelated to the tools or ambiguous, return:
             try:
                 if file_path.suffix.lower() not in SEARCHABLE_SUFFIXES:
                     continue
-                file_content = file_path.read_text(
-                    encoding="utf-8", errors="ignore"
-                )[:5000]
+                file_content = file_path.read_text(encoding="utf-8", errors="ignore")[
+                    :5000
+                ]
 
                 prompt = f"""Search Query: {query}
 

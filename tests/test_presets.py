@@ -7,13 +7,7 @@ import pytest
 from max_cli.core import presets
 from max_cli.core.engines.pdf_engine import find_pdfs
 from max_cli.core.engines.video_engine import resolve_concat_inputs
-from max_cli.interface.tui.command_executor import CommandExecutor
 from max_cli.interface.tui.command_registry import CommandRegistry
-
-
-def _map(category, command, params):
-    schema = CommandRegistry.get_command(category, command)
-    return CommandExecutor()._map_engine_params(category, command, params, schema)
 
 
 class TestPresetHelpers:
@@ -57,9 +51,3 @@ def test_dashboard_organizes_music_by_artist_and_album():
     schema = CommandRegistry.get_command("audio", "organize")
     pattern = next(f for f in schema["fields"] if f["name"] == "pattern")
     assert pattern["default"] == "artist-album"
-
-
-def test_tui_shred_passes_the_path_the_engine_expects(tmp_path):
-    """The dashboard sent `target=`, which secure_delete doesn't accept."""
-    params = _map("files", "shred", {"target": tmp_path / "secret.txt", "passes": 3})
-    assert params == {"path": tmp_path / "secret.txt", "passes": 3}
