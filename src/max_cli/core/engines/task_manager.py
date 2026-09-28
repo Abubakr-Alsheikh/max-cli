@@ -313,9 +313,7 @@ class TaskManager:
 
     def get_stats(self, task_type: Optional[TaskType] = None) -> dict[str, Any]:
         with self._lock:
-            queue = [
-                i for i in self._queue if task_type is None or i.type == task_type
-            ]
+            queue = [i for i in self._queue if task_type is None or i.type == task_type]
             stats: dict[str, Any] = {
                 "total": len(queue),
                 "pending": sum(1 for i in queue if i.status == TaskStatus.PENDING),

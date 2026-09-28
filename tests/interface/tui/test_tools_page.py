@@ -274,3 +274,28 @@ async def test_browse_adds_to_a_list_field(tmp_path):
         await pilot.pause()
 
         assert field.value == f"{first}; {second}"
+
+
+@pytest.mark.asyncio
+async def test_files_page_organize_opens_the_form_and_moves_nothing(tmp_path):
+    """Organize used to run smart-sort at once, with no question asked."""
+    from max_cli.interface.tui.app import MaxDashboardApp
+    from max_cli.interface.tui.widgets.files_panel import FilesPanel
+
+    (tmp_path / "invoice.pdf").write_bytes(b"%PDF")
+    app = MaxDashboardApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        panel = app.query_one(FilesPanel)
+        panel._current_path = tmp_path
+        panel.query_one("#btn-organize", Button).press()
+        await pilot.pause()
+        await pilot.pause()
+
+        form = app.query_one("#tools-panel").query_one(ActionForm)
+        assert form.action.id == "files.smart-sort"
+        assert form.query_one("#field-path", Input).value == str(tmp_path)
+        assert (tmp_path / "invoice.pdf").exists()
+
+        form.query_one("#form-run", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)

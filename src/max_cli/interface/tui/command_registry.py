@@ -57,75 +57,6 @@ def _f(
 
 
 COMMANDS: dict[str, dict[str, CommandSchema]] = {
-    "files": {
-        "order": {
-            "label": "Order Files",
-            "icon": "\U0001f522",
-            "category": "files",
-            "engine": "FileOrganizer",
-            "method": "order_files",
-            "description": "Rename files with sequential numbers",
-            "has_queue_option": False,
-            "fields": [
-                _f("folder", "path_folder", "Target Directory", required=True),
-                _f("dry_run", "bool", "Dry Run", default=True),
-                _f("start", "int", "Start Number", default=1),
-            ],
-        },
-        "smart_sort": {
-            "label": "Smart Sort Files",
-            "icon": "\U0001f4c1",
-            "category": "files",
-            "engine": "FileOrganizer",
-            "method": "smart_sort",
-            "description": "Organize files into categorized folders",
-            "has_queue_option": False,
-            "fields": [
-                _f("path", "path_folder", "Target Directory", required=True),
-                _f("dry_run", "bool", "Dry Run", default=True),
-            ],
-        },
-        "duplicates": {
-            "label": "Find Duplicates",
-            "icon": "\U0001f50d",
-            "category": "files",
-            "engine": "FileOrganizer",
-            "method": "find_duplicates",
-            "description": "Find duplicate files by content hash",
-            "has_queue_option": False,
-            "fields": [
-                _f("folder", "path_folder", "Target Directory", required=True),
-                _f("recursive", "bool", "Search Subdirectories", default=False),
-                _f("delete", "bool", "Delete Duplicates", default=False),
-            ],
-        },
-        "shred": {
-            "label": "Secure Delete",
-            "icon": "\U0001f512",
-            "category": "files",
-            "engine": "FileOrganizer",
-            "method": "secure_delete",
-            "description": "Securely delete files with multiple overwrite passes",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Target File", required=True),
-                _f("passes", "int", "Overwrite Passes", default=3),
-            ],
-        },
-        "backup": {
-            "label": "Create Backup",
-            "icon": "\U0001f4be",
-            "category": "files",
-            "engine": "FileOrganizer",
-            "method": "create_backup",
-            "description": "Create a backup of a file",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Target File", required=True),
-                _f("label", "str", "Backup Label", default="manual"),
-            ],
-        },
-    },
     "audio": {
         "set": {
             "label": "Set Audio Metadata",
@@ -243,7 +174,7 @@ COMMANDS: dict[str, dict[str, CommandSchema]] = {
 
 # `video` and `grab` moved to the command catalog (core/catalog); the Tools
 # and Download pages use it.
-CATEGORIES: list[str] = ["files", "audio", "ai"]
+CATEGORIES: list[str] = ["audio", "ai"]
 
 
 class CommandRegistry:

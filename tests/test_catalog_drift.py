@@ -15,14 +15,18 @@ import typer
 
 from max_cli.core.catalog import GROUP_MODULES, load_group
 from max_cli.core.catalog.runner import _operation
-from max_cli.core.catalog.spec import Action, Setting
+from max_cli.core.catalog.spec import Action, Danger, Setting
 from max_cli.core.cli.registry import _GROUPS
 
 QUEUE_OPTION = "queue"
+# --force skips the CLI's own prompt. The dashboard and the agent ask based on
+# the action's danger instead, so only dangerous actions may have it.
+FORCE_OPTION = "force"
+CONFIRM_DANGERS = {Danger.MOVES, Danger.OVERWRITES, Danger.DELETES}
 # Groups whose Typer flags match their catalog entries. `max grab download`
 # calls its operation too, but keeps flags such as --video/--audio and
 # --no-meta that scripts rely on, so only its operation is checked.
-CLI_CHECKED_GROUPS = ("video", "images", "pdf")
+CLI_CHECKED_GROUPS = ("video", "images", "pdf", "files")
 
 
 def _cli_commands(group_name: str) -> dict[str, Any]:
@@ -63,6 +67,8 @@ def test_cli_options_match_the_catalog(group_name: str, action: Action):
 
     has_queue = cli_params.pop(QUEUE_OPTION, None) is not None
     assert has_queue == action.queueable
+    if cli_params.pop(FORCE_OPTION, None) is not None:
+        assert action.danger in CONFIRM_DANGERS, "--force on a harmless action"
     assert list(cli_params) == [param.name for param in action.params]
 
     for param in action.params:

@@ -1,5 +1,9 @@
 # File Commands
 
+Max records every rename, move and delete these commands make, so `max files undo` can reverse the last one. `shred` is the exception: it keeps no copy on purpose.
+
+In the dashboard, the Tools page has a form for each command, and the Files page's Organize, Duplicates and Backup buttons open those forms filled in. A form asks before it moves or deletes anything.
+
 ## order
 
 Add a number prefix to every file in a folder (`1_file.txt`, `2_file.txt`, ...). Max skips files that already have a number. It asks before it renames anything.

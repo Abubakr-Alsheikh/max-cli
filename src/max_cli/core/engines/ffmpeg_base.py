@@ -57,9 +57,7 @@ class FFmpegEngine:
     def _run(self, cmd: list[str]):
         """Runs the subprocess command."""
         try:
-            subprocess.run(
-                cmd, check=True, capture_output=True
-            )
+            subprocess.run(cmd, check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode().strip()
             raise RuntimeError(f"FFmpeg Error: {error_msg}") from e
