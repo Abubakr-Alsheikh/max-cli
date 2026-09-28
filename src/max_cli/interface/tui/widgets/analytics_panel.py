@@ -53,6 +53,11 @@ class AnalyticsPanel(Vertical):
         self.refresh_data()
 
     def refresh_data(self) -> None:
+        # One repaint for all of this page's updates, not one per label.
+        with self.app.batch_update():
+            self._refresh_now()
+
+    def _refresh_now(self) -> None:
         self._update_system_resources()
         self._update_activity_stats()
         self._update_storage_stats()

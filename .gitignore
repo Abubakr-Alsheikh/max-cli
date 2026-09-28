@@ -101,3 +101,6 @@ tasks/
 # Claude Code local state (hooks) and personal overrides
 .claude/.state/
 .claude/settings.local.json
+
+# Git Bash crash dumps
+*.stackdump

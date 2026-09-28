@@ -508,3 +508,34 @@ def test_open_folder_uses_the_system_file_manager(tmp_path):
 
     run.assert_called_once_with(["xdg-open", str(tmp_path)], check=False)
     assert Path(run.call_args.args[0][1]) == tmp_path
+
+
+@pytest.mark.asyncio
+async def test_progress_updates_leave_the_tabs_alone():
+    """Relabelling a tab restarts its underline animation, which flashed the
+    page on every progress tick. Only a state change may touch the tabs."""
+    release = threading.Event()
+
+    def held_download(**kwargs):
+        release.wait(5)
+        return OK
+
+    app = PanelApp()
+    with patch(DOWNLOAD, side_effect=held_download):
+        async with app.run_test(size=(110, 60)) as pilot:
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await pilot.pause()
+            panel = app.query_one(DownloadPanel)
+            job = panel._jobs[1]
+            tab = panel.query_one("#dl-tabs").get_tab("tab-active")
+            label_before = tab.label
+
+            for percent in (10.0, 20.0, 30.0):
+                panel._row_call(job, "set_progress", percent, 1024.0, 5)
+            panel._sync_tab_counts()
+
+            assert tab.label is label_before
+            release.set()
+            await _settle(app, pilot)
+            assert str(tab.label) == "Downloads"

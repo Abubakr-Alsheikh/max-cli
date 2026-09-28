@@ -1,10 +1,12 @@
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.widgets import Button, DataTable, Label, Static
 
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskStatus
+from max_cli.interface.tui.tables import Row, show_rows
 
 STATUS_ICONS = {
     TaskStatus.PENDING: "\u23f3",
@@ -41,27 +43,6 @@ class QueuePanel(Vertical):
         manager.refresh()
         tasks = manager.get_all()
         table = self.query_one("#queue-table", DataTable)
-
-        table.clear()
-
-        if not tasks:
-            if not table.columns:
-                table.add_column("ID", width=10)
-                table.add_column("Type", width=16)
-                table.add_column("Title", width=30)
-                table.add_column("Status", width=12)
-                table.add_column("Progress", width=10)
-                table.add_column("ETA", width=10)
-            table.add_row(
-                "",
-                "",
-                "[dim]No tasks in queue — use the Download tab to start[/dim]",
-                "",
-                "",
-                "",
-            )
-            return
-
         if not table.columns:
             table.add_column("ID", width=10)
             table.add_column("Type", width=16)
@@ -70,6 +51,12 @@ class QueuePanel(Vertical):
             table.add_column("Progress", width=14)
             table.add_column("ETA", width=10)
 
+        if not tasks:
+            empty = "[dim]No tasks in queue — use the Download tab to start[/dim]"
+            show_rows(table, [Row(("", "", empty, "", "", ""))])
+            return
+
+        rows = []
         for task in tasks:
             status_style = self._status_style(task.status)
             icon = STATUS_ICONS.get(task.status, "")
@@ -80,15 +67,20 @@ class QueuePanel(Vertical):
             if task.description and not title:
                 title = task.description[:28]
 
-            table.add_row(
-                task.id,
-                task.type.value,
-                title,
-                f"{icon} [{status_style}]{task.status.value}[/{status_style}]",
-                progress_str,
-                eta_str,
-                key=task.id,
+            rows.append(
+                Row(
+                    (
+                        task.id,
+                        task.type.value,
+                        Content(title),  # a title like "Song [red]" isn't markup
+                        f"{icon} [{status_style}]{task.status.value}[/{status_style}]",
+                        progress_str,
+                        eta_str,
+                    ),
+                    key=task.id,
+                )
             )
+        show_rows(table, rows)
 
         stats = manager.get_stats()
         status_label = self.query_one("#queue-status", Label)
