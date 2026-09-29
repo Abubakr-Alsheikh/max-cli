@@ -155,7 +155,7 @@ class HelpScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         from textual.content import Content
 
-        lines = []
+        lines: list[Content] = []
         for key, description in self._rows:
             if not key:
                 gap = "\n" if lines else ""  # a blank line between groups
