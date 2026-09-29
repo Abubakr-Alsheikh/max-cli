@@ -98,6 +98,11 @@ class HomePanel(Vertical):
         self.refresh_data()
 
     def refresh_data(self) -> None:
+        # One repaint for all of this page's updates, not one per label.
+        with self.app.batch_update():
+            self._refresh_now()
+
+    def _refresh_now(self) -> None:
         self._update_system_bar()
         self._update_stats()
         self._load_recent_activity()

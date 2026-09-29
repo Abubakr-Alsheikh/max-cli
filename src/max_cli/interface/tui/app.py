@@ -52,6 +52,12 @@ class MaxDashboardApp(App):
         background: $panel;
     }
 
+    /* Screen paints the theme's near-black $background by default. Any spot
+       not yet repainted during a scroll showed through as a black block. */
+    Screen {
+        background: $panel;
+    }
+
     #main-horizontal {
         height: 1fr;
     }
@@ -66,6 +72,7 @@ class MaxDashboardApp(App):
         padding: 1 2;
         height: 1fr;
         overflow-y: auto;
+        background: $panel;
     }
 
     Footer {
@@ -236,8 +243,10 @@ class MaxDashboardApp(App):
         background: $boost;
     }
 
+    /* A fixed height: a 1fr scroll area inside a scrolling page gets squeezed
+       and resized on every reflow, and fights the page for the mouse wheel. */
     #home-activity-scroll {
-        height: 1fr;
+        height: 12;
         border: round $border;
         background: $surface;
         padding: 0 1;

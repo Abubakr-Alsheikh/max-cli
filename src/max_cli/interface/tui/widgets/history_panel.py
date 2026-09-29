@@ -1,10 +1,12 @@
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.interface.tui.tables import Row, show_rows
 
 
 class HistoryPanel(Vertical):
@@ -66,7 +68,6 @@ class HistoryPanel(Vertical):
             ]
 
         table = self.query_one("#history-table", DataTable)
-        table.clear()
         if not table.columns:
             table.add_column("Time", width=18)
             table.add_column("Category", width=10)
@@ -75,14 +76,10 @@ class HistoryPanel(Vertical):
             table.add_column("Details", width=40)
             table.add_column("Duration", width=10)
 
+        rows = []
         if not entries:
-            table.add_row(
-                "",
-                "",
-                "[dim]No history entries found[/dim]",
-                "",
-                "",
-                "",
+            rows.append(
+                Row(("", "", "[dim]No history entries found[/dim]", "", "", ""))
             )
 
         for entry in entries:
@@ -92,15 +89,20 @@ class HistoryPanel(Vertical):
                 :38
             ]
 
-            table.add_row(
-                time_str,
-                entry.category,
-                entry.action.replace("_", " ").title(),
-                f"[{status_color}]{entry.status}[/{status_color}]",
-                details,
-                f"{entry.duration_ms:.0f}ms" if entry.duration_ms > 0 else "-",
-                key=entry.id,
+            rows.append(
+                Row(
+                    (
+                        time_str,
+                        entry.category,
+                        entry.action.replace("_", " ").title(),
+                        f"[{status_color}]{entry.status}[/{status_color}]",
+                        Content(details),  # URLs and paths aren't markup
+                        f"{entry.duration_ms:.0f}ms" if entry.duration_ms > 0 else "-",
+                    ),
+                    key=entry.id,
+                )
             )
+        show_rows(table, rows)
 
         count_label = self.query_one("#history-count", Label)
         count_label.update(f"{len(entries)} items")

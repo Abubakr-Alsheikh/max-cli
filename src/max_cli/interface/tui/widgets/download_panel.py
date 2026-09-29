@@ -57,7 +57,12 @@ ADVANCED_FIELDS = (
 )
 LINK_PATTERN = re.compile(r"https?://\S+")
 AUTO_CHECK_SECONDS = 0.6
-PROGRESS_REFRESH_SECONDS = 0.25
+# At most this often per download. Every update is a repaint, and on Windows
+# Textual can't ask the terminal to show a frame all at once, so a burst of
+# repaints shows up as flashing (PLANS/active/dashboard-design-system.md).
+PROGRESS_REFRESH_SECONDS = 0.5
+# Row changes that change the running count shown on the tabs.
+STATE_CHANGES = frozenset({"set_started", "set_done", "set_failed", "set_cancelled"})
 SLOT_POLL_SECONDS = 0.2
 HISTORY_LIMIT = 50
 PREVIEW_LINK_LIMIT = 8
@@ -206,8 +211,8 @@ class DownloadRow(Vertical):
         yield ProgressBar(total=100, show_eta=False, show_percentage=False)
         yield Static("Waiting for a free slot...", classes="row-info")
 
-    def _info(self, text: "str | Content") -> None:
-        self.query_one(".row-info", Static).update(text)
+    def _info(self, text: "str | Content", layout: bool = True) -> None:
+        self.query_one(".row-info", Static).update(text, layout=layout)
 
     def set_title(self, title: str) -> None:
         self.job.title = title
@@ -217,13 +222,15 @@ class DownloadRow(Vertical):
         self._info("Starting...")
 
     def set_progress(self, percent: float, speed: float, eta: int) -> None:
-        self.query_one(ProgressBar).progress = percent
         parts = [f"{percent:.0f}%"]
         if speed:
             parts.append(f"{format_size(speed)}/s")
         if eta:
             parts.append(f"{_duration(eta)} left")
-        self._info("  ·  ".join(parts))
+        # One repaint for bar and text; the one-line text needs no page layout.
+        with self.app.batch_update():
+            self.query_one(ProgressBar).progress = percent
+            self._info("  ·  ".join(parts), layout=False)
 
     def _swap_button(
         self, label: str, button_id: str, variant: str = "default"
@@ -802,7 +809,8 @@ class DownloadPanel(Vertical):
     def _row_call(self, job: DownloadJob, method: str, *args: Any) -> None:
         """Update a job's row. Workers call this through call_from_thread."""
         getattr(self._row(job), method)(*args)
-        self._sync_tab_counts()
+        if method in STATE_CHANGES:
+            self._sync_tab_counts()
 
     def _run_job(self, job: DownloadJob) -> None:
         """Runs in a thread worker: wait for a slot, download, report back."""
@@ -872,10 +880,16 @@ class DownloadPanel(Vertical):
     def _sync_tab_counts(self) -> None:
         running = sum(not job.finished for job in self._jobs.values())
         tabs = self.query_one("#dl-tabs", TabbedContent)
-        tabs.get_tab("tab-active").label = (
-            f"Downloads ({running} running)" if running else "Downloads"
-        )
-        tabs.get_tab("tab-history").label = f"History ({len(self._history)})"
+        labels = {
+            "tab-active": f"Downloads ({running} running)" if running else "Downloads",
+            "tab-history": f"History ({len(self._history)})",
+        }
+        for tab_id, text in labels.items():
+            tab = tabs.get_tab(tab_id)
+            # Setting a label, even to the same text, restarts the tab
+            # underline animation: a repaint every frame for 0.3 s.
+            if str(tab.label) != text:
+                tab.label = text
 
     @on(Button.Pressed)
     def _on_row_button(self, event: Button.Pressed) -> None:
@@ -926,12 +940,13 @@ class DownloadPanel(Vertical):
     def _load_history(self) -> None:
         self._history = DownloadHistory().get_recent(limit=HISTORY_LIMIT)
         table = self.query_one("#download-history-table", DataTable)
-        table.clear(columns=True)
-        table.add_column("", width=2)
-        table.add_column("Title", width=46)
-        table.add_column("Size", width=10)
-        table.add_column("Source", width=16)
-        table.add_column("When", width=10)
+        if not table.columns:
+            table.add_column("", width=2)
+            table.add_column("Title", width=46)
+            table.add_column("Size", width=10)
+            table.add_column("Source", width=16)
+            table.add_column("When", width=10)
+        table.clear()
         for entry in self._history:
             ok = entry.get("status") == "completed"
             files = entry.get("output_files") or []
