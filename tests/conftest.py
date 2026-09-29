@@ -2,6 +2,14 @@ import pytest
 from PIL import Image
 
 
+def pytest_configure(config):
+    # scripts/ci_local.py runs two suites at once, then these tests alone:
+    # a busy machine makes a timing test fail for no reason.
+    config.addinivalue_line(
+        "markers", "timing: measures wall-clock time; run on an idle machine"
+    )
+
+
 @pytest.fixture(autouse=True)
 def isolated_task_store(tmp_path_factory, monkeypatch):
     """Keep every TaskManager, and its legacy-file migration, out of ~/.max_cli."""
