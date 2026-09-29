@@ -303,9 +303,12 @@ class ActionForm(Vertical):
             self._set_status(markup("[red]$error[/red]", error=e))
             return
         self._set_status(
-            f"[green]Queued[/green] (ID: {task.id}). See the Queue page for progress."
+            f"[green]Queued[/green] (ID: {task.id}). J shows its progress."
         )
         self.notify(f"Queued {self.action.group} {self.action.name}")
+        from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
+
+        self.post_message(JobsDrawer.Show())
 
     def _run(self, values: dict[str, Any]) -> None:
         """Runs in a thread worker; the UI updates go through call_from_thread."""

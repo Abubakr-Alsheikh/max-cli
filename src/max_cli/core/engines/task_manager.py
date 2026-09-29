@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 HISTORY_LIMIT = 200
 IDLE_POLL_SECONDS = 2
 BETWEEN_TASKS_SECONDS = 1
+WORKER_STOP_TIMEOUT_SECONDS = 5
 
 
 class TaskManagerError(MaxError):
@@ -47,6 +48,8 @@ class TaskManager:
         self._lock = threading.Lock()
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
+        # The task an executor is running now; refresh() waits while it's set.
+        self._executing: Optional[str] = None
         self._ensure_dirs()
         self._load_queue()
         self._load_history()
@@ -55,15 +58,36 @@ class TaskManager:
     def _ensure_dirs(self) -> None:
         self.QUEUE_DIR.mkdir(parents=True, exist_ok=True)
 
-    def _load_queue(self) -> None:
-        if not self.QUEUE_FILE.exists():
-            return
+    @staticmethod
+    def _read_tasks(path: Path) -> Optional[list[TaskItem]]:
+        """The tasks stored in `path`; None when the file can't be read.
+
+        None means "keep what you have": on Windows a read fails while
+        another thread replaces the file, and treating that as an empty
+        store wiped the history. A single bad entry is skipped, not the file.
+        """
+        if not path.exists():
+            return []
         try:
-            data = json.loads(self.QUEUE_FILE.read_text(encoding="utf-8"))
-            self._queue = [TaskItem.from_dict(item) for item in data]
-        except (OSError, ValueError, TypeError):
-            logger.warning("Ignoring unreadable task queue %s", self.QUEUE_FILE)
-            self._queue = []
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.warning("Could not read task store %s; keeping current tasks", path)
+            return None
+        if not isinstance(data, list):
+            logger.warning("Task store %s is not a list; keeping current tasks", path)
+            return None
+        tasks = []
+        for item in data:
+            try:
+                tasks.append(TaskItem.from_dict(item))
+            except (ValueError, TypeError) as exc:
+                logger.warning("Skipping an unreadable task in %s: %s", path, exc)
+        return tasks
+
+    def _load_queue(self) -> None:
+        tasks = self._read_tasks(self.QUEUE_FILE)
+        if tasks is not None:
+            self._queue = tasks
 
     def _save_queue(self) -> None:
         self._ensure_dirs()
@@ -74,14 +98,9 @@ class TaskManager:
             logger.exception("Failed to save task queue %s", self.QUEUE_FILE)
 
     def _load_history(self) -> None:
-        if not self.HISTORY_FILE.exists():
-            return
-        try:
-            data = json.loads(self.HISTORY_FILE.read_text(encoding="utf-8"))
-            self._history = [TaskItem.from_dict(item) for item in data]
-        except (OSError, ValueError, TypeError):
-            logger.warning("Ignoring unreadable task history %s", self.HISTORY_FILE)
-            self._history = []
+        tasks = self._read_tasks(self.HISTORY_FILE)
+        if tasks is not None:
+            self._history = tasks
 
     def _save_history(self) -> None:
         self._ensure_dirs()
@@ -98,10 +117,13 @@ class TaskManager:
         replace the task object the worker is updating.
         """
         with self._lock:
-            if any(item.status == TaskStatus.RUNNING for item in self._queue):
+            # A cancelled task is no longer RUNNING but its executor may still
+            # be finishing; reloading then would swap its object out.
+            if self._executing or any(
+                item.status == TaskStatus.RUNNING for item in self._queue
+            ):
                 return
-            self._queue = []
-            self._history = []
+            # A load that fails keeps the current list (see _read_tasks).
             self._load_queue()
             self._load_history()
 
@@ -336,10 +358,13 @@ class TaskManager:
         self._worker_thread = threading.Thread(target=self._process_loop, daemon=True)
         self._worker_thread.start()
 
-    def stop_worker(self) -> None:
+    def stop_worker(self, wait: bool = True) -> None:
+        """Stop after the current task. `wait` False returns at once: the
+        daemon thread ends with the process, and a running task stays in the
+        queue as running work that `max queue` can retry."""
         self._running = False
-        if self._worker_thread:
-            self._worker_thread.join(timeout=5)
+        if self._worker_thread and wait:
+            self._worker_thread.join(timeout=WORKER_STOP_TIMEOUT_SECONDS)
 
     def process_now(
         self, max_tasks: int = 0, task_type: Optional[TaskType] = None
@@ -380,12 +405,20 @@ class TaskManager:
 
     def _archive(self, task: TaskItem) -> None:
         """Move a finished task from the queue to history. Caller holds _lock."""
-        if task in self._queue:
-            self._queue.remove(task)
+        # By id: a refresh can hold an equal-looking copy, and == compares
+        # every field, so the stale copy stayed queued forever.
+        self._queue = [item for item in self._queue if item.id != task.id]
         self._history.insert(0, task)
         del self._history[HISTORY_LIMIT:]
 
     def _execute_task(self, task: TaskItem) -> None:
+        self._executing = task.id
+        try:
+            self._run_task(task)
+        finally:
+            self._executing = None
+
+    def _run_task(self, task: TaskItem) -> None:
         with self._lock:
             if task.status != TaskStatus.PENDING:
                 return  # cancelled or paused after it was picked

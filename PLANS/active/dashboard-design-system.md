@@ -89,6 +89,12 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [ ] Then build, with empty, loading and error states for each section.
 - [ ] Path and URL autocomplete (`textual-autocomplete`).
 
+### Queue in the dashboard (maintainer's report, 2026-09-29)
+- [x] Queued downloads stayed pending: nothing in the dashboard started the queue worker. The app now starts it on mount.
+- [x] Queued actions report progress, speed and ETA, and a running one stops when cancelled.
+- [x] Two task-store races found on the way: a refused read during `refresh()` wiped the history; a refreshed copy kept a cancelled task queued forever.
+- [x] Jobs window (`J`): running job with a progress bar, speed and time left, waiting jobs, the last finished ones. Opens when you queue something.
+
 ### R4: The other pages
 - [ ] Queue, History, Files, Tools, Analytics (`textual-plotext` charts), Config, System, Chat, using the same rules.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.

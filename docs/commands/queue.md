@@ -22,6 +22,8 @@ max queue process
 
 Max stores tasks in `~/.max_cli/tasks/`: pending tasks in `queue.json` and finished ones in `history.json`. `max grab queue`, `max grab history` and the dashboard read the same store, so a download you queue with `max grab` shows up here too.
 
+While the dashboard is open, it runs queued tasks one after another, including tasks left from earlier runs. Press `J` in the dashboard to watch them. Outside the dashboard, `max queue process` runs them.
+
 ## status
 
 List every task in the queue with its ID, type, status and progress.

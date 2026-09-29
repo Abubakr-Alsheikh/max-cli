@@ -44,6 +44,7 @@ from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.interface.tui.text import markup
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.action_form import ActionForm
+from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 
 GRAB_ACTION_ID = "grab.download"
 # Advanced mode shows these catalog options. The Format and Quality buttons
@@ -776,13 +777,14 @@ class DownloadPanel(Vertical):
         if all_values is None:
             return
         for values in all_values:
-            enqueue_action(self._action, values)
+            enqueue_action(self._action, values, title=self._title_for(values["url"]))
         self._set_status(
             Content.from_markup(
                 f"[green]Added {len(all_values)} to the queue.[/green] "
-                "The Queue page shows them."
+                "They start one after another; J shows them."
             )
         )
+        self.post_message(JobsDrawer.Show())
         self._reset_link()
 
     def _reset_link(self) -> None:

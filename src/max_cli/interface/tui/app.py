@@ -16,6 +16,7 @@ from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
+from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
 from max_cli.interface.tui.widgets.sidebar import (
     SECTION_KEYS,
@@ -48,6 +49,7 @@ PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
 GLOBAL_KEYS = [
     ("Esc", "Back to the sidebar"),
     ("Alt+Left", "Previous page"),
+    ("J", "Show or hide running and queued jobs"),
     ("Ctrl+B", "Collapse or expand the sidebar"),
     ("Ctrl+P", "Command palette: themes and more"),
     ("r", "Refresh this page"),
@@ -75,6 +77,7 @@ class MaxDashboardApp(App):
         ("ctrl+b", "toggle_sidebar", "Sidebar"),
         Binding("escape", "focus_sidebar", "Sidebar", show=False),
         Binding("alt+left", "previous_page", "Back", show=False),
+        ("j", "toggle_jobs", "Jobs"),
         # Number keys jump to pages. Typing in an input still types digits:
         # the focused input handles the key first.
         *(
@@ -371,6 +374,7 @@ class MaxDashboardApp(App):
                 yield ConfigPanel(id="config-panel")
                 yield SystemPanel(id="system-panel")
                 yield ChatPanel(id="chat-panel")
+        yield JobsDrawer(id="jobs")
         yield Footer()
 
     def __init__(self) -> None:
@@ -398,6 +402,17 @@ class MaxDashboardApp(App):
         self.query_one(Sidebar).focus_nav()
         self.set_interval(2.0, self._refresh_active_panel)
         self.set_interval(BADGE_REFRESH_SECONDS, self._refresh_badges)
+        # Run queued work while the dashboard is open: "Queue for later" and
+        # tasks left from earlier runs. Nothing started this before, so
+        # queued downloads stayed pending.
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        self._task_manager = get_task_manager()
+        self._task_manager.start_worker()
+
+    def on_unmount(self) -> None:
+        if hasattr(self, "_task_manager"):
+            self._task_manager.stop_worker(wait=False)
 
     # --- navigation ----------------------------------------------------------
 
@@ -425,6 +440,12 @@ class MaxDashboardApp(App):
 
     def action_focus_sidebar(self) -> None:
         self.query_one(Sidebar).focus_nav()
+
+    def action_toggle_jobs(self) -> None:
+        self.query_one(JobsDrawer).toggle()
+
+    def on_jobs_drawer_show(self, message: JobsDrawer.Show) -> None:
+        self.query_one(JobsDrawer).show_jobs()
 
     def action_help(self) -> None:
         from max_cli.interface.tui.widgets.dialogs import HelpScreen
