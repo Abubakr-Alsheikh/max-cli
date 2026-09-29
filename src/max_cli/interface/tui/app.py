@@ -1,8 +1,13 @@
+from datetime import datetime
+
+from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.widget import Widget
 from textual.widgets import Footer
 
+from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.config_panel import ConfigPanel
@@ -11,7 +16,12 @@ from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
-from max_cli.interface.tui.widgets.sidebar import SECTIONS, Sidebar
+from max_cli.interface.tui.widgets.sidebar import (
+    SECTION_KEYS,
+    SECTIONS,
+    Badge,
+    Sidebar,
+)
 from max_cli.interface.tui.widgets.system_panel import SystemPanel
 from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
@@ -24,6 +34,31 @@ REFRESHABLE_PANEL_IDS = (
     "#home-panel",
     "#analytics-panel",
 )
+# Below this width the sidebar shows icons only.
+AUTO_COMPACT_COLUMNS = 100
+BACK_HISTORY_LIMIT = 20
+BADGE_REFRESH_SECONDS = 2.0
+PREF_LAST_PAGE = "last_page"
+PREF_SIDEBAR_COMPACT = "sidebar_compact"
+# Shown on the help screen after the page list.
+GLOBAL_KEYS = [
+    ("Esc", "Back to the sidebar"),
+    ("Alt+Left", "Previous page"),
+    ("Ctrl+B", "Collapse or expand the sidebar"),
+    ("Ctrl+P", "Command palette: themes and more"),
+    ("r", "Refresh this page"),
+    ("?", "This help"),
+    ("q", "Quit"),
+]
+
+
+def _app_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("max-cli")
+    except PackageNotFoundError:
+        return ""
 
 
 class MaxDashboardApp(App):
@@ -32,7 +67,16 @@ class MaxDashboardApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("question_mark", "help", "Help"),
         ("ctrl+b", "toggle_sidebar", "Sidebar"),
+        Binding("escape", "focus_sidebar", "Sidebar", show=False),
+        Binding("alt+left", "previous_page", "Back", show=False),
+        # Number keys jump to pages. Typing in an input still types digits:
+        # the focused input handles the key first.
+        *(
+            Binding(key, f"goto('{section_id}')", show=False)
+            for section_id, key in SECTION_KEYS.items()
+        ),
     ]
 
     CSS = """
@@ -443,7 +487,7 @@ class MaxDashboardApp(App):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-horizontal"):
-            yield Sidebar(id="sidebar")
+            yield Sidebar(id="sidebar", version=_app_version())
             with Container(id="content"):
                 yield HomePanel(id="home-panel")
                 yield DownloadPanel(id="download-panel")
@@ -458,10 +502,95 @@ class MaxDashboardApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("home")
-        self._show_panel("home")
+        prefs = load_prefs()
+        self._back: list[str] = []
+        self._current = ""
+        self._user_compact = bool(prefs.get(PREF_SIDEBAR_COMPACT, False))
+        # Failures that happen from now on get a badge on History.
+        self._history_seen = datetime.now().isoformat()
+        self._apply_compact()
+        start_page = prefs.get(PREF_LAST_PAGE)
+        known = {section_id for section_id, _icon, _label in SECTIONS}
+        self.navigate(start_page if start_page in known else "home", remember=False)
+        self.query_one(Sidebar).focus_nav()
         self.set_interval(2.0, self._refresh_active_panel)
+        self.set_interval(BADGE_REFRESH_SECONDS, self._refresh_badges)
+
+    # --- navigation ----------------------------------------------------------
+
+    def navigate(self, section_id: str, remember: bool = True) -> None:
+        """Show a page, mark it in the sidebar and remember it for next time."""
+        if section_id == self._current:
+            return
+        if remember and self._current:
+            self._back.append(self._current)
+            del self._back[:-BACK_HISTORY_LIMIT]
+        self._current = section_id
+        self.query_one(Sidebar).set_active(section_id)
+        self._show_panel(section_id)
+        save_pref(PREF_LAST_PAGE, section_id)
+        if section_id == "history":
+            self._history_seen = datetime.now().isoformat()
+            self.query_one(Sidebar).set_badge("history", None)
+
+    def action_goto(self, section_id: str) -> None:
+        self.navigate(section_id)
+
+    def action_previous_page(self) -> None:
+        if self._back:
+            self.navigate(self._back.pop(), remember=False)
+
+    def action_focus_sidebar(self) -> None:
+        self.query_one(Sidebar).focus_nav()
+
+    def action_help(self) -> None:
+        from max_cli.interface.tui.widgets.dialogs import HelpScreen
+
+        rows: list[tuple[str, str]] = [("", "Pages")]
+        rows += [(SECTION_KEYS[sid], label) for sid, _icon, label in SECTIONS]
+        rows += [("", "Everywhere"), *GLOBAL_KEYS]
+        self.push_screen(HelpScreen(rows))
+
+    def _apply_compact(self) -> None:
+        narrow = self.size.width < AUTO_COMPACT_COLUMNS
+        self.query_one(Sidebar).set_compact(self._user_compact or narrow)
+
+    def on_resize(self, event: events.Resize) -> None:
+        if hasattr(self, "_user_compact"):
+            self._apply_compact()
+
+    # --- badges --------------------------------------------------------------
+
+    def on_download_panel_running_changed(
+        self, message: DownloadPanel.RunningChanged
+    ) -> None:
+        self.query_one(Sidebar).set_badge("download", Badge("running", message.running))
+
+    def _refresh_badges(self) -> None:
+        sidebars = self.query(Sidebar)
+        if not sidebars:
+            return  # shutting down
+        sidebar = sidebars.first()
+        sidebar.set_badge("queue", Badge("waiting", self._waiting_tasks()))
+        if self._current != "history":
+            sidebar.set_badge("history", Badge("failed", self._new_failures()))
+
+    @staticmethod
+    def _waiting_tasks() -> int:
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        manager = get_task_manager()
+        manager.refresh()
+        stats = manager.get_stats()
+        return int(stats.get("pending", 0)) + int(stats.get("running", 0))
+
+    def _new_failures(self) -> int:
+        from max_cli.interface.tui.activity_log import ActivityLog
+
+        failed = ActivityLog().get_entries(
+            status_filter="failed", date_from=self._history_seen
+        )
+        return len(failed)
 
     def _show_panel(self, section_id: str) -> None:
         for known_id, _icon, _label in SECTIONS:
@@ -493,7 +622,9 @@ class MaxDashboardApp(App):
                 break
 
     def action_toggle_sidebar(self) -> None:
-        self.query_one(Sidebar).toggle_mode()
+        self._user_compact = not self.query_one(Sidebar).compact
+        save_pref(PREF_SIDEBAR_COMPACT, self._user_compact)
+        self.query_one(Sidebar).set_compact(self._user_compact)
 
     def action_refresh(self) -> None:
         for panel in self._refreshable_panels():
@@ -501,59 +632,11 @@ class MaxDashboardApp(App):
                 panel.refresh_data()
 
     def on_sidebar_section_selected(self, message: Sidebar.SectionSelected) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active(message.section_id)
-        self._show_panel(message.section_id)
-
-    def action_switch_home(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("home")
-        self._show_panel("home")
-
-    def action_switch_download(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("download")
-        self._show_panel("download")
-
-    def action_switch_queue(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("queue")
-        self._show_panel("queue")
-
-    def action_switch_history(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("history")
-        self._show_panel("history")
-
-    def action_switch_files(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("files")
-        self._show_panel("files")
-
-    def action_switch_analytics(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("analytics")
-        self._show_panel("analytics")
-
-    def action_switch_config(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("config")
-        self._show_panel("config")
-
-    def action_switch_system(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("system")
-        self._show_panel("system")
-
-    def action_switch_chat(self) -> None:
-        sidebar = self.query_one(Sidebar)
-        sidebar.set_active("chat")
-        self._show_panel("chat")
+        self.navigate(message.section_id)
 
     def on_files_panel_open_action(self, message: FilesPanel.OpenAction) -> None:
         """The Files page hands a selected file to a Tools form."""
-        self.query_one(Sidebar).set_active("tools")
-        self._show_panel("tools")
+        self.navigate("tools")
         self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
 
     def on_home_panel_command_selected(
@@ -566,6 +649,4 @@ class MaxDashboardApp(App):
         }
         target = tab_map.get(message.category)
         if target:
-            sidebar = self.query_one(Sidebar)
-            sidebar.set_active(target)
-            self._show_panel(target)
+            self.navigate(target)

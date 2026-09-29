@@ -23,6 +23,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import (
     Button,
@@ -267,6 +268,13 @@ class DownloadRow(Vertical):
 
 
 class DownloadPanel(Vertical):
+    class RunningChanged(Message):
+        """How many downloads run now; the sidebar shows it as a badge."""
+
+        def __init__(self, running: int) -> None:
+            super().__init__()
+            self.running = running
+
     """The Download page."""
 
     DEFAULT_CSS = """
@@ -385,6 +393,7 @@ class DownloadPanel(Vertical):
         self._checked_text = ""  # the link box text that _media belongs to
         self._check_timer: Optional[Timer] = None
         self._jobs: dict[int, DownloadJob] = {}
+        self._last_running = 0
         self._next_job_id = 1
         self._slots = threading.BoundedSemaphore(settings.GRAB_MAX_CONCURRENT)
         self._history: list[dict[str, Any]] = []
@@ -884,6 +893,9 @@ class DownloadPanel(Vertical):
             "tab-active": f"Downloads ({running} running)" if running else "Downloads",
             "tab-history": f"History ({len(self._history)})",
         }
+        if running != self._last_running:
+            self._last_running = running
+            self.post_message(self.RunningChanged(running))
         for tab_id, text in labels.items():
             tab = tabs.get_tab(tab_id)
             # Setting a label, even to the same text, restarts the tab

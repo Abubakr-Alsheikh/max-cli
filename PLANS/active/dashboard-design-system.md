@@ -58,10 +58,18 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [ ] Mechanical checks in `.claude/hooks/check_rules.py` for `interface/tui/`: no hex or named colours outside the theme; no `DataTable.clear(columns=True)` or `recompose()` in a `refresh_data`; progress callbacks throttled.
 - [ ] Every UI PR includes Pilot screenshots (SVG to PNG) of the pages it changes.
 
+### R1.5: Sidebar and navigation (maintainer's choice, 2026-09-29: grouped, all 10 pages kept)
+- [x] Grouped list (Do, Track, Setup) with one-row items, arrow keys and Enter.
+- [x] Number keys 1-9 and 0 jump to pages; `Alt+Left` goes back; `Esc` returns to the sidebar.
+- [x] `?` help screen listing every shortcut.
+- [x] Badges: running downloads, waiting tasks, failures since History was last opened. They redraw only when a number changes.
+- [x] Remember the last page and the icons-only choice; icons only below 100 columns.
+
 ### R2: Theme and navigation
 - [ ] One registered Max theme (`App.register_theme`) that replaces the `$var` overrides in `app.py`, plus a light variant. The Ctrl+P theme choice is remembered in `ui_prefs`.
 - [ ] Page jumps and main actions in the command palette.
 - [ ] Footer shows each page's keys.
+- [ ] Style the page scrollbars from the theme (the track shows as a black bar).
 
 ### R3: Home and Download redesign
 - [ ] Mockups as screenshots for the maintainer's approval before building.
