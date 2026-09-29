@@ -260,3 +260,53 @@ def test_task_replaced_by_refresh_is_not_run_twice(monkeypatch):
     assert ran == []
     assert manager.process_now() == 1
     assert len(ran) == 1
+
+
+class TestRefreshNeverLosesTasks:
+    """Windows can refuse a read while another thread atomically replaces
+    the file. refresh() used to empty its lists first, so one refused read
+    wiped the history, and the next save wrote that over the file."""
+
+    def _manager_with_history(self) -> TaskManager:
+        manager = get_task_manager()
+        done = TaskItem(type=TaskType.ACTION, status=TaskStatus.COMPLETED, title="kept")
+        manager.record(done)
+        return manager
+
+    def test_a_refused_read_keeps_what_is_in_memory(self, monkeypatch):
+        manager = self._manager_with_history()
+        real_read = type(manager.HISTORY_FILE).read_text
+
+        def refused(path, *args, **kwargs):
+            if path.name in ("queue.json", "history.json"):
+                raise PermissionError("file is being replaced")
+            return real_read(path, *args, **kwargs)
+
+        monkeypatch.setattr(type(manager.HISTORY_FILE), "read_text", refused)
+        manager.refresh()
+
+        assert [task.title for task in manager.get_history()] == ["kept"]
+
+    def test_one_bad_entry_does_not_drop_the_rest(self):
+        manager = self._manager_with_history()
+        entries = json.loads(manager.HISTORY_FILE.read_text(encoding="utf-8"))
+        entries.append({"type": "not-a-task-type"})
+        _write_json(manager.HISTORY_FILE, entries)
+
+        manager.refresh()
+
+        assert [task.title for task in manager.get_history()] == ["kept"]
+
+
+def test_archiving_removes_a_refreshed_copy_by_id():
+    """refresh() can swap in a copy that differs in one field (completed_at).
+    Removing by equality left that copy queued forever."""
+    manager = get_task_manager()
+    worker_copy = manager.add(TaskItem(type=TaskType.ACTION, title="cancel me"))
+    manager._queue = [worker_copy.model_copy()]
+    worker_copy.completed_at = "2026-09-29T00:00:00"
+
+    manager._archive(worker_copy)
+
+    assert manager.get_all() == []
+    assert manager.get_history()[0].id == worker_copy.id

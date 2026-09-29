@@ -39,6 +39,12 @@ The dashboard remembers whether you expanded the sidebar. In a window narrower t
 
 The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
+## Jobs window
+
+Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on a Tools form.
+
+While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open the Queue page (`6`).
+
 ## Theme
 
 The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "theme" to try another one; the dashboard remembers your choice.
@@ -51,6 +57,7 @@ The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "t
 | `Alt+Left` | Back to the previous section |
 | `Esc` | Move to the sidebar |
 | `?` | Show every shortcut |
+| `J` | Show or hide the Jobs window |
 | `Ctrl+P` | Command palette (themes and more) |
 | `q` | Quit |
 | `r` | Refresh the sections |
