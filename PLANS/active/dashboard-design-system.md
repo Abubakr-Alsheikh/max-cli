@@ -64,6 +64,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] `?` help screen listing every shortcut.
 - [x] Badges: running downloads, waiting tasks, failures since History was last opened. They redraw only when a number changes.
 - [x] Remember the last page and the icons-only choice; icons only below 100 columns.
+- [x] Maintainer feedback (2026-09-29): the expanded sidebar's right margin was wider than its left, and the collapsed strip had too much padding. Margins are now equal, and the icon strip is 7 columns with centred icons.
 - [x] Maintainer feedback (2026-09-29): items were too small and the collapsed icons hard to see.
   - Each page is now a 3-row target.
   - Colour emoji replace the thin symbols.
@@ -95,6 +96,11 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - Every section has an empty state that says what goes there and how to start, and a loading state.
 - Results and errors show as toasts (`notify`), and the page keeps its place.
 - User text (titles, paths, URLs, errors) is `Content`, never markup.
+- A widget's `DEFAULT_CSS` is scoped to that widget: a rule there that starts from a parent (`Sidebar.-compact NavItem`) never matches. Put rules that depend on a parent's state in the parent's CSS.
+- App CSS beats every widget's `DEFAULT_CSS`, whatever the selector. A global rule such as `Button { min-width: 12 }` needs its exceptions in the app CSS too.
+- In Textual CSS, set `padding` as a whole (`padding: 0 2 0 1`). A lone `padding-left` reset the other sides.
+- `content-align` doesn't move text a widget draws in `render()`; centre it there.
+- Badges and markers use ASCII or single-width symbols. Ambiguous-width symbols (such as a filled dot) are two columns wide in some fonts.
 - The first input a page needs gets focus. Every action has a key, and the footer shows it.
 
 ## Related

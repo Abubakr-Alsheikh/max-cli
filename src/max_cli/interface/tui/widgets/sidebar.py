@@ -88,13 +88,6 @@ class NavItem(Widget, can_focus=True):
         padding: 0 2 0 1;
         text-style: bold;
     }
-    Sidebar.-compact NavItem {
-        padding: 0;
-        content-align: center middle;
-    }
-    Sidebar.-compact NavItem.-active {
-        padding: 0;
-    }
     """
 
     class Selected(Message):
@@ -120,9 +113,10 @@ class NavItem(Widget, can_focus=True):
             badge = f"{BADGE_SYMBOLS[self.badge.kind]}{self.badge.count}"
             badge_style = f"bold ${BADGE_COLOURS[self.badge.kind]}"
         if self.compact:
-            return Content.assemble(
-                self.icon, (f" {badge}" if badge else "", badge_style)
-            )
+            icon = Content.assemble(self.icon, (badge, badge_style))
+            # Centre by hand: content-align doesn't move text a widget renders.
+            indent = max(0, (self.content_size.width - icon.cell_length) // 2)
+            return Content.assemble(" " * indent, icon)
         name = Content.assemble(
             (f"{SECTION_KEYS[self.section_id]}  ", "dim"), f"{self.icon}  {self.label}"
         )
@@ -150,7 +144,21 @@ class Sidebar(Vertical):
         border-right: solid $border;
     }
     Sidebar.-compact {
-        width: 11;
+        width: 7;
+    }
+    /* These live here, not in NavItem's CSS: Textual scopes a widget's
+       DEFAULT_CSS to that widget, so a rule starting at Sidebar never
+       matched there. NavItem centres its icon itself. */
+    Sidebar.-compact NavItem {
+        padding: 0;
+    }
+    Sidebar.-compact NavItem.-active {
+        padding: 0;
+    }
+    /* No scrollbar column in the icon strip; the wheel and arrow keys still
+       scroll it. */
+    Sidebar.-compact #sidebar-scroll {
+        scrollbar-size-vertical: 0;
     }
     #sidebar-top {
         height: 3;

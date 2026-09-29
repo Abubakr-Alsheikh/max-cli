@@ -213,3 +213,25 @@ async def test_expanded_items_have_equal_left_and_right_margins():
             left = item.content_region.x - item.region.x
             right = item.region.right - item.content_region.right
             assert left == right == 2, item.section_id
+
+
+@pytest.mark.asyncio
+async def test_collapsed_icons_are_centred_in_a_narrow_strip():
+    """The collapsed rules sat in NavItem's scoped CSS and never matched,
+    so icons hugged the left of an 11-column strip."""
+    from max_cli.interface.tui.widgets.sidebar import NavItem
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        await pilot.pause()
+        sidebar = app.query_one(Sidebar)
+        assert sidebar.compact and sidebar.size.width <= 7
+
+        for item in app.query(NavItem):
+            if item.has_class("-active"):
+                continue  # its accent border takes a column
+            text = item.render()
+            indent = len(text.plain) - len(text.plain.lstrip(" "))
+            icon_width = text.cell_length - indent
+            assert item.content_region == item.region, item.section_id
+            assert indent == (item.content_size.width - icon_width) // 2
