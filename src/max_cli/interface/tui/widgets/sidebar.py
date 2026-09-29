@@ -44,7 +44,6 @@ SECTION_KEYS = {
     section_id: str((position + 1) % 10)
     for position, (section_id, _icon, _label) in enumerate(SECTIONS)
 }
-LABEL_WIDTH = 10
 EXPAND_LABEL = "»"
 COLLAPSE_LABEL = "«"
 
@@ -57,7 +56,9 @@ class Badge:
     count: int
 
 
-BADGE_SYMBOLS = {"running": "●", "waiting": "", "failed": "!"}
+# ASCII only: symbols like a dot have an ambiguous width, and some fonts draw
+# them two columns wide, which pushed the badge into the sidebar's edge.
+BADGE_SYMBOLS = {"running": "", "waiting": "", "failed": "!"}
 BADGE_COLOURS = {"running": "success", "waiting": "warning", "failed": "error"}
 
 
@@ -68,7 +69,7 @@ class NavItem(Widget, can_focus=True):
     NavItem {
         height: 3;
         width: 1fr;
-        padding: 0 1 0 2;
+        padding: 0 2;
         content-align: left middle;
         color: $text;
     }
@@ -82,7 +83,9 @@ class NavItem(Widget, can_focus=True):
     NavItem.-active {
         background: $primary 25%;
         border-left: outer $accent;
-        padding-left: 1;
+        /* Full padding: a lone padding-left dropped the right padding. The
+           border takes one column, so the text stays where it was. */
+        padding: 0 2 0 1;
         text-style: bold;
     }
     Sidebar.-compact NavItem {
@@ -90,7 +93,7 @@ class NavItem(Widget, can_focus=True):
         content-align: center middle;
     }
     Sidebar.-compact NavItem.-active {
-        padding-left: 0;
+        padding: 0;
     }
     """
 
@@ -120,11 +123,13 @@ class NavItem(Widget, can_focus=True):
             return Content.assemble(
                 self.icon, (f" {badge}" if badge else "", badge_style)
             )
-        return Content.assemble(
-            (f"{SECTION_KEYS[self.section_id]}  ", "dim"),
-            f"{self.icon}  {self.label:<{LABEL_WIDTH}}",
-            (badge, badge_style),
+        name = Content.assemble(
+            (f"{SECTION_KEYS[self.section_id]}  ", "dim"), f"{self.icon}  {self.label}"
         )
+        # The badge sits against the right padding, so the right margin
+        # matches the left one whatever the label's length.
+        gap = max(1, self.content_size.width - name.cell_length - len(badge))
+        return Content.assemble(name, " " * gap, (badge, badge_style))
 
     def action_open(self) -> None:
         self.post_message(self.Selected(self.section_id))
@@ -139,7 +144,7 @@ class Sidebar(Vertical):
 
     DEFAULT_CSS = """
     Sidebar {
-        width: 28;
+        width: 26;
         layout: vertical;
         background: $surface;
         border-right: solid $border;
@@ -165,8 +170,8 @@ class Sidebar(Vertical):
         display: none;
     }
     #sidebar-toggle {
-        width: 7;
-        min-width: 7;
+        width: 5;
+        min-width: 5;
         height: 3;
         border: none;
         background: transparent;
@@ -179,6 +184,7 @@ class Sidebar(Vertical):
         width: 1fr;
     }
     #sidebar-scroll {
+        width: 100%;
         height: 1fr;
         scrollbar-size-vertical: 1;
         scrollbar-background: $surface;

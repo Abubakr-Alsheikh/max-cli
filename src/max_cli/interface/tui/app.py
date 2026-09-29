@@ -135,6 +135,11 @@ class MaxDashboardApp(App):
     Button {
         min-width: 12;
     }
+    /* The sidebar's expand button is one character; the app CSS wins over
+       the sidebar's own styles, so the exception lives here. */
+    Sidebar #sidebar-toggle {
+        min-width: 5;
+    }
     #sidebar .sidebar-btn {
         min-width: 0;
     }

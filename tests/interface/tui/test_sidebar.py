@@ -196,3 +196,20 @@ async def test_ctrl_b_choice_is_remembered():
     second = MaxDashboardApp()
     async with second.run_test(size=WIDE):
         assert not second.query_one(Sidebar).compact
+
+
+@pytest.mark.asyncio
+async def test_expanded_items_have_equal_left_and_right_margins():
+    """The active item lost its right padding and its badge hit the edge."""
+    from max_cli.interface.tui.widgets.sidebar import NavItem
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        await pilot.press("ctrl+b")
+        app.navigate("download")
+        await pilot.pause()
+
+        for item in app.query(NavItem):
+            left = item.content_region.x - item.region.x
+            right = item.region.right - item.content_region.right
+            assert left == right == 2, item.section_id

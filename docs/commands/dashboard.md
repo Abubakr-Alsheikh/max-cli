@@ -33,7 +33,7 @@ The sidebar on the left lists ten sections in three groups. It starts as a strip
 | `9` | **Config** | View and edit your settings |
 | `0` | **System** | Disk usage of `~/.max_cli/` and system info |
 
-Badges next to a section show what needs a look: `●2` on Download means two downloads are running, `3` on Queue means three tasks are waiting or running, and `!1` on History means one action failed since you last opened History.
+Badges next to a section show what needs a look: a green `2` on Download means two downloads are running, a yellow `3` on Queue means three tasks are waiting or running, and a red `!1` on History means one action failed since you last opened History.
 
 The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
 
