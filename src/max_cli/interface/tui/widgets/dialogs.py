@@ -115,3 +115,58 @@ class PathPicker(ModalScreen[Optional[Path]]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+class HelpScreen(ModalScreen[None]):
+    """Every shortcut on one screen. `rows` are (key, what it does) pairs;
+    a row with an empty key is a heading."""
+
+    DEFAULT_CSS = """
+    HelpScreen {
+        align: center middle;
+    }
+    #help-box {
+        width: 56;
+        height: auto;
+        max-height: 90%;
+        padding: 1 2;
+        border: thick $accent;
+        background: $surface;
+    }
+    #help-table {
+        height: auto;
+        max-height: 30;
+    }
+    #help-hint {
+        margin-top: 1;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "close", "Close"),
+        ("question_mark", "close", "Close"),
+        ("q", "close", "Close"),
+    ]
+
+    def __init__(self, rows: list[tuple[str, str]]) -> None:
+        super().__init__()
+        self._rows = rows
+
+    def compose(self) -> ComposeResult:
+        from textual.content import Content
+
+        lines: list[Content] = []
+        for key, description in self._rows:
+            if not key:
+                gap = "\n" if lines else ""  # a blank line between groups
+                lines.append(Content.styled(f"{gap}{description}", "bold $accent"))
+            else:
+                lines.append(
+                    Content.assemble((f"  {key:<12}", "bold"), (description, ""))
+                )
+        with Vertical(id="help-box"):
+            yield Static(Content("\n").join(lines), id="help-table")
+            yield Static(Content.styled("Esc or ? closes this.", "dim"), id="help-hint")
+
+    def action_close(self) -> None:
+        self.dismiss(None)

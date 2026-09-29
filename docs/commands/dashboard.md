@@ -15,20 +15,27 @@ The dashboard comes with the base install. Older instructions say `pip install m
 
 ## Sections
 
-A sidebar on the left switches between ten sections. Click a section, or move to it with `Tab` and press `Enter`.
+The sidebar on the left lists ten sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's number to jump to it, click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
 
-| Section | What it does |
-|---------|--------------|
-| **Home** | Quick actions that open the matching section |
-| **Download** | Download form with progress and recent downloads |
-| **Queue** | Live task queue; refreshes every 2 seconds |
-| **History** | Finished tasks, with filters |
-| **Files** | File browser with quick actions |
-| **Tools** | A form for each command, with all its options |
-| **Analytics** | Live usage and system monitoring |
-| **Config** | View and edit your settings |
-| **System** | Disk usage of `~/.max_cli/` and system info |
-| **Chat** | AI chat with command suggestions |
+| Key | Section | What it does |
+|-----|---------|--------------|
+| | **Do** | |
+| `1` | **Home** | Quick actions that open the matching section |
+| `2` | **Download** | Download form with progress and recent downloads |
+| `3` | **Tools** | A form for each command, with all its options |
+| `4` | **Files** | File browser with quick actions |
+| `5` | **Chat** | AI chat with command suggestions |
+| | **Track** | |
+| `6` | **Queue** | Live task queue; refreshes every 2 seconds |
+| `7` | **History** | Finished tasks, with filters |
+| `8` | **Analytics** | Live usage and system monitoring |
+| | **Setup** | |
+| `9` | **Config** | View and edit your settings |
+| `0` | **System** | Disk usage of `~/.max_cli/` and system info |
+
+Badges next to a section show what needs a look: a green `2` on Download means two downloads are running, a yellow `3` on Queue means three tasks are waiting or running, and a red `!1` on History means one action failed since you last opened History.
+
+The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
 
 The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
@@ -36,11 +43,18 @@ The Queue and History sections read the same task store as `max queue` and `max 
 
 | Key | Action |
 |-----|--------|
+| `1` to `9`, `0` | Jump to a section |
+| `Alt+Left` | Back to the previous section |
+| `Esc` | Move to the sidebar |
+| `?` | Show every shortcut |
+| `Ctrl+P` | Command palette (themes and more) |
 | `q` | Quit |
 | `r` | Refresh the sections |
 | `Ctrl+B` | Collapse or expand the sidebar |
 | `Tab` / `Shift+Tab` | Move between buttons and fields |
 | `Enter` | Press the focused button |
+
+Number keys and `q` type into a text field when one has focus. Press `Esc` first to leave the field.
 
 ## Troubleshooting
 
