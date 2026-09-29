@@ -7,6 +7,7 @@ from textual.containers import Container, Horizontal
 from textual.widget import Widget
 from textual.widgets import Footer
 
+from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
@@ -39,6 +40,7 @@ AUTO_COMPACT_COLUMNS = 100
 BACK_HISTORY_LIMIT = 20
 BADGE_REFRESH_SECONDS = 2.0
 PREF_LAST_PAGE = "last_page"
+PREF_THEME = "theme"
 # Named "collapsed", not the earlier "sidebar_compact": that older choice
 # predates the icons-first default and must not override it.
 PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
@@ -82,17 +84,6 @@ class MaxDashboardApp(App):
     ]
 
     CSS = """
-    $primary: #0ea5e9;
-    $accent: #8b5cf6;
-    $surface: #1e293b;
-    $boost: #334155;
-    $panel: #0f172a;
-    $border: #334155;
-    $success: #22c55e;
-    $warning: #eab308;
-    $error: #ef4446;
-    $text-muted: #64748b;
-
     MaxDashboardApp {
         layout: vertical;
         background: $panel;
@@ -183,132 +174,6 @@ class MaxDashboardApp(App):
         border: solid $border;
         background: $surface;
         padding: 0 1;
-    }
-
-    /* ══════════════════════════════════════════════════════
-       HOME PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #home-title {
-        text-style: bold;
-        padding: 0 1;
-        margin-bottom: 0;
-    }
-
-    #home-subtitle {
-        margin: 1 0 1 0;
-        padding: 0 1;
-        text-style: bold;
-    }
-
-    #home-status-bar {
-        height: auto;
-        margin: 1 0;
-    }
-
-    .status-metric {
-        width: 1fr;
-        height: auto;
-        margin: 0 1;
-        padding: 1;
-        border: round $border;
-        background: $surface;
-    }
-    .status-metric:hover {
-        border: round $primary;
-        background: $boost;
-    }
-
-    .metric-label {
-        text-style: bold;
-        margin-bottom: 0;
-        padding: 0 0;
-    }
-
-    .metric-value {
-        text-align: right;
-        margin-top: 0;
-        padding: 0 0;
-    }
-
-    #home-stats-row {
-        height: auto;
-        margin: 1 0;
-    }
-
-    .stat-card {
-        width: 1fr;
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        text-align: center;
-        margin: 0 1;
-    }
-    .stat-card:hover {
-        border: round $primary;
-        background: $boost;
-    }
-
-    .stat-number {
-        text-style: bold;
-        text-align: center;
-    }
-
-    .stat-label {
-        text-align: center;
-        color: $text-muted;
-    }
-
-    #home-cards {
-        height: auto;
-    }
-
-    .home-card {
-        width: 1fr;
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        text-align: center;
-        margin: 0 1;
-    }
-    .home-card:hover {
-        border: round $primary;
-        background: $boost;
-    }
-    .home-card Button {
-        width: 100%;
-        margin-top: 1;
-    }
-    .home-card Button:hover {
-        text-style: bold;
-    }
-
-    .home-card-green  { border-left: heavy $success; }
-    .home-card-yellow { border-left: heavy $warning; }
-    .home-card-purple { border-left: heavy $accent;  }
-    .home-card-green:hover,
-    .home-card-yellow:hover,
-    .home-card-purple:hover {
-        background: $boost;
-    }
-
-    /* A fixed height: a 1fr scroll area inside a scrolling page gets squeezed
-       and resized on every reflow, and fights the page for the mouse wheel. */
-    #home-activity-scroll {
-        height: 12;
-        border: round $border;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    #home-activity-title {
-        margin-top: 1;
-    }
-
-    #home-panel {
-        overflow-y: auto;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -508,8 +373,18 @@ class MaxDashboardApp(App):
                 yield ChatPanel(id="chat-panel")
         yield Footer()
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_theme(MAX_CYBER)
+        saved = load_prefs().get(PREF_THEME)
+        self.theme = saved if saved in self.available_themes else THEME_NAME
+
     def on_mount(self) -> None:
         prefs = load_prefs()
+        # Ctrl+P can switch themes; remember the choice.
+        self.theme_changed_signal.subscribe(
+            self, lambda theme: save_pref(PREF_THEME, theme.name)
+        )
         self._back: list[str] = []
         self._current = ""
         # The sidebar starts as icons; the maintainer's choice (2026-09-29).
@@ -658,14 +533,5 @@ class MaxDashboardApp(App):
         self.navigate("tools")
         self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
 
-    def on_home_panel_command_selected(
-        self, message: HomePanel.CommandSelected
-    ) -> None:
-        tab_map = {
-            "grab": "download",
-            "files": "files",
-            "ai": "chat",
-        }
-        target = tab_map.get(message.category)
-        if target:
-            self.navigate(target)
+    def on_home_panel_open_page(self, message: HomePanel.OpenPage) -> None:
+        self.navigate(message.section_id)

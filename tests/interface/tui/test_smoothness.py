@@ -7,8 +7,6 @@ from textual.widgets import DataTable
 
 from max_cli.interface.tui.tables import Row, show_rows
 
-PANEL_BACKGROUND = Color.parse("#0f172a")
-
 
 class TableApp(App):
     def compose(self) -> ComposeResult:
@@ -56,4 +54,5 @@ async def test_screen_background_matches_the_pages():
 
     app = MaxDashboardApp()
     async with app.run_test(size=(100, 30)):
-        assert app.screen.styles.background == PANEL_BACKGROUND
+        panel = Color.parse(app.theme_variables["panel"])
+        assert app.screen.styles.background == panel
