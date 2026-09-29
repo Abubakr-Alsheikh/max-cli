@@ -58,6 +58,9 @@ PYTEST_ARGS = (
 COVERAGE_ARGS = ("--cov=max_cli", "--cov-report=", f"--cov-fail-under={COVERAGE_MIN}")
 # One suite takes about a minute (two with coverage). Past this, it hangs.
 STEP_TIMEOUT_SECONDS = 600
+# Tests that measure time. --full runs them alone after the parallel suites,
+# where two suites at once made the startup budget fail on a busy machine.
+TIMING_MARKER = "timing"
 # Test suites at once in --full. Four at once starved each other and made a
 # timing-sensitive test hang; two keeps the run short and the machine usable.
 PARALLEL_SUITES = 2
@@ -214,12 +217,25 @@ def run_tests_on(version: str) -> StepResult:
             "pytest",
             *PYTEST_ARGS,
             *coverage,
+            "-m",
+            f"not {TIMING_MARKER}",
             f"--basetemp={WORK_DIR / f'tmp-{version}'}",
         ],
         env={"COVERAGE_FILE": str(WORK_DIR / f".coverage-{version}")},
     )
     tested.seconds += installed.seconds
     return announce(tested)
+
+
+def run_timing_tests(version: str) -> StepResult:
+    """The timing-marked tests alone, so no other suite competes for the CPU."""
+    python = venv_python(WORK_DIR / f"py{version}")
+    return announce(
+        run_step(
+            f"timing tests (Python {version})",
+            [str(python), "-m", "pytest", *PYTEST_ARGS, "-m", TIMING_MARKER],
+        )
+    )
 
 
 def build_package() -> StepResult:
@@ -257,6 +273,8 @@ def full_steps() -> list[StepResult]:
     with ThreadPoolExecutor(max_workers=PARALLEL_SUITES) as pool:
         jobs = [pool.submit(run_tests_on, version) for version in ready]
         results.extend(job.result() for job in jobs)
+    print("... timing tests, one Python at a time", flush=True)
+    results.extend(run_timing_tests(version) for version in ready)
     print("... build", flush=True)
     results.append(build_package())
     return results

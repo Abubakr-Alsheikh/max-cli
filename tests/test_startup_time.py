@@ -60,6 +60,7 @@ def test_help_runs():
     assert result.returncode == 0, f"max --help failed: {result.stderr}"
 
 
+@pytest.mark.timing
 def test_import_cost_below_ceiling(import_cost_seconds: float):
     assert import_cost_seconds < IMPORT_COST_CEILING_SECONDS, (
         f"Import cost {import_cost_seconds:.3f}s exceeds regression ceiling "
@@ -67,6 +68,7 @@ def test_import_cost_below_ceiling(import_cost_seconds: float):
     )
 
 
+@pytest.mark.timing
 def test_import_cost_meets_target(import_cost_seconds: float):
     assert import_cost_seconds < IMPORT_COST_TARGET_SECONDS, (
         f"Import cost {import_cost_seconds:.3f}s (target {IMPORT_COST_TARGET_SECONDS}s)"

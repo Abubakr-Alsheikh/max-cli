@@ -72,12 +72,19 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - The choice is saved as `sidebar_collapsed`; the older `sidebar_compact` key is ignored.
 
 ### R2: Theme and navigation
-- [ ] One registered Max theme (`App.register_theme`) that replaces the `$var` overrides in `app.py`, plus a light variant. The Ctrl+P theme choice is remembered in `ui_prefs`.
+- [x] One registered Max theme, `max-cyber` (`interface/tui/theme.py`), replaces the `$var` overrides in `app.py`. The Ctrl+P theme choice is remembered in `ui_prefs` (2026-09-29).
+- [ ] A light variant.
 - [ ] Page jumps and main actions in the command palette.
 - [ ] Footer shows each page's keys.
 - [ ] Style the page scrollbars from the theme (the track shows as a black bar).
 
 ### R3: Home and Download redesign
+- [x] Home: a command center with a futuristic look (maintainer's request, 2026-09-29).
+  - Header with greeting, clock and status lights (online, FFmpeg, AI key).
+  - Live CPU and memory gauges with a 2-minute history, and a disk capacity meter, all in large `Digits`.
+  - Downloads, actions, queue and downloaded-size tiles.
+  - Charts: activity over 14 days (today in magenta) and a by-type breakdown, from `widgets/charts.py`.
+  - Quick launch with number keys, and a recent-activity feed.
 - [ ] Mockups as screenshots for the maintainer's approval before building.
 - [ ] Then build, with empty, loading and error states for each section.
 - [ ] Path and URL autocomplete (`textual-autocomplete`).

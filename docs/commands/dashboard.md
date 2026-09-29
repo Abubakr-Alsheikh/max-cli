@@ -20,7 +20,7 @@ The sidebar on the left lists ten sections in three groups. It starts as a strip
 | Key | Section | What it does |
 |-----|---------|--------------|
 | | **Do** | |
-| `1` | **Home** | Quick actions that open the matching section |
+| `1` | **Home** | Command center: live CPU, memory and disk, your download and action counts, activity over the last 14 days, a breakdown by type, quick launch and recent activity |
 | `2` | **Download** | Download form with progress and recent downloads |
 | `3` | **Tools** | A form for each command, with all its options |
 | `4` | **Files** | File browser with quick actions |
@@ -38,6 +38,10 @@ Badges next to a section show what needs a look: a green `2` on Download means t
 The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
 
 The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
+
+## Theme
+
+The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "theme" to try another one; the dashboard remembers your choice.
 
 ## Keyboard Shortcuts
 
