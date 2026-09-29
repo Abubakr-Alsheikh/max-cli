@@ -64,6 +64,11 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] `?` help screen listing every shortcut.
 - [x] Badges: running downloads, waiting tasks, failures since History was last opened. They redraw only when a number changes.
 - [x] Remember the last page and the icons-only choice; icons only below 100 columns.
+- [x] Maintainer feedback (2026-09-29): items were too small and the collapsed icons hard to see.
+  - Each page is now a 3-row target.
+  - Colour emoji replace the thin symbols.
+  - The sidebar starts as icons, with a `»`/`«` button to expand it and a tooltip with the name on each icon.
+  - The choice is saved as `sidebar_collapsed`; the older `sidebar_compact` key is ignored.
 
 ### R2: Theme and navigation
 - [ ] One registered Max theme (`App.register_theme`) that replaces the `$var` overrides in `app.py`, plus a light variant. The Ctrl+P theme choice is remembered in `ui_prefs`.

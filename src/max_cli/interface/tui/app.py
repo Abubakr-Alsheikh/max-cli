@@ -39,7 +39,9 @@ AUTO_COMPACT_COLUMNS = 100
 BACK_HISTORY_LIMIT = 20
 BADGE_REFRESH_SECONDS = 2.0
 PREF_LAST_PAGE = "last_page"
-PREF_SIDEBAR_COMPACT = "sidebar_compact"
+# Named "collapsed", not the earlier "sidebar_compact": that older choice
+# predates the icons-first default and must not override it.
+PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
 # Shown on the help screen after the page list.
 GLOBAL_KEYS = [
     ("Esc", "Back to the sidebar"),
@@ -505,7 +507,8 @@ class MaxDashboardApp(App):
         prefs = load_prefs()
         self._back: list[str] = []
         self._current = ""
-        self._user_compact = bool(prefs.get(PREF_SIDEBAR_COMPACT, False))
+        # The sidebar starts as icons; the maintainer's choice (2026-09-29).
+        self._user_compact = bool(prefs.get(PREF_SIDEBAR_COMPACT, True))
         # Failures that happen from now on get a badge on History.
         self._history_seen = datetime.now().isoformat()
         self._apply_compact()
@@ -551,9 +554,15 @@ class MaxDashboardApp(App):
         rows += [("", "Everywhere"), *GLOBAL_KEYS]
         self.push_screen(HelpScreen(rows))
 
+    def _narrow(self) -> bool:
+        return self.size.width < AUTO_COMPACT_COLUMNS
+
     def _apply_compact(self) -> None:
-        narrow = self.size.width < AUTO_COMPACT_COLUMNS
-        self.query_one(Sidebar).set_compact(self._user_compact or narrow)
+        sidebar = self.query_one(Sidebar)
+        if self._narrow():
+            sidebar.set_compact(True, can_expand=False)
+        else:
+            sidebar.set_compact(self._user_compact)
 
     def on_resize(self, event: events.Resize) -> None:
         if hasattr(self, "_user_compact"):
@@ -622,9 +631,14 @@ class MaxDashboardApp(App):
                 break
 
     def action_toggle_sidebar(self) -> None:
-        self._user_compact = not self.query_one(Sidebar).compact
+        if self._narrow():
+            return  # names don't fit; the button says so
+        self._user_compact = not self._user_compact
         save_pref(PREF_SIDEBAR_COMPACT, self._user_compact)
-        self.query_one(Sidebar).set_compact(self._user_compact)
+        self._apply_compact()
+
+    def on_sidebar_toggle_requested(self, message: Sidebar.ToggleRequested) -> None:
+        self.action_toggle_sidebar()
 
     def action_refresh(self) -> None:
         for panel in self._refreshable_panels():

@@ -2,7 +2,7 @@
 (PLANS/active/dashboard-design-system.md)."""
 
 import pytest
-from textual.widgets import Input, OptionList
+from textual.widgets import Button, Input
 
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
@@ -100,17 +100,54 @@ async def test_arrow_keys_and_enter_open_a_page():
 
 
 @pytest.mark.asyncio
-async def test_group_headings_cannot_be_opened():
+async def test_clicking_a_page_opens_it():
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        await pilot.click("#nav-tools")
+        await pilot.pause()
+
+        assert _shown(app) == "tools"
+
+
+@pytest.mark.asyncio
+async def test_the_sidebar_starts_as_icons_and_the_button_expands_it():
+    """Maintainer's choice (2026-09-29): icons first, a button for names."""
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        sidebar = app.query_one(Sidebar)
+        assert sidebar.compact
+
+        await pilot.click("#sidebar-toggle")
+        await pilot.pause()
+        assert not sidebar.compact
+        assert load_prefs()["sidebar_collapsed"] is False
+
+        await pilot.click("#sidebar-toggle")
+        await pilot.pause()
+        assert sidebar.compact
+
+
+@pytest.mark.asyncio
+async def test_an_old_expanded_choice_does_not_override_the_new_default(isolated_home):
+    """`sidebar_compact` belonged to the first sidebar; only `sidebar_collapsed` counts."""
+    prefs = isolated_home / ".max_cli" / "dashboard_prefs.json"
+    prefs.parent.mkdir(parents=True, exist_ok=True)
+    prefs.write_text('{"sidebar_compact": false}', encoding="utf-8")
+
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE):
-        nav = app.query_one("#sidebar-nav", OptionList)
-        headings = [
-            nav.get_option_at_index(index)
-            for index in range(nav.option_count)
-            if (nav.get_option_at_index(index).id or "").startswith(("group-", "gap-"))
-        ]
+        assert app.query_one(Sidebar).compact
 
-        assert headings and all(option.disabled for option in headings)
+
+@pytest.mark.asyncio
+async def test_narrow_windows_disable_the_expand_button():
+    app = MaxDashboardApp()
+    async with app.run_test(size=NARROW) as pilot:
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+        assert app.query_one(Sidebar).compact
+        assert app.query_one("#sidebar-toggle", Button).disabled
 
 
 @pytest.mark.asyncio
@@ -154,8 +191,8 @@ async def test_ctrl_b_choice_is_remembered():
     async with first.run_test(size=WIDE) as pilot:
         await pilot.press("ctrl+b")
         await pilot.pause()
-        assert first.query_one(Sidebar).compact
+        assert not first.query_one(Sidebar).compact
 
     second = MaxDashboardApp()
     async with second.run_test(size=WIDE):
-        assert second.query_one(Sidebar).compact
+        assert not second.query_one(Sidebar).compact

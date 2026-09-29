@@ -15,7 +15,7 @@ The dashboard comes with the base install. Older instructions say `pip install m
 
 ## Sections
 
-The sidebar on the left lists ten sections in three groups. Press a section's number to jump to it, or click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
+The sidebar on the left lists ten sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's number to jump to it, click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
 
 | Key | Section | What it does |
 |-----|---------|--------------|
@@ -35,7 +35,7 @@ The sidebar on the left lists ten sections in three groups. Press a section's nu
 
 Badges next to a section show what needs a look: `●2` on Download means two downloads are running, `3` on Queue means three tasks are waiting or running, and `!1` on History means one action failed since you last opened History.
 
-In a window narrower than 100 columns, the sidebar shows icons only. `Ctrl+B` switches between icons and full labels, and the dashboard remembers your choice.
+The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
 
 The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 

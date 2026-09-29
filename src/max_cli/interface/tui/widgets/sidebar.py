@@ -1,33 +1,38 @@
 """The page list on the left: grouped, numbered, with live badges.
 
-Arrow keys move, Enter or a click opens a page, and a page's number key jumps
-straight to it (the app binds the keys). Badges show what needs attention:
-running downloads, waiting tasks, failures you haven't seen.
-See PLANS/active/dashboard-design-system.md.
+Starts as a strip of icons; the button at the top expands it to show names.
+Each page is a large target (3 rows) that you can click, reach with the
+arrow keys and open with Enter, or jump to with its number key (the app
+binds those). Badges show what needs attention: running downloads, waiting
+tasks, failures you haven't seen. See PLANS/active/dashboard-design-system.md.
 """
 
 from dataclasses import dataclass
 from typing import Optional
 
 from textual import on
-from textual.containers import Vertical
+from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
-from textual.events import Message
-from textual.widgets import OptionList, Static
-from textual.widgets.option_list import Option
+from textual.events import Click
+from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Button, Static
 
 # (page id, icon, label), in sidebar order. The number keys follow this order.
+# Colour emoji: the thin symbols used before were hard to see, or missing, in
+# common Windows terminal fonts.
 SECTIONS = [
-    ("home", "⌂", "Home"),
-    ("download", "↓", "Download"),
-    ("tools", "⚒", "Tools"),
-    ("files", "▣", "Files"),
-    ("chat", "✦", "Chat"),
-    ("queue", "≣", "Queue"),
-    ("history", "↻", "History"),
-    ("analytics", "≈", "Analytics"),
-    ("config", "⚙", "Config"),
-    ("system", "◉", "System"),
+    ("home", "\U0001f3e0", "Home"),
+    ("download", "\U0001f4e5", "Download"),
+    ("tools", "\U0001f9f0", "Tools"),
+    ("files", "\U0001f4c1", "Files"),
+    ("chat", "\U0001f4ac", "Chat"),
+    ("queue", "\U0001f4cb", "Queue"),
+    ("history", "\U0001f558", "History"),
+    ("analytics", "\U0001f4ca", "Analytics"),
+    ("config", "\U0001f4dd", "Config"),
+    ("system", "\U0001f4bb", "System"),
 ]
 SECTION_GROUPS = (
     ("DO", ("home", "download", "tools", "files", "chat")),
@@ -39,8 +44,9 @@ SECTION_KEYS = {
     section_id: str((position + 1) % 10)
     for position, (section_id, _icon, _label) in enumerate(SECTIONS)
 }
-LABEL_WIDTH = 9
-ACTIVE_MARK = "▌"
+LABEL_WIDTH = 10
+EXPAND_LABEL = "»"
+COLLAPSE_LABEL = "«"
 
 
 @dataclass(frozen=True)
@@ -55,49 +61,172 @@ BADGE_SYMBOLS = {"running": "●", "waiting": "", "failed": "!"}
 BADGE_COLOURS = {"running": "success", "waiting": "warning", "failed": "error"}
 
 
+class NavItem(Widget, can_focus=True):
+    """One page in the sidebar: 3 rows tall, clickable, focusable."""
+
+    DEFAULT_CSS = """
+    NavItem {
+        height: 3;
+        width: 1fr;
+        padding: 0 1 0 2;
+        content-align: left middle;
+        color: $text;
+    }
+    NavItem:hover {
+        background: $boost;
+    }
+    NavItem:focus {
+        background: $boost;
+        text-style: bold;
+    }
+    NavItem.-active {
+        background: $primary 25%;
+        border-left: outer $accent;
+        padding-left: 1;
+        text-style: bold;
+    }
+    Sidebar.-compact NavItem {
+        padding: 0;
+        content-align: center middle;
+    }
+    Sidebar.-compact NavItem.-active {
+        padding-left: 0;
+    }
+    """
+
+    class Selected(Message):
+        def __init__(self, section_id: str) -> None:
+            super().__init__()
+            self.section_id = section_id
+
+    BINDINGS = [("enter", "open", "Open"), ("space", "open", "Open")]
+
+    def __init__(self, section_id: str, icon: str, label: str) -> None:
+        super().__init__(id=f"nav-{section_id}")
+        self.section_id = section_id
+        self.icon = icon
+        self.label = label
+        self.compact = False
+        self.badge: Optional[Badge] = None
+        self.tooltip = f"{label}  ({SECTION_KEYS[section_id]})"
+
+    def render(self) -> Content:
+        badge = ""
+        badge_style = ""
+        if self.badge is not None:
+            badge = f"{BADGE_SYMBOLS[self.badge.kind]}{self.badge.count}"
+            badge_style = f"bold ${BADGE_COLOURS[self.badge.kind]}"
+        if self.compact:
+            return Content.assemble(
+                self.icon, (f" {badge}" if badge else "", badge_style)
+            )
+        return Content.assemble(
+            (f"{SECTION_KEYS[self.section_id]}  ", "dim"),
+            f"{self.icon}  {self.label:<{LABEL_WIDTH}}",
+            (badge, badge_style),
+        )
+
+    def action_open(self) -> None:
+        self.post_message(self.Selected(self.section_id))
+
+    def on_click(self, event: Click) -> None:
+        event.stop()
+        self.action_open()
+
+
 class Sidebar(Vertical):
     """Grouped page list; posts SectionSelected when a page is opened."""
 
     DEFAULT_CSS = """
     Sidebar {
-        width: 22;
+        width: 28;
         layout: vertical;
         background: $surface;
         border-right: solid $border;
     }
     Sidebar.-compact {
-        width: 7;
+        width: 11;
+    }
+    #sidebar-top {
+        height: 3;
+        padding: 0 0 0 2;
+    }
+    Sidebar.-compact #sidebar-top {
+        padding: 0;
     }
     #sidebar-brand {
-        height: 1;
-        margin: 1 1 1 1;
+        width: 1fr;
+        height: 3;
+        content-align: left middle;
         text-style: bold;
         color: $accent;
     }
-    #sidebar-nav {
-        height: 1fr;
+    Sidebar.-compact #sidebar-brand {
+        display: none;
+    }
+    #sidebar-toggle {
+        width: 7;
+        min-width: 7;
+        height: 3;
         border: none;
-        background: $surface;
-        padding: 0;
+        background: transparent;
+        text-style: bold;
     }
-    #sidebar-nav > .option-list--option-highlighted {
+    #sidebar-toggle:hover {
         background: $boost;
-        text-style: none;
     }
-    #sidebar-nav:focus > .option-list--option-highlighted {
-        background: $boost;
+    Sidebar.-compact #sidebar-toggle {
+        width: 1fr;
+    }
+    #sidebar-scroll {
+        height: 1fr;
+        scrollbar-size-vertical: 1;
+        scrollbar-background: $surface;
+        scrollbar-background-hover: $surface;
+        scrollbar-color: $boost;
+        scrollbar-color-hover: $accent;
+    }
+    .sidebar-group {
+        height: 1;
+        margin: 1 0 0 2;
+        color: $text-muted;
+        text-style: bold;
+    }
+    Sidebar.-compact .sidebar-group {
+        display: none;
+    }
+    Sidebar.-compact .sidebar-divider {
+        display: block;
+    }
+    .sidebar-divider {
+        display: none;
+        height: 1;
+        color: $border;
+        content-align: center middle;
     }
     #sidebar-help {
         height: 1;
-        margin: 1 1;
+        margin: 1 0 1 2;
         color: $text-muted;
     }
+    Sidebar.-compact #sidebar-help {
+        margin: 1 0;
+        content-align: center middle;
+    }
     """
+
+    BINDINGS = [
+        ("up", "move(-1)", "Previous page"),
+        ("down", "move(1)", "Next page"),
+    ]
 
     class SectionSelected(Message):
         def __init__(self, section_id: str) -> None:
             super().__init__()
             self.section_id = section_id
+
+    class ToggleRequested(Message):
+        """The expand/collapse button was pressed."""
 
     def __init__(self, *, version: str = "", id: Optional[str] = None) -> None:
         super().__init__(id=id)
@@ -105,73 +234,49 @@ class Sidebar(Vertical):
         self.compact = False
         self.active = SECTIONS[0][0]
         self._badges: dict[str, Badge] = {}
+        self._toggle_enabled = True
 
-    def compose(self):
-        yield Static(self._brand(), id="sidebar-brand")
-        yield OptionList(*self._options(), id="sidebar-nav")
-        yield Static(self._help_hint(), id="sidebar-help")
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="sidebar-top"):
+            yield Static(f"MAX {self.version}".rstrip(), id="sidebar-brand")
+            yield Button(COLLAPSE_LABEL, id="sidebar-toggle")
+        with VerticalScroll(id="sidebar-scroll"):
+            icons = {section_id: (icon, label) for section_id, icon, label in SECTIONS}
+            for position, (group, section_ids) in enumerate(SECTION_GROUPS):
+                yield Static(group, classes="sidebar-group")
+                if position:
+                    yield Static("───", classes="sidebar-divider")
+                for section_id in section_ids:
+                    icon, label = icons[section_id]
+                    yield NavItem(section_id, icon, label)
+        yield Static(Content("? Help"), id="sidebar-help")
 
-    # --- rendering -------------------------------------------------------
+    def on_mount(self) -> None:
+        self._apply_compact()
+        self._item(self.active).add_class("-active")
 
-    def _brand(self) -> str:
-        if self.compact:
-            return "MAX"
-        return f"MAX {self.version}".rstrip()
+    # --- helpers -----------------------------------------------------------
 
-    def _help_hint(self) -> Content:
-        text = "?" if self.compact else "? Help  ^P Menu"
-        return Content(text)
+    def _item(self, section_id: str) -> NavItem:
+        return self.query_one(f"#nav-{section_id}", NavItem)
 
-    def _options(self) -> list[Option]:
-        options = []
-        for position, (group, section_ids) in enumerate(SECTION_GROUPS):
-            if position:
-                # A blank row between groups.
-                options.append(Option("", id=f"gap-{group}", disabled=True))
-            heading = "" if self.compact else group
-            options.append(
-                Option(
-                    Content.styled(heading, "dim bold"),
-                    id=f"group-{group}",
-                    disabled=True,
-                )
-            )
-            options.extend(
-                Option(self._prompt(section_id), id=section_id)
-                for section_id in section_ids
-            )
-        return options
+    def _items(self) -> list[NavItem]:
+        return list(self.query(NavItem))
 
-    def _prompt(self, section_id: str) -> Content:
-        icon, label = next(
-            (icon, label) for sid, icon, label in SECTIONS if sid == section_id
-        )
-        mark = ACTIVE_MARK if section_id == self.active else " "
-        parts: list = [(mark, "bold $accent")]
-        if self.compact:
-            parts.append((icon, "bold" if section_id == self.active else ""))
+    def _apply_compact(self) -> None:
+        self.set_class(self.compact, "-compact")
+        toggle = self.query_one("#sidebar-toggle", Button)
+        toggle.label = EXPAND_LABEL if self.compact else COLLAPSE_LABEL
+        if not self._toggle_enabled:
+            toggle.tooltip = "Widen the window to show page names"
         else:
-            parts.append((f"{SECTION_KEYS[section_id]} ", "dim"))
-            parts.append(
-                (
-                    f"{icon} {label:<{LABEL_WIDTH}}",
-                    "bold" if section_id == self.active else "",
-                )
-            )
-        badge = self._badges.get(section_id)
-        if badge is not None and badge.count > 0:
-            text = f"{BADGE_SYMBOLS[badge.kind]}{badge.count}"
-            parts.append(
-                (
-                    text if self.compact else f" {text}",
-                    f"bold ${BADGE_COLOURS[badge.kind]}",
-                )
-            )
-        return Content.assemble(*parts)
-
-    def _redraw(self, section_id: str) -> None:
-        nav = self.query_one("#sidebar-nav", OptionList)
-        nav.replace_option_prompt(section_id, self._prompt(section_id))
+            toggle.tooltip = "Show page names" if self.compact else "Icons only"
+        toggle.disabled = not self._toggle_enabled
+        help_hint = self.query_one("#sidebar-help", Static)
+        help_hint.update(Content("?" if self.compact else "? Help   ^B Sidebar"))
+        for item in self._items():
+            item.compact = self.compact
+            item.refresh()
 
     # --- public API --------------------------------------------------------
 
@@ -179,47 +284,56 @@ class Sidebar(Vertical):
         previous, self.active = self.active, section_id
         if not self.is_mounted:
             return
-        self._redraw(previous)
-        self._redraw(section_id)
-        nav = self.query_one("#sidebar-nav", OptionList)
-        nav.highlighted = nav.get_option_index(section_id)
+        self._item(previous).remove_class("-active")
+        item = self._item(section_id)
+        item.add_class("-active")
+        item.scroll_visible(animate=False)
 
     def set_badge(self, section_id: str, badge: Optional[Badge]) -> None:
         """Show or clear a page's badge. Redraws only when it changes."""
-        current = self._badges.get(section_id)
         if badge is not None and badge.count <= 0:
             badge = None
-        if badge == current:
+        if badge == self._badges.get(section_id):
             return
         if badge is None:
             self._badges.pop(section_id, None)
         else:
             self._badges[section_id] = badge
         if self.is_mounted:
-            self._redraw(section_id)
+            item = self._item(section_id)
+            item.badge = badge
+            item.refresh()
 
     def badge(self, section_id: str) -> Optional[Badge]:
         return self._badges.get(section_id)
 
-    def set_compact(self, compact: bool) -> None:
-        if compact == self.compact:
+    def set_compact(self, compact: bool, can_expand: bool = True) -> None:
+        """Icons only, or icons and names. `can_expand` False greys out the button."""
+        if compact == self.compact and can_expand == self._toggle_enabled:
             return
         self.compact = compact
-        self.set_class(compact, "-compact")
-        if not self.is_mounted:
-            return
-        self.query_one("#sidebar-brand", Static).update(self._brand())
-        self.query_one("#sidebar-help", Static).update(self._help_hint())
-        nav = self.query_one("#sidebar-nav", OptionList)
-        nav.clear_options()
-        nav.add_options(self._options())
-        nav.highlighted = nav.get_option_index(self.active)
+        self._toggle_enabled = can_expand
+        if self.is_mounted:
+            self._apply_compact()
 
     def focus_nav(self) -> None:
-        self.query_one("#sidebar-nav", OptionList).focus()
+        if self.is_mounted:
+            self._item(self.active).focus()
 
-    @on(OptionList.OptionSelected, "#sidebar-nav")
-    def _on_selected(self, event: OptionList.OptionSelected) -> None:
+    def action_move(self, step: int) -> None:
+        items = self._items()
+        focused = self.app.focused
+        current = items.index(focused) if isinstance(focused, NavItem) else 0
+        target = items[(current + step) % len(items)]
+        target.focus()
+        target.scroll_visible(animate=False)
+
+    @on(NavItem.Selected)
+    def _on_item_selected(self, event: NavItem.Selected) -> None:
         event.stop()
-        if event.option.id:
-            self.post_message(self.SectionSelected(event.option.id))
+        self.post_message(self.SectionSelected(event.section_id))
+
+    @on(Button.Pressed, "#sidebar-toggle")
+    def _on_toggle(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.post_message(self.ToggleRequested())
