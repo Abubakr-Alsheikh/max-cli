@@ -507,9 +507,7 @@ class SettingsPanel(Vertical):
             "data_size": _folder_size(data_dir),
             "cache": (cache.get_size(), cache.count()),
             "backups": (
-                sum(1 for path in backups.iterdir() if path.is_file())
-                if backups.is_dir()
-                else 0,
+                len(_files_in(backups, recursive=False)),
                 _folder_size(backups),
             ),
             "undo": len(TransactionLog.list_groups()),
@@ -695,7 +693,33 @@ def _about() -> Content:
     )
 
 
-def _folder_size(folder: Path) -> int:
+def _files_in(folder: Path, recursive: bool = True) -> list[Path]:
+    """The files under `folder`, skipping any that vanish during the walk.
+
+    The task store saves by writing a temporary file and renaming it, so a
+    file listed a moment ago can be gone when it's looked at. That crashed
+    this page's worker on a Windows CI run.
+    """
     if not folder.is_dir():
-        return 0
-    return sum(path.stat().st_size for path in folder.rglob("*") if path.is_file())
+        return []
+    found: list[Path] = []
+    try:
+        for path in folder.rglob("*") if recursive else folder.iterdir():
+            try:
+                if path.is_file():
+                    found.append(path)
+            except OSError:
+                continue
+    except OSError:
+        pass  # a whole folder went away mid-walk; what was found so far stands
+    return found
+
+
+def _folder_size(folder: Path) -> int:
+    total = 0
+    for path in _files_in(folder):
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue  # removed since the walk listed it
+    return total
