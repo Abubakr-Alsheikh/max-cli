@@ -17,6 +17,7 @@ Default output names, the same for every caller:
 - rip: `<name>_assets/`; ocr: `<name>.txt`.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -424,4 +425,76 @@ def compare(
             "pages_equal": result["pages_equal"],
             "differences": result["differences"],
         },
+    )
+
+
+# --- describing a file (the dashboard's PDF page) ----------------------------
+
+POINTS_PER_MM = 72 / 25.4
+# Paper sizes in points (portrait) and how far off a page may be to match.
+PAPER_SIZES = {
+    "A4": (595, 842),
+    "Letter": (612, 792),
+    "Legal": (612, 1008),
+    "A3": (842, 1191),
+    "A5": (420, 595),
+}
+PAPER_TOLERANCE_PT = 3
+LOCKED_NOTE = "Locked with a password: Max can't read it without the password."
+SCANNED_NOTE = "No text on the first pages: it looks scanned. OCR can read it."
+
+
+@dataclass
+class PdfFacts:
+    """What a PDF holds, for the PDF page."""
+
+    path: Path
+    size_bytes: int
+    pages: Optional[int] = None
+    page_size: str = ""  # "A4 portrait", or "210 x 99 mm"
+    title: str = ""
+    author: str = ""
+    form_fields: int = 0
+    encrypted: bool = False
+    scanned: bool = False  # no text on the first pages
+    note: str = ""
+
+
+def paper_size(width_pt: float, height_pt: float) -> str:
+    """A page's size as a paper name and orientation, or in millimetres."""
+    portrait = (min(width_pt, height_pt), max(width_pt, height_pt))
+    orientation = "landscape" if width_pt > height_pt else "portrait"
+    for name, (short, long) in PAPER_SIZES.items():
+        if (
+            abs(portrait[0] - short) <= PAPER_TOLERANCE_PT
+            and abs(portrait[1] - long) <= PAPER_TOLERANCE_PT
+        ):
+            return f"{name} {orientation}"
+    return f"{width_pt / POINTS_PER_MM:.0f} x {height_pt / POINTS_PER_MM:.0f} mm"
+
+
+def describe(target: Path, *, engine: Optional["PDFEngine"] = None) -> PdfFacts:
+    """A PDF's pages, paper size, title, form fields, and whether it's locked
+    or scanned. Raises ProcessingError for a file that isn't a readable PDF."""
+    target = Path(target)
+    _require_file(target)
+    size = target.stat().st_size
+    try:
+        info = _engine(engine).inspect_pdf(target)
+    except RuntimeError as e:
+        raise ProcessingError(str(e)) from e
+    if info.get("encrypted"):
+        return PdfFacts(path=target, size_bytes=size, encrypted=True, note=LOCKED_NOTE)
+    width, height = info.get("width_pt"), info.get("height_pt")
+    scanned = bool(info.get("pages")) and not info.get("has_text")
+    return PdfFacts(
+        path=target,
+        size_bytes=size,
+        pages=info.get("pages"),
+        page_size=paper_size(width, height) if width and height else "",
+        title=str(info.get("title") or ""),
+        author=str(info.get("author") or ""),
+        form_fields=int(info.get("form_fields") or 0),
+        scanned=scanned,
+        note=SCANNED_NOTE if scanned else "",
     )

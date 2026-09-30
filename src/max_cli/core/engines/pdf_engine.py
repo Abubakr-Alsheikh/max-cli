@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Any
 
+# inspect_pdf looks for text on this many pages; none means a scan.
+TEXT_CHECK_PAGES = 3
+
 
 def find_pdfs(folder: Path) -> list[Path]:
     """PDFs directly inside `folder`, in natural order ("2" before "10").
@@ -172,6 +175,40 @@ class PDFEngine:
         new_doc.close()
         doc.close()
         return count
+
+    def inspect_pdf(self, input_path: Path) -> dict[str, Any]:
+        """What a PDF holds, read without changing it.
+
+        Keys: encrypted, pages, title, author, width_pt, height_pt,
+        form_fields, has_text (text on any of the first few pages).
+        A locked PDF gives only `encrypted`. Raises RuntimeError for a file
+        PyMuPDF can't open.
+        """
+        import fitz
+
+        try:
+            doc = fitz.open(input_path)
+        except (fitz.FileDataError, RuntimeError, ValueError) as e:
+            raise RuntimeError(f"Couldn't read this PDF: {e}") from e
+        with doc:
+            if doc.needs_pass:
+                return {"encrypted": True}
+            first = doc[0] if doc.page_count else None
+            metadata = doc.metadata or {}
+            return {
+                "encrypted": False,
+                "pages": doc.page_count,
+                "title": (metadata.get("title") or "").strip(),
+                "author": (metadata.get("author") or "").strip(),
+                "width_pt": first.rect.width if first else None,
+                "height_pt": first.rect.height if first else None,
+                # is_form_pdf is the field count, or False without a form.
+                "form_fields": int(doc.is_form_pdf or 0),
+                "has_text": any(
+                    page.get_text().strip()
+                    for page in doc.pages(0, min(TEXT_CHECK_PAGES, doc.page_count))
+                ),
+            }
 
     def get_page_count(self, input_path: Path) -> int:
         """Returns the total number of pages in a PDF."""

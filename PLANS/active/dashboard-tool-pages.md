@@ -1,6 +1,6 @@
 # Dashboard: a page per command group
 
-**Status:** in progress. Video page built (2026-09-30).
+**Status:** in progress. Video (2026-09-30) and PDF (2026-10-01) pages built.
 **Decided by:** the maintainer, 2026-09-30 ("lets build on top of this plan").
 
 ## Goal
@@ -12,7 +12,7 @@ You start from a file ("I have a PDF"), not from a command name. Each big comman
 | Group | Actions | Page |
 |-------|---------|------|
 | video | 15 on the dashboard (record, stream and preview stay CLI-only) | **Video** (done) |
-| pdf | 13 | PDF |
+| pdf | 13 | **PDF** (done) |
 | files | 10 | Files, rebuilt on the same layout |
 | audio | 7 (needs its catalog port) | Audio, with a tag table |
 | images | 4 | Images |
@@ -32,7 +32,7 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 
 - [x] Settings page (PR #37).
 - [x] Shared `ToolPage` and the Video page.
-- [ ] PDF page (`pdf.describe`: pages, size, encrypted, forms).
+- [x] PDF page (`pdf.describe`: pages, paper size, title and author, form fields, locked, scanned). The Files page's Compress on a PDF opens it.
 - [ ] Images page (`images.describe`: size in pixels, format, colour mode; a folder shows its image count).
 - [ ] Files page on the same layout (a folder instead of a file: counts by type, size).
 - [ ] Audio: port the `audio` group to the catalog, then its page with a tag table.

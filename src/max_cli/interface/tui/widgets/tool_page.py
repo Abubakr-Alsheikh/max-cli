@@ -27,6 +27,7 @@ from textual.widgets import Button, Input, Label, Static
 from max_cli.core.catalog import get_action
 from max_cli.core.catalog.spec import Action, ParamKind
 from max_cli.interface.tui.widgets.action_form import ActionForm
+from max_cli.interface.tui.workers import show_from_worker
 
 DESCRIBE_DELAY_SECONDS = 0.4
 
@@ -273,7 +274,7 @@ class ToolPage(Vertical):
             facts = self.spec.describe(Path(path).expanduser())
         except MaxError as e:
             facts = Content.styled(str(e), "$error")
-        self.app.call_from_thread(self._show_facts, path, facts)
+        show_from_worker(self, self._show_facts, path, facts)
 
     def _show_facts(self, path: str, facts: Content) -> None:
         if path == self.query_one("#tool-file", Input).value.strip():
