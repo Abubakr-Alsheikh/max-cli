@@ -24,6 +24,7 @@ from max_cli.core.operations.result import ActionResult
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog, PathPicker
+from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 from .waiting import wait_until
 
@@ -248,14 +249,14 @@ async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
         app.query_one(FilesPanel).post_message(
             FilesPanel.OpenAction("images.compress", {"target": str(dummy_image)})
         )
-        tools = app.query_one("#tools-panel")
+        tools = app.query_one(ToolsPanel)
         await wait_until(
             pilot,
-            lambda: tools.query_one(ActionForm).query_one("#field-target", Input).value
+            lambda: tools.form.query_one("#field-target", Input).value
             == str(dummy_image),
         )
 
-        form = tools.query_one(ActionForm)
+        form = tools.form
         assert form.action.id == "images.compress"
         assert form.query_one("#field-target", Input).value == str(dummy_image)
         # A Setting default shows the user's configured value.
@@ -299,14 +300,13 @@ async def test_files_page_organize_opens_the_form_and_moves_nothing(tmp_path):
         panel = app.query_one(FilesPanel)
         panel._current_path = tmp_path
         panel.query_one("#btn-organize", Button).press()
-        tools = app.query_one("#tools-panel")
+        tools = app.query_one(ToolsPanel)
         await wait_until(
             pilot,
-            lambda: tools.query_one(ActionForm).query_one("#field-path", Input).value
-            == str(tmp_path),
+            lambda: tools.form.query_one("#field-path", Input).value == str(tmp_path),
         )
 
-        form = tools.query_one(ActionForm)
+        form = tools.form
         assert form.action.id == "files.smart-sort"
         assert form.query_one("#field-path", Input).value == str(tmp_path)
         assert (tmp_path / "invoice.pdf").exists()

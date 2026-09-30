@@ -21,12 +21,12 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
-from textual.css.query import NoMatches
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from max_cli.common.utils import format_size
 from max_cli.config import Settings, settings
 from max_cli.interface.tui.text import markup
+from max_cli.interface.tui.workers import show_from_worker
 
 KEEP_DAYS = 30
 # Settings also loads this file from the current folder, after the saved one.
@@ -513,21 +513,7 @@ class SettingsPanel(Vertical):
             ),
             "undo": len(TransactionLog.list_groups()),
         }
-        self.app.call_from_thread(self._from_worker, self._show_upkeep, facts)
-
-    def _from_worker(self, show: Callable[..., None], *args: Any) -> None:
-        """Show a worker's result, unless the page is closing.
-
-        A thread worker can finish after the app starts shutting down; the
-        widgets it updates are gone by then, and the NoMatches failed the
-        worker and a test with it.
-        """
-        if not self.is_attached:
-            return
-        try:
-            show(*args)
-        except NoMatches:
-            return  # the page's widgets were already removed
+        show_from_worker(self, self._show_upkeep, facts)
 
     def _show_upkeep(self, facts: dict[str, Any]) -> None:
         def line(title: str, *parts: tuple[str, str]) -> Content:

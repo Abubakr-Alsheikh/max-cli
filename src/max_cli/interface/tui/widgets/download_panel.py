@@ -21,13 +21,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
-from textual.css.query import NoMatches
 from textual.events import Resize
 from textual.message import Message
 from textual.timer import Timer
@@ -52,6 +51,7 @@ from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.charts import Meter
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
+from max_cli.interface.tui.workers import show_from_worker
 
 GRAB_ACTION_ID = "grab.download"
 # The OPTIONS card shows these catalog options. The Format and Quality buttons
@@ -1493,23 +1493,9 @@ class DownloadPanel(Vertical):
         except (ImportError, AttributeError) as e:
             # The provider registry is a private yt-dlp module; a new yt-dlp
             # can move it. Say so rather than guess.
-            self.app.call_from_thread(self._from_worker, self._show_fix_error, str(e))
+            show_from_worker(self, self._show_fix_error, str(e))
             return
-        self.app.call_from_thread(self._from_worker, self._show_fix_status, status)
-
-    def _from_worker(self, show: Callable[..., None], *args: Any) -> None:
-        """Show a worker's result, unless the page is closing.
-
-        A thread worker can finish after the app starts shutting down; the
-        widgets it updates are gone by then, and the NoMatches failed the
-        worker and a test with it.
-        """
-        if not self.is_attached:
-            return
-        try:
-            show(*args)
-        except NoMatches:
-            return  # the page's widgets were already removed
+        show_from_worker(self, self._show_fix_status, status)
 
     def _show_fix_error(self, error: str) -> None:
         self.query_one("#dl-fix-status", Static).update(

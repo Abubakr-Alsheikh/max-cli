@@ -131,7 +131,7 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 4. Throttle progress to at most 2 updates a second per job, and group bar and text in one `batch_update`.
 5. Never rebuild widgets or tables on a timer. Mount once, then change values. Refill tables with `tables.show_rows`.
 6. Don't set a tab's `label` unless the text changed: it restarts the tab underline animation.
-7. Blocking work (network, disk walks, AI) runs in a thread worker; post results back with `call_from_thread`.
+7. Blocking work (network, disk walks, AI) runs in a thread worker; hand results back with `workers.show_from_worker(self, self._show, result)`. It skips a result that lands while the page closes; a bare `call_from_thread` then raised NoMatches and failed CI runs.
 8. One scroll area per page. An inner scroll area gets a fixed height, never `1fr`.
 9. Something that refreshes only matters while visible: pause its timer when hidden (`jobs_drawer.py`).
 

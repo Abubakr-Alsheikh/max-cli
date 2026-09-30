@@ -51,6 +51,7 @@ class ToolsPanel(Vertical):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._group: Optional[str] = None
+        self._form: Optional[ActionForm] = None
 
     def compose(self) -> ComposeResult:
         groups = _dashboard_groups()
@@ -101,19 +102,30 @@ class ToolsPanel(Vertical):
         if event.option.id:
             self.show_action(get_action(event.option.id))
 
+    @property
+    def form(self) -> Optional[ActionForm]:
+        """The form on show now. A replaced one stays in the DOM until Textual
+        finishes removing it, so querying for ActionForm can find the old one."""
+        return self._form
+
     def show_action(self, action: Action, **values: Any) -> ActionForm:
         """Show `action`'s form, filling any `values` given (e.g. a selected file)."""
         area = self.query_one("#tools-form-area", Vertical)
-        area.remove_children()
         form = ActionForm(action)
-        area.mount(form)
-
-        def _fill() -> None:
-            for name, value in values.items():
-                form.set_value(name, value)
-
-        self.call_after_refresh(_fill)
+        self._form = form
+        self.call_later(self._swap_form, area, form, values)
         return form
+
+    async def _swap_form(
+        self, area: Vertical, form: ActionForm, values: dict[str, Any]
+    ) -> None:
+        """Replace the form, then fill it: set_value needs its fields mounted."""
+        await area.remove_children()
+        await area.mount(form)
+        if form is not self._form:
+            return  # another action was picked meanwhile
+        for name, value in values.items():
+            form.set_value(name, value)
 
     def open_action(self, action_id: str, **values: Any) -> None:
         """Jump to an action from another page: select its group, show its form."""

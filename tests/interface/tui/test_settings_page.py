@@ -13,6 +13,7 @@ from max_cli.config import Settings, settings
 from max_cli.interface.tui.widgets import settings_panel
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 from max_cli.interface.tui.widgets.settings_panel import FIELDS, UNUSED, SettingsPanel
+from max_cli.interface.tui.workers import _show_if_open
 
 SIZE = (130, 80)
 SRC = Path(__file__).resolve().parents[3] / "src" / "max_cli"
@@ -330,4 +331,4 @@ async def test_a_late_worker_result_is_ignored_when_the_page_is_closing():
             "backups": (0, 0),
             "undo": 0,
         }
-        panel._from_worker(panel._show_upkeep, facts)  # must not raise
+        _show_if_open(panel, panel._show_upkeep, facts)  # must not raise
