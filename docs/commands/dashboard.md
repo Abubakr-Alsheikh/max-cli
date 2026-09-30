@@ -15,21 +15,22 @@ The dashboard comes with the base install. Older instructions say `pip install m
 
 ## Sections
 
-The sidebar on the left lists eight sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's number to jump to it, click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
+The sidebar on the left lists nine sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's number to jump to it, click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
 
 | Key | Section | What it does |
 |-----|---------|--------------|
 | | **Do** | |
 | `1` | **Home** | Command center: live CPU, memory and disk, your download and action counts, activity over the last 14 days, a breakdown by type, quick launch and recent activity |
 | `2` | **Download** | Download form with progress and recent downloads |
-| `3` | **Tools** | A form for each command, with all its options |
-| `4` | **Files** | File browser with quick actions |
-| `5` | **Chat** | AI chat with command suggestions |
+| `3` | **Video** | Pick a video or audio file, see its length, size and codecs, and run any `max video` action on it |
+| `4` | **Tools** | A form for each command, with all its options |
+| `5` | **Files** | File browser with quick actions |
+| `6` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
-| `6` | **Queue** | What's running, waiting and finished, with buttons to pause, cancel and retry |
-| `7` | **History** | Finished tasks, with filters |
+| `7` | **Queue** | What's running, waiting and finished, with buttons to pause, cancel and retry |
+| `8` | **History** | Finished tasks, with filters |
 | | **Setup** | |
-| `8` | **Settings** | Your defaults (AI, downloads, images) and upkeep: FFmpeg status, data size, cache and undo cleanup |
+| `9` | **Settings** | Your defaults (AI, downloads, images) and upkeep: FFmpeg status, data size, cache and undo cleanup |
 
 Badges next to a section show what needs a look: a green `2` on Download means two downloads are running, a yellow `3` on Queue means three tasks are waiting or running, and a red `!1` on History means one action failed since you last opened History.
 
@@ -45,17 +46,23 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 - **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
 - **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Queue page and the settings.
 
+## Video page
+
+The Video page (`3`) works on one file at a time. Paste a path or press Browse: the FILE card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
+
+Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue. The Files page's Compress button on a video opens this page too.
+
 ## Queue page
 
-The Queue page (`6`) shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
+The Queue page (`7`) shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
 
 - **Now running** shows the running task with its progress, speed and time left. Cancel stops it.
 - **Up next** lists the waiting tasks in the order they'll run. Each one has Pause (or Resume) and Cancel. "Pause all", "Resume all" and "Clear waiting" act on the whole list; "Clear waiting" asks first and leaves the running task alone.
-- **Finished** shows the last 8 tasks. Retry puts a failed or cancelled task back in line, "Run again" repeats a finished one, and "Open folder" opens where its files went. The History page (`7`) has everything else.
+- **Finished** shows the last 8 tasks. Retry puts a failed or cancelled task back in line, "Run again" repeats a finished one, and "Open folder" opens where its files went. The History page (`8`) has everything else.
 
 ## Settings page
 
-The Settings page (`8`) edits the same settings as `max config`, saved in `~/.max_config.env`. It shows only settings that change something:
+The Settings page (`9`) edits the same settings as `max config`, saved in `~/.max_config.env`. It shows only settings that change something:
 
 - **AI:** the API key (hidden; press Show to see it), the base URL, the chat and image models, and Ollama.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
@@ -69,7 +76,7 @@ The Settings page (`8`) edits the same settings as `max config`, saved in `~/.ma
 
 Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on a Tools form.
 
-While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open the Queue page (`6`).
+While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open the Queue page (`7`).
 
 ## Theme
 
@@ -79,7 +86,7 @@ The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "t
 
 | Key | Action |
 |-----|--------|
-| `1` to `8` | Jump to a section |
+| `1` to `9` | Jump to a section |
 | `Alt+Left` | Back to the previous section |
 | `Esc` | Move to the sidebar |
 | `?` | Show every shortcut |

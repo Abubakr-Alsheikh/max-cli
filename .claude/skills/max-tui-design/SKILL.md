@@ -16,6 +16,7 @@ Every page in `max` (the Textual dashboard) should look like one product: the Ho
 | `interface/tui/widgets/charts.py` | `BarChart`, `HBarChart`, `Spark`, `Meter` |
 | `interface/tui/widgets/sidebar.py` | Large click targets, badges, compact mode, CSS that depends on a parent's state |
 | `interface/tui/widgets/jobs_drawer.py` | Live list with aligned columns, refresh while open only |
+| `interface/tui/widgets/tool_page.py` | The page for a command group: add a `ToolPageSpec` in `tool_pages.py` rather than a new page class |
 | `interface/tui/widgets/queue_panel.py` | Live lists of widget rows updated in place (`TaskRow.show`, `QueuePanel._sync`), tiles that dim at zero |
 | `interface/tui/tables.py` | `show_rows`: refill a `DataTable` without flicker |
 
@@ -145,11 +146,13 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 - Don't dock anything else at the bottom: the `Footer` docks there and covers it.
 - Use ASCII or single-width marks for badges and states (`»`, `!`, `·`, `✓`, `✗`). Ambiguous-width symbols such as `●` or `▶` are two columns wide in some fonts and break alignment.
 - Don't name a widget attribute `_task`: `MessagePump` keeps its asyncio task there, and overwriting it crashes the widget on mount. Other private names Textual uses: `_parent`, `_id`, `_classes`, `_nodes`.
+- Pages start hidden (`#content > * { display: none }` in the app CSS). When every page showed for the first frame, the Download page took focus in its `on_show` and swallowed the number keys.
+- Replacing a widget: `remove_children()` finishes later, so a query right after can still find the old widget. Keep a reference to the new one (`ToolPage.form`), and fill a form only after `await mount(...)`.
 - User text (titles, paths, URLs, errors) goes in as `Content(text)` or through `text.markup()`'s `$variables`, never as markup: `Song [red]` loses text, and some strings crash the parser.
 
 ## Keyboard
 
-- Pages are `1`-`8` (`sidebar.SECTION_KEYS`); `J` Jobs; `?` help; `Esc` back to the sidebar.
+- Pages are `1`-`9`, `0` (`sidebar.SECTION_KEYS`; write keys in text from it, never as digits); `J` Jobs; `?` help; `Esc` back to the sidebar.
 - The field a page is for gets focus when it shows (`on_show`).
 - Every action has a key or a button; the footer shows a page's keys.
 - New global keys go in the app's `BINDINGS` and in `GLOBAL_KEYS` (the help screen).
@@ -157,6 +160,6 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 ## Before you open a PR
 
 1. Screenshots: `python scripts/tui_screenshot.py <page> <out.png>` renders a page at 140x44 with a temporary home folder. Look at it at 120x40 and 90x30 too.
-2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed. To wait for a thread worker, poll with `await pilot.pause(...)`; never call `event.wait()` in the test: it blocks the app's event loop, the worker never starts, and a fake that waits for Cancel hangs the run. Give such fakes a deadline.
+2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed. To wait for a thread worker, poll with `await pilot.pause(...)`; use `tests/interface/tui/waiting.wait_until` rather than a fixed number of pauses, and never call `event.wait()` in the test: it blocks the app's event loop, the worker never starts, and a fake that waits for Cancel hangs the run. Give such fakes a deadline.
 3. Every colour is a theme token; every user string is `Content`.
 4. `python scripts/ci_local.py --full`.

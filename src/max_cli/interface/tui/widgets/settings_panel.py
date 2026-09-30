@@ -21,6 +21,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from max_cli.common.utils import format_size
@@ -512,7 +513,21 @@ class SettingsPanel(Vertical):
             ),
             "undo": len(TransactionLog.list_groups()),
         }
-        self.app.call_from_thread(self._show_upkeep, facts)
+        self.app.call_from_thread(self._from_worker, self._show_upkeep, facts)
+
+    def _from_worker(self, show: Callable[..., None], *args: Any) -> None:
+        """Show a worker's result, unless the page is closing.
+
+        A thread worker can finish after the app starts shutting down; the
+        widgets it updates are gone by then, and the NoMatches failed the
+        worker and a test with it.
+        """
+        if not self.is_attached:
+            return
+        try:
+            show(*args)
+        except NoMatches:
+            return  # the page's widgets were already removed
 
     def _show_upkeep(self, facts: dict[str, Any]) -> None:
         def line(title: str, *parts: tuple[str, str]) -> Content:

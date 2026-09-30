@@ -1,10 +1,11 @@
 """Shared FFmpeg plumbing for the video, audio and stream engines."""
 
+import json
 import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from max_cli.common.ffmpeg_resolver import ConfirmDownload, DownloadProgress
@@ -62,17 +63,56 @@ class FFmpegEngine:
             error_msg = e.stderr.decode().strip()
             raise RuntimeError(f"FFmpeg Error: {error_msg}") from e
 
+    def _ffprobe_path(self) -> Path:
+        """ffprobe next to ffmpeg, else the one on PATH."""
+        ffprobe_path = self.ffmpeg_path.with_name("ffprobe" + self.ffmpeg_path.suffix)
+        if not ffprobe_path.is_file():
+            ffprobe_path = Path(shutil.which("ffprobe") or ffprobe_path)
+        return ffprobe_path
+
+    def probe_media(self, input_path: Path) -> dict[str, Any]:
+        """ffprobe's description of a file: its `format` and its `streams`.
+
+        Raises RuntimeError when ffprobe can't run or can't read the file.
+        """
+        cmd = [
+            str(self._ffprobe_path()),
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-of",
+            "json",
+            str(input_path),
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=FFPROBE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError(f"ffprobe couldn't run: {exc}") from exc
+        if result.returncode != 0:
+            raise RuntimeError(
+                (result.stderr or "ffprobe couldn't read the file").strip()
+            )
+        try:
+            return json.loads(result.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("ffprobe gave an answer Max couldn't read") from exc
+
     def _get_duration(self, input_path: Path) -> Optional[float]:
         """Media duration in seconds, or None when ffprobe cannot tell.
 
         Duration only drives progress reporting, so a missing ffprobe must not
         fail the operation; it is logged instead of silently returning 0.0.
         """
-        ffprobe_path = self.ffmpeg_path.with_name("ffprobe" + self.ffmpeg_path.suffix)
-        if not ffprobe_path.is_file():
-            ffprobe_path = Path(shutil.which("ffprobe") or ffprobe_path)
         cmd = [
-            str(ffprobe_path),
+            str(self._ffprobe_path()),
             "-v",
             "error",
             "-show_entries",

@@ -33,6 +33,7 @@ from max_cli.interface.tui.widgets.charts import (
     Meter,
     Spark,
 )
+from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
 HISTORY_SAMPLES = 60  # 2 minutes of gauge history at one sample per refresh
 ACTIVITY_DAYS = 14
@@ -49,11 +50,12 @@ CATEGORY_LOOK = {
     "ai": ("AI", "$secondary"),
     "task": ("Queue", "$success"),
 }
+# (page id, label). Each button shows the page's number key.
 QUICK_LAUNCH = [
-    ("download", "2", "Download"),
-    ("tools", "3", "Tools"),
-    ("files", "4", "Files"),
-    ("chat", "5", "Ask AI"),
+    ("download", "Download"),
+    ("video", "Video"),
+    ("tools", "Tools"),
+    ("chat", "Ask AI"),
 ]
 
 
@@ -303,7 +305,8 @@ class HomePanel(Vertical):
                 yield Static("", id="home-success")
         with Grid(id="home-bottom"):
             with Vertical(id="home-launch-card", classes="home-card"):
-                for section_id, key, label in QUICK_LAUNCH:
+                for section_id, label in QUICK_LAUNCH:
+                    key = SECTION_KEYS[section_id]
                     yield Button(
                         Content.assemble((f" {key} ", "bold $primary"), f"  {label}"),
                         id=f"launch-{section_id}",
@@ -440,7 +443,8 @@ class HomePanel(Vertical):
             Content("\n").join(lines)
             if lines
             else Content.styled(
-                "Nothing yet. Press 2 to download something.", "$text-muted"
+                f"Nothing yet. Press {SECTION_KEYS['download']} to download something.",
+                "$text-muted",
             )
         )
         self.query_one("#home-recent", Static).update(text)
