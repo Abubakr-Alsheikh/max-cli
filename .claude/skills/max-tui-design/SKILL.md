@@ -109,6 +109,7 @@ Set titles in `on_mount`: `self.query_one("#my-card").border_title = "QUEUE"`.
 | Facts about one thing | lines of `key` (muted, fixed width) and value | `download_panel.media_facts`; skip facts the source left out |
 | A few options in a card | `ActionForm(action, include=..., compact=True)` | Two fields a row, checkboxes, help as tooltips |
 | A button inside a list row | one line high: `height: 1; border: none` on a row class | `DownloadRow`; three-line buttons made rows twice as tall |
+| A setting | caption above a control that fits it: `Select` for choices, `Checkbox` for on/off, a password `Input` with Show for secrets, `Input` + Change... for folders | `settings_panel.py` |
 | A link to another page | `self.post_message(messages.OpenPage("queue"))` | The app navigates |
 
 Separate facts on one line with `  ·  `. Label cards and headings in UPPERCASE; write sentences in normal case.
@@ -148,7 +149,7 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 
 ## Keyboard
 
-- Pages are `1`-`9`, `0` (`sidebar.SECTION_KEYS`); `J` Jobs; `?` help; `Esc` back to the sidebar.
+- Pages are `1`-`8` (`sidebar.SECTION_KEYS`); `J` Jobs; `?` help; `Esc` back to the sidebar.
 - The field a page is for gets focus when it shows (`on_show`).
 - Every action has a key or a button; the footer shows a page's keys.
 - New global keys go in the app's `BINDINGS` and in `GLOBAL_KEYS` (the help screen).

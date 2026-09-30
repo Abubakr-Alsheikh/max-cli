@@ -11,10 +11,7 @@ from max_cli.interface.tui.widgets.sidebar import Sidebar
 
 @pytest.fixture
 def mock_manager():
-    with (
-        patch("max_cli.interface.tui.widgets.queue_panel.get_task_manager") as mock_q,
-        patch("max_cli.interface.tui.widgets.system_panel.get_task_manager") as mock_s,
-    ):
+    with patch("max_cli.interface.tui.widgets.queue_panel.get_task_manager") as mock_q:
         manager = MagicMock()
         manager.get_all.return_value = []
         manager.get_stats.return_value = {
@@ -28,7 +25,6 @@ def mock_manager():
         manager.get_history.return_value = []
         manager.get.return_value = None
         mock_q.return_value = manager
-        mock_s.return_value = manager
         yield manager
 
 

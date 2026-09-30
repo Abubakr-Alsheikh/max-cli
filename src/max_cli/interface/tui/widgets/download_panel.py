@@ -1582,5 +1582,5 @@ class DownloadPanel(Vertical):
 
     @on(Button.Pressed, "#btn-goto-queue, #btn-goto-config")
     def _on_goto(self, event: Button.Pressed) -> None:
-        page = "queue" if event.button.id == "btn-goto-queue" else "config"
+        page = "queue" if event.button.id == "btn-goto-queue" else "settings"
         self.post_message(OpenPage(page))

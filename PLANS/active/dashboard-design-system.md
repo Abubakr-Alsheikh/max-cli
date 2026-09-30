@@ -112,7 +112,11 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 
 ### R4: The other pages
 - [x] Queue (2026-09-30): tiles for running, waiting, done today and failed today; NOW RUNNING, UP NEXT and FINISHED lists with pause, resume, cancel, retry, run again and open folder; Pause all, Resume all, Clear waiting (asks first). Replaces a bare table whose buttons acted on the table cursor.
-- [ ] History, Files, Tools, Analytics (`textual-plotext` charts), Config, System, Chat, using the same rules.
+- [x] Pages review (maintainer, 2026-09-30): 10 pages became 8. Analytics went (Home shows the same numbers); Config and System became one Settings page (2026-09-30).
+  - Settings shows only settings some code reads, with fitting controls, saves only changed keys, applies them at once, and flags a local `.env` that overrides them. Maintenance: versions, FFmpeg, data size, cache and 30-day undo cleanup, reset; each asks first.
+  - Nine settings nothing reads (`APP_NAME`, `BATCH_SIZE`, `CONFIRM_DESTRUCTIVE`, `DOWNLOAD_TIMEOUT`, `GRAB_AUDIO_FORMAT`, `GRAB_QUEUE_ENABLED`, `MAX_RETRIES`, `PROGRESS_BAR`, `VERBOSE`) are left off the page. Decide later whether to delete them from `config.py` or make them work.
+- [ ] History becomes Activity: readable times, where the output went, Run again, and Undo for file changes.
+- [ ] Tools, then Files as "start from a file" (actions that fit the picked file's type), then Chat with the AI agent.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.
 
 ## The Max TUI rules (draft for R1; the maintained version is the `max-tui-design` skill)

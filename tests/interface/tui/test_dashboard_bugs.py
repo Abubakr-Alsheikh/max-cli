@@ -9,30 +9,6 @@ from textual.widgets import DataTable, Input
 
 
 @pytest.mark.asyncio
-async def test_config_search_filters_rows_and_clearing_restores_them():
-    """Typing in the search box used to raise AttributeError (Label.renderable)."""
-    from max_cli.interface.tui.widgets.config_panel import ConfigPanel
-
-    class TestApp(App):
-        def compose(self) -> ComposeResult:
-            yield ConfigPanel()
-
-    async with TestApp().run_test() as pilot:
-        search = pilot.app.query_one("#config-search", Input)
-        rows = list(pilot.app.query(".config-row"))
-        assert rows
-
-        search.value = "grab_quality"
-        await pilot.pause()
-        shown = [row.name for row in rows if row.display]
-        assert shown == ["GRAB_QUALITY"]
-
-        search.value = ""
-        await pilot.pause()
-        assert all(row.display for row in rows)
-
-
-@pytest.mark.asyncio
 async def test_files_filter_hides_rows_that_do_not_match(tmp_path):
     """The filter set Row.visible, which Textual ignores, so nothing changed."""
     from max_cli.interface.tui.widgets.files_panel import FilesPanel
@@ -59,15 +35,6 @@ async def test_files_filter_hides_rows_that_do_not_match(tmp_path):
         pilot.app.query_one("#files-filter", Input).value = ""
         await pilot.pause()
         assert table.row_count == 3
-
-
-def test_config_sections_name_real_settings_fields():
-    """The sections listed OPENAI_MODEL, YTDLP_FORMAT and others that don't exist."""
-    from max_cli.config import Settings
-    from max_cli.interface.tui.widgets.config_panel import CONFIG_SECTIONS
-
-    listed = [name for names in CONFIG_SECTIONS.values() for name in names]
-    assert set(listed) <= set(Settings.model_fields)
 
 
 def test_grab_activity_counts_as_download():
@@ -138,9 +105,7 @@ DASHBOARD_SECTIONS = [
     "history",
     "files",
     "tools",
-    "analytics",
-    "config",
-    "system",
+    "settings",
     "chat",
 ]
 
