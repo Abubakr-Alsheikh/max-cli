@@ -326,3 +326,126 @@ class TestTokenHelperTimeout:
         with patch("yt_dlp.YoutubeDL", side_effect=_fake_ydl([], run)):
             with pytest.raises(RuntimeError, match="token helper"):
                 NetworkEngine().download_media(VIDEO_URL, tmp_path)
+
+
+RICH_INFO = {
+    **VIDEO_INFO,
+    "webpage_url_domain": "www.youtube.com",
+    "upload_date": "20240501",
+    "view_count": 1_234_567,
+    "like_count": 34_500,
+    "subtitles": {"en": [], "ar": [], "live_chat": []},
+    "automatic_captions": {"en": []},
+    "chapters": [{"title": "Intro"}, {"title": "Main"}],
+    "live_status": "not_live",
+    "formats": [
+        *VIDEO_INFO["formats"],
+        {
+            "format_id": "299",
+            "vcodec": "avc1",
+            "acodec": "none",
+            "height": 1080,
+            "fps": 60,
+            "tbr": 6000,
+            "filesize": 120_000_000,
+        },
+    ],
+}
+
+
+class TestProbeDetails:
+    def test_video_details_for_the_preview(self):
+        engine = MagicMock()
+        engine.probe_info.return_value = RICH_INFO
+
+        media = grab.probe(VIDEO_URL, engine=engine)
+
+        assert media.site == "youtube.com"
+        assert media.upload_date == "2024-05-01"
+        assert (media.view_count, media.like_count) == (1_234_567, 34_500)
+        # yt-dlp lists the live chat replay as a subtitle track.
+        assert media.subtitle_languages == ["ar", "en"]
+        assert media.has_auto_captions
+        assert media.chapter_count == 2
+        assert not media.is_live
+        assert (media.audio_codec, media.audio_bitrate) == ("mp4a", 128)
+        # The 60 fps stream has the highest bitrate at 1080p.
+        assert media.qualities[0].label == "1080p60"
+
+    def test_missing_details_stay_empty(self):
+        engine = MagicMock()
+        engine.probe_info.return_value = {"title": "Bare", "formats": []}
+
+        media = grab.probe("https://example.com/v", engine=engine)
+
+        assert media.site == "example.com"
+        assert (media.upload_date, media.view_count, media.chapter_count) == (
+            "",
+            None,
+            0,
+        )
+        assert media.subtitle_languages == []
+
+    def test_playlist_length_adds_up_its_items(self):
+        engine = MagicMock()
+        engine.probe_info.return_value = PLAYLIST_INFO
+
+        media = grab.probe("https://youtube.com/playlist?list=PL1", engine=engine)
+
+        assert media.total_duration == 192 + 245
+
+
+class TestYoutubeFix:
+    def _engine(self, available):
+        engine = MagicMock()
+        engine.pot_provider_available.side_effect = available
+        engine.install_pot_provider.return_value = {"ok": True, "output": ""}
+        engine.setup_pot_server.return_value = {"ok": True, "output": ""}
+        return engine
+
+    def test_status(self):
+        engine = self._engine([True])
+        with patch("shutil.which", return_value=None):
+            status = grab.youtube_fix_status(engine=engine)
+
+        assert status == grab.YoutubeFixStatus(installed=True, deno_found=False)
+
+    def test_needs_deno(self):
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(ValidationError, match="Deno"):
+                grab.install_youtube_fix(engine=self._engine([False]))
+
+    def test_already_installed_does_nothing(self):
+        engine = self._engine([True])
+        with patch("shutil.which", return_value="deno"):
+            result = grab.install_youtube_fix(engine=engine)
+
+        assert result.ok and "already" in result.message
+        engine.install_pot_provider.assert_not_called()
+
+    def test_installs_plugin_then_server(self):
+        engine = self._engine([False, True])
+        with patch("shutil.which", return_value="deno"):
+            result = grab.install_youtube_fix(engine=engine)
+
+        assert result.ok
+        engine.install_pot_provider.assert_called_once()
+        engine.setup_pot_server.assert_called_once()
+
+    def test_a_failed_step_says_which(self):
+        from max_cli.common.exceptions import ProcessingError
+
+        engine = self._engine([False])
+        engine.install_pot_provider.return_value = {"ok": False, "output": "no pip"}
+        with patch("shutil.which", return_value="deno"):
+            with pytest.raises(ProcessingError, match="yt-dlp plugin failed:\nno pip"):
+                grab.install_youtube_fix(engine=engine)
+        engine.setup_pot_server.assert_not_called()
+
+    def test_provider_not_seen_after_install(self):
+        from max_cli.common.exceptions import ProcessingError
+
+        engine = self._engine([False, False])
+        with patch("shutil.which", return_value="deno"):
+            with pytest.raises(ProcessingError, match="Restart max"):
+                grab.install_youtube_fix(engine=engine)

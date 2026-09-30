@@ -104,6 +104,11 @@ Set titles in `on_mount`: `self.query_one("#my-card").border_title = "QUEUE"`.
 | A list of jobs or events | rows with a coloured left edge (`border-left: outer <state colour>`) | See `DownloadRow`; align columns with fixed widths |
 | Status lights | `● LABEL` in `$success` or `$text-muted` | Home header |
 | Long tables | `DataTable` filled through `tables.show_rows` | Keeps cursor and scroll |
+| A long list inside a scrolling page | a page of rows (8) with a filter `Input` and `< Prev` / `Next >` | Download History; never an inner scroll area |
+| Facts about one thing | lines of `key` (muted, fixed width) and value | `download_panel.media_facts`; skip facts the source left out |
+| A few options in a card | `ActionForm(action, include=..., compact=True)` | Two fields a row, checkboxes, help as tooltips |
+| A button inside a list row | one line high: `height: 1; border: none` on a row class | `DownloadRow`; three-line buttons made rows twice as tall |
+| A link to another page | `self.post_message(messages.OpenPage("queue"))` | The app navigates |
 
 Separate facts on one line with `  ·  `. Label cards and headings in UPPERCASE; write sentences in normal case.
 
@@ -130,7 +135,8 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 ## CSS pitfalls (each one cost a fix)
 
 - A widget's `DEFAULT_CSS` is scoped to that widget: a rule starting at a parent (`Sidebar.-compact NavItem`) never matches there. Put rules that depend on a parent's state in the parent's CSS.
-- The app's `CSS` beats every widget's `DEFAULT_CSS`, whatever the selector. A global rule like `Button { min-width: 12 }` needs its exceptions in the app CSS too.
+- The app's `CSS` beats every widget's `DEFAULT_CSS`, whatever the selector. A global rule like `Button { min-width: 12 }` needs its exceptions in the app CSS too. The app's `DataTable { height: 1fr; min-height: 8 }` made the Download history 35 rows tall; `#download-history-table` has its exception there.
+- In a narrow column, put a field's caption above it (`.field-caption`), not beside it: a label column cut the quality buttons' sizes off.
 - Set `padding` as a whole (`padding: 0 2 0 1`). A lone `padding-left` reset the other sides.
 - `content-align` doesn't move text a widget draws in `render()`; centre it there.
 - `$text-muted` isn't allowed as a border colour; use `$border`.

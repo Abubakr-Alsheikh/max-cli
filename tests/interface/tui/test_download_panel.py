@@ -6,7 +6,14 @@ from unittest.mock import patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Button, DataTable, Input, SelectionList, Static
+from textual.widgets import (
+    Button,
+    DataTable,
+    Input,
+    SelectionList,
+    Static,
+    TabbedContent,
+)
 
 from max_cli.common.exceptions import OperationCancelled
 from max_cli.core.engines.download_history import DownloadHistory
@@ -29,6 +36,9 @@ URL = "https://www.youtube.com/watch?v=abc"
 DOWNLOAD = "max_cli.core.operations.grab.download"
 PROBE = "max_cli.core.operations.grab.probe"
 OK = ActionResult(True, "Downloaded: Trailer", [])
+# Waiting for a state change: up to 100 x 0.05 s, for runs under load.
+POLL_ATTEMPTS = 100
+POLL_SECONDS = 0.05
 
 VIDEO = MediaInfo(
     url=URL,
@@ -64,6 +74,10 @@ def quiet_page(monkeypatch):
     monkeypatch.setattr(download_panel, "AUTO_CHECK_SECONDS", 3600)
     monkeypatch.setattr(settings, "GRAB_DEFAULT_TYPE", "video")
     monkeypatch.setattr(settings, "GRAB_QUALITY", "h")
+    # The real check imports yt-dlp and asks about its plugins.
+    monkeypatch.setattr(
+        grab, "youtube_fix_status", lambda **_: grab.YoutubeFixStatus(True, True)
+    )
     grab._probe_cache.clear()
     yield
     grab._probe_cache.clear()
@@ -285,7 +299,7 @@ async def test_audio_format_offers_bitrates():
             app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
 
-    assert chips[0] == "Best · 320 kbps"
+    assert chips[0] == "320 kbps"
     kwargs = download.call_args.kwargs
     assert (kwargs["media_type"], kwargs["quality"]) == ("audio", "h")
     assert load_prefs()["download_format"] == "audio"
@@ -539,3 +553,319 @@ async def test_progress_updates_leave_the_tabs_alone():
             release.set()
             await _settle(app, pilot)
             assert str(tab.label) == "Downloads"
+
+
+# --- richer preview ----------------------------------------------------------
+
+RICH_VIDEO = MediaInfo(
+    url=URL,
+    title="Trailer",
+    uploader="Studio",
+    duration=151,
+    qualities=[QualityOption(1080, 82_000_000, fps=60), QualityOption(720, None)],
+    audio_size_bytes=2_000_000,
+    audio_codec="opus",
+    audio_bitrate=131,
+    site="youtube.com",
+    upload_date="2024-05-01",
+    view_count=1_234_567,
+    like_count=34_500,
+    subtitle_languages=["ar", "de", "en", "es", "fr", "ja"],
+    has_auto_captions=True,
+    chapter_count=12,
+)
+
+
+def test_media_facts_lists_what_the_site_says():
+    facts = download_panel.media_facts(RICH_VIDEO).plain
+
+    for expected in (
+        "Studio",
+        "2:31",
+        "12 chapters",
+        "1.2M views",
+        "34K likes",
+        "2024-05-01",
+        "up to 1080p60",
+        "opus",
+        "131 kbps",
+        "ar, de, en, es +2 more",
+        "auto captions",
+        "youtube.com",
+    ):
+        assert expected in facts
+
+
+def test_media_facts_skips_what_the_site_left_out():
+    facts = download_panel.media_facts(VIDEO).plain
+
+    assert "Stats" not in facts and "Subtitles" not in facts
+
+
+def test_media_facts_for_a_playlist_counts_items_and_length():
+    playlist = MediaInfo(
+        url=URL,
+        title="Mix",
+        is_playlist=True,
+        entries=[PlaylistEntry(1, "a", "u1", 60), PlaylistEntry(2, "b", "u2", 125)],
+    )
+
+    assert "2 videos  ·  3:05 in all" in download_panel.media_facts(playlist).plain
+
+
+@pytest.mark.asyncio
+async def test_audio_chips_show_the_mp3_size_of_a_checked_video():
+    app = PanelApp()
+    with patch(PROBE, return_value=RICH_VIDEO):
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _check(app, pilot)
+            app.query_one("#fmt-audio", Button).press()
+            await _settle(app, pilot)
+            chips = _chips(app)
+            button = str(app.query_one("#btn-download", Button).label)
+
+    # 192 kbps for 151 s is 3.6 million bytes.
+    assert "192 kbps · 3.5 MB" in chips
+    assert button == "⬇ Download MP3 192 kbps · 3.5 MB"
+
+
+# --- advanced options ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_advanced_options_are_compact_and_reach_the_download():
+    from textual.widgets import Checkbox
+
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK) as download:
+        async with app.run_test(size=(140, 60)) as pilot:
+            app.query_one("#mode-advanced", Button).press()
+            await _settle(app, pilot)
+            height = app.query_one("#dl-advanced").outer_size.height
+            app.query_one("#field-subtitles", Checkbox).value = True
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+
+    # Two fields and four checkboxes. It was 30 rows: one field per 5 rows.
+    assert height <= 12
+    assert download.call_args.kwargs["subtitles"] is True
+
+
+# --- transfers ---------------------------------------------------------------
+
+
+def _record_history(count: int) -> None:
+    for number in range(count):
+        DownloadHistory().record_download(
+            url=f"{URL}{number}",
+            title=f"Video {number}" if number % 2 else f"Song {number}",
+            output_files=[],
+            settings_used={"audio_only": number % 2 == 0, "quality": "h"},
+        )
+
+
+def _history_titles(app: App) -> list[str]:
+    table = app.query_one("#download-history-table", DataTable)
+    return [str(table.get_row_at(row)[1]) for row in range(table.row_count)]
+
+
+@pytest.mark.asyncio
+async def test_history_shows_a_page_at_a_time_without_its_own_scrollbar():
+    _record_history(20)
+    app = PanelApp()
+    async with app.run_test(size=(140, 60)) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#dl-tabs", TabbedContent).active = "tab-history"
+        await _settle(app, pilot)
+        table = app.query_one("#download-history-table", DataTable)
+        first_page = _history_titles(app)
+        no_inner_scroll = table.max_scroll_y == 0
+        app.query_one("#btn-history-next", Button).press()
+        await _settle(app, pilot)
+        second_page = _history_titles(app)
+        page_label = _text(app, "#dl-history-page")
+        app.query_one("#btn-history-next", Button).press()
+        await _settle(app, pilot)
+        last_page = _history_titles(app)
+        next_disabled = app.query_one("#btn-history-next", Button).disabled
+
+    assert len(first_page) == len(second_page) == download_panel.HISTORY_PAGE_ROWS
+    assert first_page[0] == "Video 19"  # newest first
+    assert not set(first_page) & set(second_page)
+    assert page_label == "2 of 3"
+    assert len(last_page) == 4 and next_disabled
+    assert no_inner_scroll
+
+
+@pytest.mark.asyncio
+async def test_history_filter_narrows_the_list():
+    _record_history(6)
+    app = PanelApp()
+    async with app.run_test(size=(140, 60)) as pilot:
+        app.query_one("#dl-history-filter", Input).value = "song"
+        await _settle(app, pilot)
+        titles = _history_titles(app)
+        app.query_one("#dl-history-filter", Input).value = "nothing like this"
+        await _settle(app, pilot)
+        empty = _text(app, "#dl-history-empty")
+        table_shown = app.query_one("#download-history-table").display
+
+    assert titles == ["Song 4", "Song 2", "Song 0"]
+    assert empty == "Nothing matches the filter."
+    assert not table_shown
+
+
+def test_history_kind_names_the_format():
+    assert download_panel.history_kind({"audio_only": True}) == "Audio MP3"
+    assert download_panel.history_kind({"quality": "m"}) == "Video 720p"
+    assert download_panel.history_kind({"custom_height": 1440}) == "Video 1440p"
+
+
+@pytest.mark.asyncio
+async def test_clear_finished_removes_only_finished_rows():
+    release = threading.Event()
+
+    def download(**kwargs):
+        if kwargs["url"].endswith("slow"):
+            release.wait(5)
+        return OK
+
+    app = PanelApp()
+    with patch(DOWNLOAD, side_effect=download):
+        async with app.run_test(size=(140, 60)) as pilot:
+            app.query_one("#dl-url", Input).value = f"{URL} {URL}slow"
+            app.query_one("#btn-download", Button).press()
+            panel = app.query_one(DownloadPanel)
+            # Wait for states, not a fixed time: the suite runs under load.
+            for _ in range(POLL_ATTEMPTS):
+                await pilot.pause(POLL_SECONDS)
+                if panel._jobs[1].finished and app.query_one("#dl-jobs-bar").display:
+                    break
+            app.query_one("#btn-clear-finished", Button).press()
+            for _ in range(POLL_ATTEMPTS):
+                await pilot.pause(POLL_SECONDS)
+                if len(app.query(DownloadRow)) == 1:
+                    break
+            left = [row.job.url for row in app.query(DownloadRow)]
+            bar_shown = app.query_one("#dl-jobs-bar").display
+            release.set()
+            await _settle(app, pilot)
+
+    assert left == [f"{URL}slow"]
+    assert not bar_shown
+
+
+# --- tools -------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stats_sum_up_the_history():
+    _record_history(3)
+    app = PanelApp()
+    async with app.run_test(size=(140, 60)):
+        stats = _text(app, "#dl-stats")
+
+    assert "3 downloads" in stats and "1 site" in stats
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "installed, deno, button_shown, text",
+    [
+        (True, True, False, "installed"),
+        (False, True, True, "not installed"),
+        (False, False, False, "needs Deno"),
+    ],
+)
+async def test_youtube_fix_status(monkeypatch, installed, deno, button_shown, text):
+    monkeypatch.setattr(
+        grab, "youtube_fix_status", lambda **_: grab.YoutubeFixStatus(installed, deno)
+    )
+    app = PanelApp()
+    async with app.run_test(size=(140, 60)) as pilot:
+        await _settle(app, pilot)
+        status = _text(app, "#dl-fix-status")
+        shown = app.query_one("#btn-youtube-fix").display
+
+    assert text in status
+    assert shown == button_shown
+
+
+@pytest.mark.asyncio
+async def test_installing_the_youtube_fix_asks_first(monkeypatch):
+    states = iter(
+        [grab.YoutubeFixStatus(False, True), grab.YoutubeFixStatus(True, True)]
+    )
+    monkeypatch.setattr(grab, "youtube_fix_status", lambda **_: next(states))
+    app = PanelApp()
+    with patch.object(
+        grab, "install_youtube_fix", return_value=ActionResult(True, "Installed.")
+    ) as install:
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _settle(app, pilot)
+            app.query_one("#btn-youtube-fix", Button).press()
+            await _settle(app, pilot)
+            assert isinstance(app.screen, ConfirmDialog)
+            app.screen.query_one("#confirm-yes", Button).press()
+            await _settle(app, pilot)
+            status = _text(app, "#dl-fix-status")
+
+    install.assert_called_once()
+    assert "installed" in status and "not" not in status
+
+
+@pytest.mark.asyncio
+async def test_tool_buttons_open_other_pages():
+    from max_cli.interface.tui.messages import OpenPage
+
+    opened: list[str] = []
+
+    class RecordingApp(PanelApp):
+        def on_open_page(self, message: OpenPage) -> None:
+            opened.append(message.section_id)
+
+    app = RecordingApp()
+    async with app.run_test(size=(140, 60)) as pilot:
+        app.query_one("#btn-goto-queue", Button).press()
+        app.query_one("#btn-goto-config", Button).press()
+        await _settle(app, pilot)
+
+    assert opened == ["queue", "config"]
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_download_points_at_the_youtube_fix():
+    job = download_panel.DownloadJob(1, URL, {}, "Trailer")
+
+    class RowApp(App):
+        def compose(self) -> ComposeResult:
+            yield DownloadRow(job)
+
+    app = RowApp()
+    async with app.run_test():
+        row = app.query_one(DownloadRow)
+        row.set_failed("HTTP Error 403: Forbidden")
+        info = _row_info(row)
+
+    assert "YouTube fix" in info
+
+
+@pytest.mark.asyncio
+async def test_in_the_dashboard_history_never_scrolls_inside_the_page():
+    """The app's DataTable rule (height 1fr, min-height 8) made the history a
+    tall scroll area inside the scrolling page."""
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    _record_history(20)
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.navigate("download")
+        await pilot.pause()
+        app.query_one("#dl-tabs", TabbedContent).active = "tab-history"
+        await _settle(app, pilot)
+        table = app.query_one("#download-history-table", DataTable)
+        rows_high, max_scroll = table.outer_size.height, table.max_scroll_y
+
+    assert max_scroll == 0
+    assert rows_high == download_panel.HISTORY_PAGE_ROWS + 1  # plus the header

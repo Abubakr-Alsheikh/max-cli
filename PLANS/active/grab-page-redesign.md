@@ -47,6 +47,8 @@ Chosen for the first round:
 
 ### Download page layout
 
+The second round (2026-09-30) moved Advanced beside the preview, paged the history and added a TOOLS card; `dashboard-design-system.md` (R3) lists the changes.
+
 ```
 +--------------------------------------------------------------+
 | Download                              ( Simple | Advanced )  |

@@ -11,10 +11,19 @@ from typing import Any, Literal, Optional
 
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
 from textual.widget import Widget
-from textual.widgets import Button, Collapsible, Input, Label, Select, Static, Switch
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Collapsible,
+    Input,
+    Label,
+    Select,
+    Static,
+    Switch,
+)
 
 from max_cli.common.exceptions import MaxError
 from max_cli.core.catalog.spec import (
@@ -93,6 +102,36 @@ class ActionForm(Vertical):
     ActionForm .form-status {
         margin-top: 1;
     }
+    ActionForm .form-grid, ActionForm .form-toggles {
+        grid-size: 2;
+        grid-gutter: 0 2;
+        grid-rows: auto;
+        height: auto;
+    }
+    ActionForm .form-grid .form-field {
+        margin-top: 0;
+    }
+    ActionForm .form-toggles {
+        margin-top: 1;
+    }
+    ActionForm .form-toggles Checkbox {
+        width: 1fr;
+        border: none;
+        padding: 0;
+        background: transparent;
+    }
+    ActionForm .form-toggles Checkbox:focus {
+        text-style: bold;
+        color: $accent;
+    }
+    ActionForm .form-toggles Checkbox > .toggle--button {
+        color: $border;
+        background: $boost;
+    }
+    ActionForm .form-toggles Checkbox.-on > .toggle--button {
+        color: $success;
+        background: $boost;
+    }
     """
 
     def __init__(
@@ -100,22 +139,29 @@ class ActionForm(Vertical):
         action: Action,
         include: Optional[Collection[str]] = None,
         embedded: bool = False,
+        compact: bool = False,
         **kwargs: Any,
     ) -> None:
         """`include` limits the form to those parameters, in the catalog's order.
 
         An `embedded` form has no title and no buttons: a page places it
-        inside its own layout and reads `values()` itself.
+        inside its own layout and reads `values()` itself. A `compact` form is
+        embedded and fits in a few rows: fields two to a row, on/off options
+        as checkboxes beside their names, and each help text in a tooltip.
         """
         super().__init__(**kwargs)
         self.action = action
-        self.embedded = embedded
+        self.embedded = embedded or compact
+        self.compact = compact
         self.params = tuple(
             param for param in action.params if include is None or param.name in include
         )
 
     def compose(self) -> ComposeResult:
         action = self.action
+        if self.compact:
+            yield from self._compact_fields()
+            return
         if self.embedded:
             for param in self.params:
                 yield self._field(param)
@@ -141,6 +187,30 @@ class ActionForm(Vertical):
             if action.queueable:
                 yield Button("Add to queue", id="form-queue", variant="primary")
         yield Static("", id="form-status", classes="form-status")
+
+    def _compact_fields(self) -> ComposeResult:
+        toggles = [param for param in self.params if param.kind == ParamKind.BOOL]
+        others = [param for param in self.params if param.kind != ParamKind.BOOL]
+        if others:
+            fields = []
+            for param in others:
+                field = Vertical(
+                    Label(_field_label(param)), self._input(param), classes="form-field"
+                )
+                field.tooltip = param.help
+                fields.append(field)
+            yield Grid(*fields, classes="form-grid")
+        if toggles:
+            boxes = []
+            for param in toggles:
+                box = Checkbox(
+                    _field_label(param),
+                    value=param.resolved_default() is True,
+                    id=f"field-{param.name}",
+                )
+                box.tooltip = param.help
+                boxes.append(box)
+            yield Grid(*boxes, classes="form-toggles")
 
     def _field(self, param: Param) -> Vertical:
         return Vertical(
@@ -191,7 +261,7 @@ class ActionForm(Vertical):
         values: dict[str, Any] = {}
         for param in self.params:
             widget = self.query_one(f"#field-{param.name}")
-            if isinstance(widget, Switch):
+            if isinstance(widget, (Switch, Checkbox)):
                 values[param.name] = widget.value
             elif isinstance(widget, Select):
                 values[param.name] = None if widget.is_blank() else widget.value
@@ -204,7 +274,7 @@ class ActionForm(Vertical):
         widget = self.query_one(f"#field-{name}")
         if isinstance(widget, Input):
             widget.value = str(value)
-        elif isinstance(widget, Switch):
+        elif isinstance(widget, (Switch, Checkbox)):
             widget.value = bool(value)
         elif isinstance(widget, Select):
             widget.value = value

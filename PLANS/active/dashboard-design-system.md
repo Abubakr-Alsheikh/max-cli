@@ -91,6 +91,12 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - A LINK card holds the link and Save to, full width, so paths aren't cut.
   - PREVIEW and OUTPUT cards side by side, then ADVANCED and TRANSFERS.
   - Download rows get a state-coloured left edge and a `charts.Meter` instead of Textual's ProgressBar.
+- [x] Download, second round (maintainer's feedback, 2026-09-30):
+  - Advanced options were one field per five rows; now a compact card beside the preview (`ActionForm(compact=True)`).
+  - History was a 35-row scroll area inside the page (the app's `DataTable` rule); now 8 rows a page with a filter, Prev/Next, and Copy link.
+  - The preview shows views, likes, upload date, chapters, subtitles, the best audio stream, and MP3 sizes per bitrate.
+  - A TOOLS card brings the rest of `max grab` in: stats (`status`), the YouTube fix (`pot-setup`), and links to the folder, the queue and settings.
+  - Download rows are four lines: one-line buttons, and "Clear finished".
 - [ ] Mockups as screenshots for the maintainer's approval before building.
 - [ ] Then build, with empty, loading and error states for each section.
 - [ ] Path and URL autocomplete (`textual-autocomplete`).

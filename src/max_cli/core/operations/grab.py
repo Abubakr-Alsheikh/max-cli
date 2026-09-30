@@ -32,6 +32,10 @@ PLAYER_CLIENTS = (
 )
 MEDIA_TYPES = ("video", "audio")
 PROBE_CACHE_SIZE = 64
+# Above this frame rate the label says so: 1080p60.
+SMOOTH_FPS = 30
+# yt-dlp lists YouTube's live chat replay as a subtitle track.
+NOT_SUBTITLES = frozenset({"live_chat"})
 
 
 @dataclass
@@ -46,10 +50,12 @@ class PlaylistEntry:
 class QualityOption:
     height: int
     size_bytes: Optional[int]  # video plus best audio; None when the site doesn't say
+    fps: Optional[int] = None
 
     @property
     def label(self) -> str:
-        return "4K" if self.height >= 2160 else f"{self.height}p"
+        name = "4K" if self.height >= 2160 else f"{self.height}p"
+        return f"{name}{self.fps}" if self.fps and self.fps > SMOOTH_FPS else name
 
     @property
     def quality_code(self) -> Optional[str]:
@@ -66,6 +72,26 @@ class MediaInfo:
     entries: list[PlaylistEntry] = field(default_factory=list)
     qualities: list[QualityOption] = field(default_factory=list)
     audio_size_bytes: Optional[int] = None
+    audio_codec: str = ""
+    audio_bitrate: Optional[int] = None  # kbps of the best audio track
+    site: str = ""  # e.g. youtube.com
+    upload_date: str = ""  # 2024-05-01
+    view_count: Optional[int] = None
+    like_count: Optional[int] = None
+    subtitle_languages: list[str] = field(default_factory=list)
+    has_auto_captions: bool = False
+    chapter_count: int = 0
+    is_live: bool = False
+
+    @property
+    def total_duration(self) -> Optional[float]:
+        """A playlist's length when every item says how long it is."""
+        if not self.is_playlist:
+            return self.duration
+        durations = [entry.duration for entry in self.entries]
+        if not durations or None in durations:
+            return None
+        return float(sum(d for d in durations if d))
 
 
 _probe_cache: "OrderedDict[str, MediaInfo]" = OrderedDict()
@@ -85,16 +111,20 @@ def _size(fmt: dict[str, Any]) -> Optional[int]:
     return int(size) if size else None
 
 
-def _qualities(
-    formats: list[dict[str, Any]],
-) -> tuple[list[QualityOption], Optional[int]]:
-    """One option per video height (largest first), plus the best audio's size."""
+def _best_audio(formats: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     audio_only = [
         fmt
         for fmt in formats
         if fmt.get("vcodec") == "none" and fmt.get("acodec") not in (None, "none")
     ]
-    best_audio = max(audio_only, key=lambda fmt: fmt.get("abr") or 0, default=None)
+    return max(audio_only, key=lambda fmt: fmt.get("abr") or 0, default=None)
+
+
+def _qualities(
+    formats: list[dict[str, Any]],
+) -> tuple[list[QualityOption], Optional[int]]:
+    """One option per video height (largest first), plus the best audio's size."""
+    best_audio = _best_audio(formats)
     audio_size = _size(best_audio) if best_audio else None
 
     best_by_height: dict[int, dict[str, Any]] = {}
@@ -113,8 +143,30 @@ def _qualities(
         total = video_size
         if video_size is not None and not has_audio and audio_size is not None:
             total = video_size + audio_size
-        options.append(QualityOption(height=height, size_bytes=total))
+        fps = best_by_height[height].get("fps")
+        options.append(
+            QualityOption(
+                height=height, size_bytes=total, fps=round(fps) if fps else None
+            )
+        )
     return options, audio_size
+
+
+def _upload_date(raw: Any) -> str:
+    """yt-dlp's 20240501 as 2024-05-01."""
+    text = str(raw or "")
+    return f"{text[:4]}-{text[4:6]}-{text[6:8]}" if len(text) == 8 else ""
+
+
+def _site(url: str, info: dict[str, Any]) -> str:
+    from urllib.parse import urlparse
+
+    domain = info.get("webpage_url_domain") or urlparse(url).netloc
+    return str(domain).removeprefix("www.") if domain else ""
+
+
+def _count(value: Any) -> Optional[int]:
+    return int(value) if isinstance(value, (int, float)) else None
 
 
 def _media_info(url: str, info: dict[str, Any]) -> MediaInfo:
@@ -135,8 +187,13 @@ def _media_info(url: str, info: dict[str, Any]) -> MediaInfo:
             uploader=info.get("uploader") or info.get("channel") or "",
             is_playlist=True,
             entries=entries,
+            site=_site(url, info),
+            view_count=_count(info.get("view_count")),
         )
-    qualities, audio_size = _qualities(info.get("formats") or [])
+    formats = info.get("formats") or []
+    qualities, audio_size = _qualities(formats)
+    best_audio = _best_audio(formats) or {}
+    codec = str(best_audio.get("acodec") or "")
     return MediaInfo(
         url=url,
         title=info.get("title") or url,
@@ -144,6 +201,17 @@ def _media_info(url: str, info: dict[str, Any]) -> MediaInfo:
         duration=info.get("duration"),
         qualities=qualities,
         audio_size_bytes=audio_size,
+        # "mp4a.40.2" is AAC's full name; the part before the dot is enough.
+        audio_codec=codec.split(".")[0],
+        audio_bitrate=_count(best_audio.get("abr")),
+        site=_site(url, info),
+        upload_date=_upload_date(info.get("upload_date")),
+        view_count=_count(info.get("view_count")),
+        like_count=_count(info.get("like_count")),
+        subtitle_languages=sorted(set(info.get("subtitles") or {}) - NOT_SUBTITLES),
+        has_auto_captions=bool(info.get("automatic_captions")),
+        chapter_count=len(info.get("chapters") or []),
+        is_live=info.get("live_status") == "is_live",
     )
 
 
@@ -253,4 +321,61 @@ def download(
         message=f"Downloaded: {title}",
         output_files=files,
         details={"title": title, "url": url, "size_bytes": total_size},
+    )
+
+
+# --- the YouTube fix (`max grab pot-setup`) ----------------------------------
+
+INSTALL_OUTPUT_TAIL = 800
+DENO_HINT = "Install Deno first (winget install DenoLand.Deno), then restart max."
+
+
+@dataclass
+class YoutubeFixStatus:
+    """Whether the PO token provider that gets past YouTube's HTTP 403 is set up."""
+
+    installed: bool
+    deno_found: bool
+
+
+def youtube_fix_status(*, engine: Optional["NetworkEngine"] = None) -> YoutubeFixStatus:
+    import shutil
+
+    return YoutubeFixStatus(
+        installed=_engine(engine).pot_provider_available(),
+        deno_found=shutil.which("deno") is not None,
+    )
+
+
+def install_youtube_fix(*, engine: Optional["NetworkEngine"] = None) -> ActionResult:
+    """Install the bgutil PO token provider: a yt-dlp plugin plus its Deno server.
+
+    Takes minutes. The CLI's `max grab pot-setup` asks before each step; the
+    dashboard asks once before calling this.
+    """
+    import shutil
+
+    from max_cli.common.exceptions import ProcessingError
+
+    network = _engine(engine)
+    if not shutil.which("deno"):
+        raise ValidationError(DENO_HINT)
+    if network.pot_provider_available():
+        return ActionResult(True, "The YouTube fix is already installed.")
+    for step, run in (
+        ("Installing the yt-dlp plugin", network.install_pot_provider),
+        ("Setting up the token server", network.setup_pot_server),
+    ):
+        outcome = run()
+        if not outcome["ok"]:
+            raise ProcessingError(
+                f"{step} failed:\n{outcome['output'][-INSTALL_OUTPUT_TAIL:]}"
+            )
+    if not network.pot_provider_available():
+        raise ProcessingError(
+            "Installed, but yt-dlp doesn't see the provider yet. Restart max and "
+            "try again, or run `max grab pot-setup` in a terminal."
+        )
+    return ActionResult(
+        True, "YouTube fix installed. Blocked downloads should work now."
     )
