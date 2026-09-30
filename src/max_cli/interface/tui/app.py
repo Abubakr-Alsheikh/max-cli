@@ -7,6 +7,7 @@ from textual.containers import Container, Horizontal
 from textual.widget import Widget
 from textual.widgets import Footer
 
+from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
@@ -124,6 +125,13 @@ class MaxDashboardApp(App):
         height: 1fr;
         min-height: 8;
         border: solid $border;
+    }
+    /* The Download page pages its history instead of scrolling it; the rule
+       above would make it a tall inner scroll area. */
+    #download-history-table {
+        height: auto;
+        min-height: 0;
+        border: none;
     }
 
     Button {
@@ -554,5 +562,5 @@ class MaxDashboardApp(App):
         self.navigate("tools")
         self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
 
-    def on_home_panel_open_page(self, message: HomePanel.OpenPage) -> None:
+    def on_open_page(self, message: OpenPage) -> None:
         self.navigate(message.section_id)

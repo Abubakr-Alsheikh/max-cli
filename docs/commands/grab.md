@@ -47,7 +47,7 @@ If downloads fail with `HTTP Error 403: Forbidden`, YouTube is probably blocking
    ```bash
    max grab pot-setup
    ```
-   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies. After that, `max grab download` detects the provider and uses the `android` client with token fetching. You don't need extra flags. Pass `--yes` (`-y`) to skip the confirmations.
+   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies. After that, `max grab download` detects the provider and uses the `android` client with token fetching. You don't need extra flags. Pass `--yes` (`-y`) to skip the confirmations. In the dashboard, the Download page's Tools card shows whether the fix is installed and has an "Install fix" button.
 3. **Update yt-dlp** to the latest version:
    ```bash
    pip install -U yt-dlp

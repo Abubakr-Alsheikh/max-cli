@@ -39,6 +39,14 @@ The dashboard remembers whether you expanded the sidebar. In a window narrower t
 
 The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
+## Download page
+
+Paste a link and press `Enter`, or wait a moment: the page checks the link. While it checks, the Check button reads "Checking" and the preview shows a spinner with the seconds so far. Then it shows its title, channel, length, chapters, views, likes, upload date, the best video and audio streams, the subtitle languages and the site. Each quality button shows the size you'll get, and the Audio (MP3) buttons show the size at each bitrate.
+
+- **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
+- **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
+- **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Queue page and the settings.
+
 ## Jobs window
 
 Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on a Tools form.

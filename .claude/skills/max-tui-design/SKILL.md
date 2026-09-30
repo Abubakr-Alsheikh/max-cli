@@ -104,13 +104,18 @@ Set titles in `on_mount`: `self.query_one("#my-card").border_title = "QUEUE"`.
 | A list of jobs or events | rows with a coloured left edge (`border-left: outer <state colour>`) | See `DownloadRow`; align columns with fixed widths |
 | Status lights | `● LABEL` in `$success` or `$text-muted` | Home header |
 | Long tables | `DataTable` filled through `tables.show_rows` | Keeps cursor and scroll |
+| A long list inside a scrolling page | a page of rows (8) with a filter `Input` and `< Prev` / `Next >` | Download History; never an inner scroll area |
+| Facts about one thing | lines of `key` (muted, fixed width) and value | `download_panel.media_facts`; skip facts the source left out |
+| A few options in a card | `ActionForm(action, include=..., compact=True)` | Two fields a row, checkboxes, help as tooltips |
+| A button inside a list row | one line high: `height: 1; border: none` on a row class | `DownloadRow`; three-line buttons made rows twice as tall |
+| A link to another page | `self.post_message(messages.OpenPage("queue"))` | The app navigates |
 
 Separate facts on one line with `  ·  `. Label cards and headings in UPPERCASE; write sentences in normal case.
 
 ### States every section needs
 
 - **Empty:** one muted sentence that says what will appear and how to start ("Nothing yet. Press 2 to download something.").
-- **Loading:** set `widget.loading = True` or show "Checking the link..." in `$primary`.
+- **Loading:** disable the button that started the work and relabel it ("Checking"; keep the label within the button's width), and show a one-line spinner with the seconds so far, updated with `layout=False` (`DownloadPanel._start_checking`). Past a few seconds, say why it can take long. Stop it only for the answer to the latest request.
 - **Error:** the reason in `$error`, in plain words, and what to do next. Errors from a finished action also go to `self.notify(..., severity="error")`.
 
 ## Smoothness rules (these caused real flicker)
@@ -130,7 +135,8 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 ## CSS pitfalls (each one cost a fix)
 
 - A widget's `DEFAULT_CSS` is scoped to that widget: a rule starting at a parent (`Sidebar.-compact NavItem`) never matches there. Put rules that depend on a parent's state in the parent's CSS.
-- The app's `CSS` beats every widget's `DEFAULT_CSS`, whatever the selector. A global rule like `Button { min-width: 12 }` needs its exceptions in the app CSS too.
+- The app's `CSS` beats every widget's `DEFAULT_CSS`, whatever the selector. A global rule like `Button { min-width: 12 }` needs its exceptions in the app CSS too. The app's `DataTable { height: 1fr; min-height: 8 }` made the Download history 35 rows tall; `#download-history-table` has its exception there.
+- In a narrow column, put a field's caption above it (`.field-caption`), not beside it: a label column cut the quality buttons' sizes off.
 - Set `padding` as a whole (`padding: 0 2 0 1`). A lone `padding-left` reset the other sides.
 - `content-align` doesn't move text a widget draws in `render()`; centre it there.
 - `$text-muted` isn't allowed as a border colour; use `$border`.
@@ -148,6 +154,6 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 ## Before you open a PR
 
 1. Screenshots: `python scripts/tui_screenshot.py <page> <out.png>` renders a page at 140x44 with a temporary home folder. Look at it at 120x40 and 90x30 too.
-2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed.
+2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed. To wait for a thread worker, poll with `await pilot.pause(...)`; never call `event.wait()` in the test: it blocks the app's event loop, the worker never starts, and a fake that waits for Cancel hangs the run. Give such fakes a deadline.
 3. Every colour is a theme token; every user string is `Content`.
 4. `python scripts/ci_local.py --full`.

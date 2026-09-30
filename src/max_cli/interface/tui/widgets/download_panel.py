@@ -1,12 +1,17 @@
 """Download page: paste a link, see what it is, pick a format and quality, download.
 
-- Pasting a link checks it: title, channel, length, and the qualities the
-  video really has, with sizes. A playlist lists its items to tick.
-  Several links pasted at once become one download each.
-- Simple mode shows only that. Advanced mode adds every other `grab
-  download` option, taken from the command catalog.
+- Pasting a link checks it: title, channel, length, views, subtitles, and the
+  qualities the video really has, with sizes (MP3 sizes too). A playlist
+  lists its items to tick. Several links pasted at once become one download
+  each.
+- The OPTIONS card beside the preview holds every other `grab download`
+  option, taken from the command catalog, in a few rows.
+- Check locks its button and shows a spinner with the seconds so far,
+  until the site answers.
 - Each download gets a row with progress and a Cancel that really stops it.
-  History sits in the next tab.
+  History sits in the next tab, a page of rows at a time with a filter.
+- The TOOLS card holds the rest of `max grab`: download stats, the YouTube
+  fix (`pot-setup`), and shortcuts to the folder, the queue and settings.
 
 See PLANS/active/grab-page-redesign.md.
 """
@@ -23,6 +28,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.events import Resize
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import (
@@ -40,6 +46,7 @@ from max_cli.common.utils import format_size
 from max_cli.config import settings
 from max_cli.core.catalog import get_action
 from max_cli.core.engines.download_history import DownloadHistory
+from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.text import markup
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.action_form import ActionForm
@@ -47,7 +54,7 @@ from max_cli.interface.tui.widgets.charts import Meter
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 
 GRAB_ACTION_ID = "grab.download"
-# Advanced mode shows these catalog options. The Format and Quality buttons
+# The OPTIONS card shows these catalog options. The Format and Quality buttons
 # already cover media type, quality and (for odd heights) resolution.
 ADVANCED_FIELDS = (
     "resolution",
@@ -66,17 +73,49 @@ PROGRESS_REFRESH_SECONDS = 0.5
 # Row changes that change the running count shown on the tabs.
 STATE_CHANGES = frozenset({"set_started", "set_done", "set_failed", "set_cancelled"})
 SLOT_POLL_SECONDS = 0.2
-HISTORY_LIMIT = 50
 PREVIEW_LINK_LIMIT = 8
-MODE_PREF = "download_mode"
+# The spinner while a link is checked: one frame per tick, on one line.
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+SPINNER_SECONDS = 0.12
+# After this long, say why a check can take a while.
+SLOW_CHECK_SECONDS = 8
 FOLDER_PREF = "download_folder"
 FORMAT_PREF = "download_format"
+
+HISTORY_LIMIT = 500
+HISTORY_PAGE_ROWS = 8
+# The history columns besides the title, with their widths. The title takes
+# what's left of the card's width.
+HISTORY_COLUMNS = (("Type", 11), ("Size", 9), ("Site", 16), ("When", 8))
+HISTORY_STATE_WIDTH = 2
+HISTORY_MIN_TITLE = 20
+# Page padding, card border and padding, and the page's scrollbar, in columns.
+HISTORY_CHROME_WIDTH = 14
+# DataTable pads each cell by one column on both sides.
+CELL_PADDING = 2
+QUALITY_NAMES = {"ss": "360p", "s": "480p", "m": "720p", "h": "1080p", "x": "best"}
+
+FACT_KEY_WIDTH = 11
+SUBTITLES_SHOWN = 4
+SEPARATOR = "  ·  "
+FORBIDDEN_MARK = "403"
 
 
 @dataclass
 class QualityChoice:
-    label: str
+    name: str  # Best, 1080p60, High
     values: dict[str, Any]  # quality / resolution for grab.download
+    kbps: Optional[int] = None  # MP3 bitrate, for audio choices
+    size_bytes: Optional[int] = None
+
+    @property
+    def label(self) -> str:
+        """Chip text: 1080p60 · 393 MB, or 192 kbps · 86 MB for audio."""
+        parts = [
+            f"{self.kbps} kbps" if self.kbps else self.name,
+            short_size(self.size_bytes) if self.size_bytes else "",
+        ]
+        return " · ".join(part for part in parts if part)
 
 
 VIDEO_CHOICES = [
@@ -88,10 +127,10 @@ VIDEO_CHOICES = [
 ]
 # The bitrates network_engine.QUALITY_MAP gives yt-dlp's MP3 conversion.
 AUDIO_CHOICES = [
-    QualityChoice("Best · 320 kbps", {"quality": "x"}),
-    QualityChoice("High · 192 kbps", {"quality": "h"}),
-    QualityChoice("Medium · 128 kbps", {"quality": "m"}),
-    QualityChoice("Small · 64 kbps", {"quality": "s"}),
+    QualityChoice("Best", {"quality": "x"}, kbps=320),
+    QualityChoice("High", {"quality": "h"}, kbps=192),
+    QualityChoice("Medium", {"quality": "m"}, kbps=128),
+    QualityChoice("Small", {"quality": "s"}, kbps=64),
 ]
 
 
@@ -104,13 +143,24 @@ def short_size(size_bytes: float) -> str:
     return f"{size_bytes:.0f} B"
 
 
-def _with_size(label: str, size: Optional[int]) -> str:
-    return f"{label} · {short_size(size)}" if size else label
+def short_count(count: int) -> str:
+    """1234567 as 1.2M, 34500 as 34K."""
+    for unit, scale in (("B", 10**9), ("M", 10**6), ("K", 10**3)):
+        if count >= scale:
+            value = count / scale
+            return f"{value:.1f}{unit}" if value < 10 else f"{value:.0f}{unit}"
+    return str(count)
+
+
+def mp3_size(kbps: int, seconds: float) -> int:
+    """An MP3 at a constant bitrate: kilobits per second times the length."""
+    return int(kbps * 1000 / 8 * seconds)
 
 
 def video_choices_for(media: Any) -> list[QualityChoice]:
     """Choices for a checked video: Best, then each height it offers, with sizes."""
-    choices = [QualityChoice("Best", {"quality": "x"})]
+    best_size = media.qualities[0].size_bytes if media.qualities else None
+    choices = [QualityChoice("Best", {"quality": "x"}, size_bytes=best_size)]
     for option in media.qualities:
         values: dict[str, Any] = (
             {"quality": option.quality_code}
@@ -118,9 +168,25 @@ def video_choices_for(media: Any) -> list[QualityChoice]:
             else {"resolution": option.height}
         )
         choices.append(
-            QualityChoice(_with_size(option.label, option.size_bytes), values)
+            QualityChoice(option.label, values, size_bytes=option.size_bytes)
         )
     return choices
+
+
+def audio_choices_for(media: Any) -> list[QualityChoice]:
+    """The MP3 bitrates, with the size each makes of a checked video."""
+    seconds = None if media is None or media.is_playlist else media.duration
+    return [
+        QualityChoice(
+            choice.name,
+            choice.values,
+            kbps=choice.kbps,
+            size_bytes=mp3_size(choice.kbps, seconds)
+            if choice.kbps and seconds
+            else None,
+        )
+        for choice in AUDIO_CHOICES
+    ]
 
 
 def playlist_items(selected: list[int], total: int) -> Optional[str]:
@@ -162,6 +228,95 @@ def _relative_time(timestamp_raw: str) -> str:
     return f"{int(seconds // 86400)}d ago"
 
 
+def _joined(*parts: str) -> str:
+    return SEPARATOR.join(part for part in parts if part)
+
+
+def _fact(key: str, value: str, style: str = "") -> Content:
+    return Content.assemble(
+        (f"{key:<{FACT_KEY_WIDTH}}", "$text-muted"), (value or "-", style)
+    )
+
+
+def _subtitles(media: Any) -> str:
+    languages = media.subtitle_languages
+    shown = ", ".join(languages[:SUBTITLES_SHOWN])
+    if len(languages) > SUBTITLES_SHOWN:
+        shown += f" +{len(languages) - SUBTITLES_SHOWN} more"
+    return _joined(shown, "auto captions" if media.has_auto_captions else "")
+
+
+def media_facts(media: Any) -> Content:
+    """The preview's details: one labelled line per fact the site gave."""
+    lines = [_fact("Channel", media.uploader)]
+    if media.is_playlist:
+        total = media.total_duration
+        lines.append(
+            _fact(
+                "Items",
+                _joined(
+                    f"{len(media.entries)} videos",
+                    f"{_duration(total)} in all" if total else "",
+                ),
+                "bold $primary",
+            )
+        )
+    else:
+        length = "LIVE now" if media.is_live else _duration(media.duration)
+        chapters = f"{media.chapter_count} chapters" if media.chapter_count else ""
+        lines.append(
+            _fact(
+                "Length", _joined(length, chapters), "$error" if media.is_live else ""
+            )
+        )
+    stats = _joined(
+        f"{short_count(media.view_count)} views" if media.view_count else "",
+        f"{short_count(media.like_count)} likes" if media.like_count else "",
+        media.upload_date,
+    )
+    if stats:
+        lines.append(_fact("Stats", stats))
+    if media.qualities:
+        top = media.qualities[0]
+        lines.append(
+            _fact(
+                "Video",
+                _joined(
+                    f"up to {top.label}",
+                    f"{len(media.qualities)} qualities",
+                    short_size(top.size_bytes) if top.size_bytes else "",
+                ),
+                "$primary",
+            )
+        )
+    audio = _joined(
+        media.audio_codec,
+        f"{media.audio_bitrate} kbps" if media.audio_bitrate else "",
+        short_size(media.audio_size_bytes) if media.audio_size_bytes else "",
+    )
+    if audio:
+        lines.append(_fact("Audio", audio, "$secondary"))
+    if media.subtitle_languages or media.has_auto_captions:
+        lines.append(_fact("Subtitles", _subtitles(media)))
+    if media.site:
+        lines.append(_fact("Source", media.site))
+    return Content("\n").join(lines)
+
+
+def history_kind(used: dict[str, Any]) -> str:
+    """What a past download was: Audio MP3, or Video with its quality."""
+    if used.get("audio_only"):
+        return "Audio MP3"
+    height = used.get("custom_height")
+    if height:
+        return f"Video {height}p"
+    return f"Video {QUALITY_NAMES.get(str(used.get('quality')), '')}".strip()
+
+
+def _clip(text: str, width: int) -> str:
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
 @dataclass
 class DownloadJob:
     job_id: int
@@ -174,7 +329,8 @@ class DownloadJob:
 
 
 class DownloadRow(Vertical):
-    """One download: title and button, a slim progress bar, then details.
+    """One download in four lines: title and a one-line button, a slim
+    progress bar, details, and a gap.
 
     The bar is a charts.Meter: Textual's ProgressBar runs a timer of its own
     and didn't take the theme's colours.
@@ -198,24 +354,39 @@ class DownloadRow(Vertical):
         border-left: outer $border;
     }
     DownloadRow .row-head {
-        height: 3;
+        height: 1;
     }
     DownloadRow .row-title {
         width: 1fr;
-        height: 3;
-        content-align: left middle;
+        height: 1;
         text-style: bold;
-    }
-    DownloadRow .row-meter {
-        margin-bottom: 0;
     }
     DownloadRow .row-info {
         height: auto;
         color: $text-muted;
-        margin-bottom: 1;
     }
-    DownloadRow Button {
+    /* One-line buttons, so a row isn't three lines taller than its text. */
+    DownloadRow Button.row-action,
+    DownloadRow Button.row-action:hover,
+    DownloadRow Button.row-action:focus,
+    DownloadRow Button.row-action.-active {
+        height: 1;
         min-width: 14;
+        border: none;
+        background: $boost;
+        text-style: bold;
+    }
+    DownloadRow Button.row-action:hover {
+        background: $primary 30%;
+    }
+    DownloadRow Button.-cancel {
+        color: $error;
+    }
+    DownloadRow Button.-open {
+        color: $success;
+    }
+    DownloadRow Button.-retry {
+        color: $warning;
     }
     """
 
@@ -226,7 +397,11 @@ class DownloadRow(Vertical):
     def compose(self) -> ComposeResult:
         with Horizontal(classes="row-head"):
             yield Static(Content(self.job.title), classes="row-title")
-            yield Button("Cancel", id=f"cancel-{self.job.job_id}", variant="error")
+            yield Button(
+                "Cancel",
+                id=f"cancel-{self.job.job_id}",
+                classes="row-action -cancel",
+            )
         yield Meter(classes="row-meter")
         yield Static("Waiting for a free slot...", classes="row-info")
 
@@ -249,32 +424,39 @@ class DownloadRow(Vertical):
         # One repaint for bar and text; the one-line text needs no page layout.
         with self.app.batch_update():
             self.query_one(Meter).set_value(percent)
-            self._info("  ·  ".join(parts), layout=False)
+            self._info(SEPARATOR.join(parts), layout=False)
 
-    def _swap_button(
-        self, label: str, button_id: str, variant: str = "default"
-    ) -> None:
+    def _swap_button(self, label: str, button_id: str, kind: str) -> None:
         head = self.query_one(".row-head", Horizontal)
         for button in head.query(Button):
             button.remove()
-        head.mount(Button(label, id=button_id, variant=variant))  # type: ignore[arg-type]  # variant is one of Textual's literals
+        head.mount(Button(label, id=button_id, classes=f"row-action {kind}"))
 
     def set_done(self, message: str, size_bytes: int) -> None:
         self.job.finished = True
         self.add_class("-done")
         self.query_one(Meter).set_value(100, "$success")
-        size = f"  ·  {format_size(size_bytes)}" if size_bytes else ""
+        size = f"{SEPARATOR}{format_size(size_bytes)}" if size_bytes else ""
         self._info(
-            markup("[green]Done.[/green] $message$size", message=message, size=size)
+            markup(
+                "[$success]Done.[/$success] $message$size", message=message, size=size
+            )
         )
-        self._swap_button("Open folder", f"open-{self.job.job_id}", "success")
+        self._swap_button("Open folder", f"open-{self.job.job_id}", "-open")
 
     def set_failed(self, error: str) -> None:
         self.job.finished = True
         self.add_class("-failed")
         self.query_one(Meter).display = False
-        self._info(markup("[red]Failed:[/red] $error", error=error))
-        self._swap_button("Retry", f"retry-{self.job.job_id}", "warning")
+        hint = (
+            "\nYouTube blocked it. The YouTube fix in TOOLS below usually helps."
+            if FORBIDDEN_MARK in error
+            else ""
+        )
+        self._info(
+            markup("[$error]Failed:[/$error] $error$hint", error=error, hint=hint)
+        )
+        self._swap_button("Retry", f"retry-{self.job.job_id}", "-retry")
 
     def set_cancelled(self) -> None:
         self.job.finished = True
@@ -282,21 +464,21 @@ class DownloadRow(Vertical):
         self.query_one(Meter).display = False
         self._info(
             Content.from_markup(
-                "[yellow]Cancelled.[/yellow] Partial files were removed."
+                "[$warning]Cancelled.[/$warning] Partial files were removed."
             )
         )
-        self._swap_button("Retry", f"retry-{self.job.job_id}", "warning")
+        self._swap_button("Retry", f"retry-{self.job.job_id}", "-retry")
 
 
 class DownloadPanel(Vertical):
+    """The Download page."""
+
     class RunningChanged(Message):
         """How many downloads run now; the sidebar shows it as a badge."""
 
         def __init__(self, running: int) -> None:
             super().__init__()
             self.running = running
-
-    """The Download page."""
 
     DEFAULT_CSS = """
     DownloadPanel {
@@ -343,8 +525,9 @@ class DownloadPanel(Vertical):
     .card:focus-within {
         border: round $primary;
     }
-    #dl-link-row, #dl-folder-row, #dl-format-row, #dl-actions,
-    #dl-playlist-actions, #dl-quality-row {
+    #dl-link-row, #dl-folder-row, #dl-actions,
+    #dl-playlist-actions, #dl-history-bar,
+    #dl-history-actions, #dl-jobs-bar, #dl-fix-row, #dl-tool-buttons {
         height: auto;
     }
     #dl-url, #dl-output {
@@ -356,20 +539,35 @@ class DownloadPanel(Vertical):
         grid-columns: 3fr 2fr;
         grid-gutter: 0 2;
     }
+    #dl-left {
+        height: auto;
+    }
     #dl-preview-title {
         text-style: bold;
         color: $primary;
         margin-top: 1;
     }
     #dl-preview-meta {
-        margin-bottom: 1;
+        margin: 1 0;
     }
-    #dl-preview-meta, #dl-duplicate, .field-name {
+    #dl-duplicate, .field-name, #dl-history-page, #dl-history-empty,
+    #dl-jobs-empty {
         color: $text-muted;
     }
     .field-name {
         width: 9;
         padding-top: 1;
+    }
+    .field-caption {
+        color: $text-muted;
+        text-style: bold;
+        margin-top: 1;
+    }
+    #dl-format-row {
+        width: 1fr;
+    }
+    #dl-format-row Button {
+        width: 1fr;
     }
     #dl-quality {
         grid-size: 2;
@@ -378,8 +576,12 @@ class DownloadPanel(Vertical):
         height: auto;
         width: 1fr;
     }
+    /* Top and bottom edges only: side borders cost two columns of text. */
     #dl-quality .chip {
         width: 100%;
+        border-left: none;
+        border-right: none;
+        padding: 0;
     }
     #dl-playlist {
         height: auto;
@@ -387,6 +589,8 @@ class DownloadPanel(Vertical):
     }
     #dl-advanced ActionForm {
         height: auto;
+        padding: 0;
+        margin-bottom: 1;
     }
     #dl-actions {
         margin-top: 1;
@@ -401,20 +605,33 @@ class DownloadPanel(Vertical):
     #dl-tabs {
         height: auto;
     }
-    #dl-jobs-empty {
-        color: $text-muted;
+    #dl-jobs-empty, #dl-history-empty {
         padding: 1 0;
     }
     #dl-jobs {
         height: auto;
     }
-    #download-history-table {
-        height: auto;
-        max-height: 16;
+    #dl-history-filter {
+        width: 1fr;
     }
-    #dl-history-actions {
-        height: auto;
+    #dl-history-page {
+        width: auto;
+        min-width: 14;
+        padding: 1 1 0 1;
+        text-align: center;
+    }
+    #dl-history-actions, #dl-tool-buttons {
+        margin: 1 0;
+    }
+    #dl-stats {
         margin-top: 1;
+    }
+    #dl-fix-row {
+        margin-top: 1;
+    }
+    #dl-fix-status {
+        width: 1fr;
+        padding-top: 1;
     }
     """
 
@@ -422,9 +639,9 @@ class DownloadPanel(Vertical):
         super().__init__(**kwargs)
         self._action = get_action(GRAB_ACTION_ID)
         prefs = load_prefs()
-        self._advanced = prefs.get(MODE_PREF) == "advanced"
         self._format = prefs.get(FORMAT_PREF) or settings.GRAB_DEFAULT_TYPE
         self._video_choices: list[QualityChoice] = list(VIDEO_CHOICES)
+        self._audio_choices: list[QualityChoice] = list(AUDIO_CHOICES)
         # The pick per format, by its grab values, so it survives a new list.
         self._chosen: dict[str, dict[str, Any]] = {
             "video": self._default_video_values(),
@@ -433,20 +650,25 @@ class DownloadPanel(Vertical):
         self._media: Any = None  # the checked MediaInfo, if any
         self._checked_text = ""  # the link box text that _media belongs to
         self._check_timer: Optional[Timer] = None
+        self._spin_timer: Optional[Timer] = None
+        self._spin_frame = 0
+        self._checking_text: Optional[str] = None  # the link box text being checked
+        self._check_started = 0.0
         self._jobs: dict[int, DownloadJob] = {}
         self._last_running = 0
         self._next_job_id = 1
         self._slots = threading.BoundedSemaphore(settings.GRAB_MAX_CONCURRENT)
         self._history: list[dict[str, Any]] = []
+        self._history_shown: list[dict[str, Any]] = []
+        self._history_page = 0
+        self._history_width = 0
+        self._fix_checked = False
 
     # --- layout ---------------------------------------------------------
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="dl-header"):
             yield Static(self._brand(), id="dl-title")
-            with Horizontal(id="dl-mode", classes="segmented"):
-                yield Button("Simple", id="mode-simple")
-                yield Button("Advanced", id="mode-advanced")
 
         with Vertical(id="dl-link-card", classes="card"):
             with Horizontal(id="dl-link-row"):
@@ -466,36 +688,37 @@ class DownloadPanel(Vertical):
             yield Static("", id="dl-duplicate")
 
         with Grid(id="dl-main"):
-            with Vertical(id="dl-preview", classes="card"):
-                yield Static(
-                    "Paste a link and Max checks it for you.",
-                    id="dl-preview-title",
-                )
-                yield Static(
-                    "Title, length and sizes show here. You can also download right away.",
-                    id="dl-preview-meta",
-                )
-                yield SelectionList[int](id="dl-playlist")
-                with Horizontal(id="dl-playlist-actions"):
-                    yield Button("Select all", id="btn-pl-all")
-                    yield Button("Select none", id="btn-pl-none")
+            with Vertical(id="dl-left"):
+                with Vertical(id="dl-preview", classes="card"):
+                    yield Static(
+                        "Paste a link and Max checks it for you.",
+                        id="dl-preview-title",
+                    )
+                    yield Static(
+                        "Channel, length, views, sizes and subtitles show here. "
+                        "You can also download right away.",
+                        id="dl-preview-meta",
+                    )
+                    yield SelectionList[int](id="dl-playlist")
+                    with Horizontal(id="dl-playlist-actions"):
+                        yield Button("Select all", id="btn-pl-all")
+                        yield Button("Select none", id="btn-pl-none")
+                with Vertical(id="dl-advanced", classes="card"):
+                    yield ActionForm(
+                        self._action, include=ADVANCED_FIELDS, compact=True
+                    )
 
             with Vertical(id="dl-output-card", classes="card"):
-                with Horizontal(id="dl-format-row"):
-                    yield Label("Format", classes="field-name")
-                    with Horizontal(classes="segmented"):
-                        yield Button("Video", id="fmt-video")
-                        yield Button("Audio (MP3)", id="fmt-audio")
-                with Horizontal(id="dl-quality-row"):
-                    yield Label("Quality", classes="field-name")
-                    yield Grid(id="dl-quality")
+                yield Label("FORMAT", classes="field-caption")
+                with Horizontal(id="dl-format-row", classes="segmented"):
+                    yield Button("Video", id="fmt-video")
+                    yield Button("Audio (MP3)", id="fmt-audio")
+                yield Label("QUALITY", classes="field-caption")
+                yield Grid(id="dl-quality")
                 with Horizontal(id="dl-actions"):
                     yield Button("⬇ Download", id="btn-download", variant="success")
                     yield Button("Queue for later", id="btn-queue")
                 yield Static("", id="dl-status")
-
-        with Vertical(id="dl-advanced", classes="card"):
-            yield ActionForm(self._action, include=ADVANCED_FIELDS, embedded=True)
 
         with Vertical(id="dl-transfers", classes="card"):
             with TabbedContent(id="dl-tabs"):
@@ -505,14 +728,36 @@ class DownloadPanel(Vertical):
                         id="dl-jobs-empty",
                     )
                     yield Vertical(id="dl-jobs")
+                    with Horizontal(id="dl-jobs-bar"):
+                        yield Button("Clear finished", id="btn-clear-finished")
                 with TabPane("History", id="tab-history"):
+                    with Horizontal(id="dl-history-bar"):
+                        yield Input(
+                            placeholder="Filter by title or site",
+                            id="dl-history-filter",
+                        )
+                        yield Button("< Prev", id="btn-history-prev")
+                        yield Static("", id="dl-history-page")
+                        yield Button("Next >", id="btn-history-next")
                     yield DataTable(id="download-history-table", cursor_type="row")
+                    yield Static("", id="dl-history-empty")
                     with Horizontal(id="dl-history-actions"):
                         yield Button("Download again", id="btn-history-again")
                         yield Button("Open folder", id="btn-history-open")
+                        yield Button("Copy link", id="btn-history-copy")
                         yield Button(
                             "Clear history", id="btn-clear-history", variant="error"
                         )
+
+        with Vertical(id="dl-tools", classes="card"):
+            yield Static("", id="dl-stats")
+            with Horizontal(id="dl-fix-row"):
+                yield Static("", id="dl-fix-status")
+                yield Button("Install fix", id="btn-youtube-fix")
+            with Horizontal(id="dl-tool-buttons"):
+                yield Button("Open download folder", id="btn-open-downloads")
+                yield Button("Queue page", id="btn-goto-queue")
+                yield Button("Download settings", id="btn-goto-config")
 
     @staticmethod
     def _brand() -> Content:
@@ -532,10 +777,12 @@ class DownloadPanel(Vertical):
         self.query_one("#dl-link-card").border_title = "LINK"
         self.query_one("#dl-preview").border_title = "PREVIEW"
         self.query_one("#dl-output-card").border_title = "OUTPUT"
-        self.query_one("#dl-advanced").border_title = "ADVANCED"
+        self.query_one("#dl-advanced").border_title = "OPTIONS"
         self.query_one("#dl-transfers").border_title = "TRANSFERS"
+        self.query_one("#dl-tools").border_title = "TOOLS"
         self.query_one("#dl-duplicate").display = False
-        self._sync_mode()
+        self.query_one("#dl-jobs-bar").display = False
+        self._show_fix_status(None)
         self._sync_format_buttons()
         self._show_playlist(False)
         await self._render_choices()
@@ -543,19 +790,16 @@ class DownloadPanel(Vertical):
 
     def on_show(self) -> None:
         self.query_one("#dl-url", Input).focus()
+        if not self._fix_checked:
+            self._fix_checked = True
+            self.run_worker(self._check_youtube_fix, thread=True, group="youtube-fix")
+
+    def on_resize(self, event: Resize) -> None:
+        if event.size.width != self._history_width:
+            self._history_width = event.size.width
+            self._show_history()
 
     # --- mode and format --------------------------------------------------
-
-    def _sync_mode(self) -> None:
-        self.query_one("#dl-advanced").display = self._advanced
-        self.query_one("#mode-simple").set_class(not self._advanced, "-selected")
-        self.query_one("#mode-advanced").set_class(self._advanced, "-selected")
-
-    @on(Button.Pressed, "#mode-simple, #mode-advanced")
-    def _on_mode(self, event: Button.Pressed) -> None:
-        self._advanced = event.button.id == "mode-advanced"
-        self._sync_mode()
-        save_pref(MODE_PREF, "advanced" if self._advanced else "simple")
 
     def _sync_format_buttons(self) -> None:
         self.query_one("#fmt-video").set_class(self._format == "video", "-selected")
@@ -571,7 +815,7 @@ class DownloadPanel(Vertical):
     # --- quality chips ----------------------------------------------------
 
     def _choices(self) -> list[QualityChoice]:
-        return AUDIO_CHOICES if self._format == "audio" else self._video_choices
+        return self._audio_choices if self._format == "audio" else self._video_choices
 
     @staticmethod
     def _default_video_values() -> dict[str, Any]:
@@ -612,6 +856,15 @@ class DownloadPanel(Vertical):
     def _chosen_choice(self) -> QualityChoice:
         return self._choices()[self._chosen_index()]
 
+    def _set_choices_for(self, media: Any) -> None:
+        """New chips for a checked link: its real heights and MP3 sizes."""
+        if media is None or media.is_playlist:
+            self._video_choices = list(VIDEO_CHOICES)
+        else:
+            self._video_choices = video_choices_for(media)
+        self._audio_choices = audio_choices_for(media)
+        self.call_later(self._render_choices)
+
     # --- link and preview -------------------------------------------------
 
     def _links(self) -> list[str]:
@@ -631,7 +884,7 @@ class DownloadPanel(Vertical):
         if existing:
             warning.update(
                 markup(
-                    "[yellow]You downloaded this before:[/yellow] $title",
+                    "[$warning]You downloaded this before:[/$warning] $title",
                     title=existing.get("title") or links[0],
                 )
             )
@@ -658,14 +911,14 @@ class DownloadPanel(Vertical):
         links = self._links()
         if not links:
             self._set_status(
-                Content.from_markup("[yellow]Paste a link first.[/yellow]")
+                Content.from_markup("[$warning]Paste a link first.[/$warning]")
             )
             return
         self._checked_text = text
         if len(links) > 1:
             self._show_many(links)
             return
-        self._set_preview(Content.from_markup("[cyan]Checking the link...[/cyan]"), "")
+        self._start_checking(text)
         url = links[0]
         self.run_worker(
             lambda: self._probe(url, text), thread=True, exclusive=True, group="probe"
@@ -677,45 +930,96 @@ class DownloadPanel(Vertical):
         try:
             media = grab.probe(url)
         except Exception as e:
-            self.app.call_from_thread(self._show_probe_error, str(e))
+            self.app.call_from_thread(self._show_probe_error, str(e), text)
             return
         self.app.call_from_thread(self._show_media, media, text)
+
+    @property
+    def is_checking(self) -> bool:
+        return self._checking_text is not None
+
+    def _start_checking(self, text: str) -> None:
+        """Lock Check and show a spinner until the site answers."""
+        self._checking_text = text
+        self._check_started = time.monotonic()
+        self._spin_frame = 0
+        button = self.query_one("#btn-check", Button)
+        button.disabled = True
+        button.label = "Checking"  # "Checking..." didn't fit the button
+        self._set_preview(self._checking_line(), "")
+        if self._spin_timer is None:
+            self._spin_timer = self.set_interval(SPINNER_SECONDS, self._spin)
+        else:
+            self._spin_timer.resume()
+
+    def _checking_line(self) -> Content:
+        seconds = int(time.monotonic() - self._check_started)
+        parts: list[tuple[str, str]] = [
+            (
+                f"{SPINNER_FRAMES[self._spin_frame % len(SPINNER_FRAMES)]} ",
+                "bold $secondary",
+            ),
+            ("Checking the link", "bold $primary"),
+            (f"  {seconds}s", "$text-muted"),
+        ]
+        if seconds >= SLOW_CHECK_SECONDS:
+            parts.append(
+                ("  ·  YouTube is often slow on the first check", "$text-muted")
+            )
+        return Content.assemble(*parts)
+
+    def _spin(self) -> None:
+        self._spin_frame += 1
+        # One line that changes often: no page layout (smoothness rule 3).
+        self.query_one("#dl-preview-title", Static).update(
+            self._checking_line(), layout=False
+        )
+
+    def _stop_checking(self, text: str) -> bool:
+        """End the check for `text`. False when a newer check replaced it."""
+        if text != self._checking_text:
+            return False
+        self._checking_text = None
+        if self._spin_timer is not None:
+            self._spin_timer.pause()
+        button = self.query_one("#btn-check", Button)
+        button.disabled = False
+        button.label = "Check"
+        return True
 
     def _set_preview(self, title: "str | Content", meta: "str | Content") -> None:
         self.query_one("#dl-preview-title", Static).update(title)
         self.query_one("#dl-preview-meta", Static).update(meta)
 
-    def _show_probe_error(self, error: str) -> None:
+    def _show_probe_error(self, error: str, text: str) -> None:
+        if not self._stop_checking(text):
+            return  # a newer check is running
         self._media = None
         self._set_preview(
-            Content.from_markup("[red]Couldn't read this link.[/red]"), Content(error)
+            Content.from_markup("[$error]Couldn't read this link.[/$error]"),
+            Content(error),
         )
 
     def _show_many(self, links: list[str]) -> None:
         self._media = None
         self._show_playlist(False)
-        self._video_choices = list(VIDEO_CHOICES)
-        self.call_later(self._render_choices)
+        self._set_choices_for(None)
         shown = "\n".join(links[:PREVIEW_LINK_LIMIT])
         more = "\n..." if len(links) > PREVIEW_LINK_LIMIT else ""
         self._set_preview(f"{len(links)} links", Content(shown + more))
 
     def _show_media(self, media: Any, text: str) -> None:
+        if not self._stop_checking(text):
+            return  # a newer check is running
         if self.query_one("#dl-url", Input).value != text:
             return  # the link changed while we were checking
         self._media = media
         if media.is_playlist:
-            meta = [media.uploader, f"Playlist · {len(media.entries)} items"]
-            self._video_choices = list(VIDEO_CHOICES)
             self._fill_playlist(media)
         else:
-            meta = [media.uploader, _duration(media.duration)]
-            self._video_choices = video_choices_for(media)
             self._show_playlist(False)
-        self._set_preview(
-            Content(media.title), Content("  ·  ".join(part for part in meta if part))
-        )
-        self.call_later(self._render_choices)
+        self._set_choices_for(media)
+        self._set_preview(Content(media.title), media_facts(media))
 
     # --- playlist ---------------------------------------------------------
 
@@ -758,11 +1062,12 @@ class DownloadPanel(Vertical):
         return list(self.query_one("#dl-playlist", SelectionList).selected)
 
     def _sync_download_label(self) -> None:
-        label_parts = self._chosen_choice().label.split(" · ")
-        what = label_parts[0] if self._format == "video" else "MP3"
-        size = (
-            label_parts[1] if len(label_parts) > 1 and self._format == "video" else ""
-        )
+        choice = self._chosen_choice()
+        if self._format == "audio":
+            what = f"MP3 {choice.kbps} kbps" if choice.kbps else "MP3"
+        else:
+            what = choice.name
+        size = short_size(choice.size_bytes) if choice.size_bytes else ""
         label = f"⬇ Download {what}" + (f" · {size}" if size else "")
         selected = self._selected_items()
         if selected is not None:
@@ -783,11 +1088,10 @@ class DownloadPanel(Vertical):
             items = playlist_items(selected, len(self._media.entries))
             if items:
                 values["playlist_items"] = items
-        if self._advanced:
-            form = self.query_one("#dl-advanced ActionForm", ActionForm)
-            for name, value in form.values().items():
-                if value not in (None, ""):
-                    values[name] = value
+        form = self.query_one("#dl-advanced ActionForm", ActionForm)
+        for name, value in form.values().items():
+            if value not in (None, ""):
+                values[name] = value
         return values
 
     def _set_status(self, text: "str | Content") -> None:
@@ -800,12 +1104,14 @@ class DownloadPanel(Vertical):
         links = self._links()
         if not links:
             self._set_status(
-                Content.from_markup("[yellow]Paste a link first.[/yellow]")
+                Content.from_markup("[$warning]Paste a link first.[/$warning]")
             )
             return None
         if self._selected_items() == []:
             self._set_status(
-                Content.from_markup("[yellow]Tick at least one playlist item.[/yellow]")
+                Content.from_markup(
+                    "[$warning]Tick at least one playlist item.[/$warning]"
+                )
             )
             return None
         all_values = [self._values_for(url) for url in links]
@@ -813,7 +1119,7 @@ class DownloadPanel(Vertical):
             for values in all_values:
                 coerce_args(self._action, values)
         except MaxError as e:
-            self._set_status(markup("[red]$error[/red]", error=e))
+            self._set_status(markup("[$error]$error[/$error]", error=e))
             return None
         return all_values
 
@@ -842,7 +1148,7 @@ class DownloadPanel(Vertical):
             enqueue_action(self._action, values, title=self._title_for(values["url"]))
         self._set_status(
             Content.from_markup(
-                f"[green]Added {len(all_values)} to the queue.[/green] "
+                f"[$success]Added {len(all_values)} to the queue.[/$success] "
                 "They start one after another; J shows them."
             )
         )
@@ -850,6 +1156,8 @@ class DownloadPanel(Vertical):
         self._reset_link()
 
     def _reset_link(self) -> None:
+        if self._checking_text is not None:
+            self._stop_checking(self._checking_text)
         self._media = None
         self._checked_text = ""
         self.query_one("#dl-url", Input).value = ""
@@ -952,6 +1260,7 @@ class DownloadPanel(Vertical):
 
     def _sync_tab_counts(self) -> None:
         running = sum(not job.finished for job in self._jobs.values())
+        finished = len(self._jobs) - running
         tabs = self.query_one("#dl-tabs", TabbedContent)
         labels = {
             "tab-active": f"Downloads ({running} running)" if running else "Downloads",
@@ -960,6 +1269,7 @@ class DownloadPanel(Vertical):
         if running != self._last_running:
             self._last_running = running
             self.post_message(self.RunningChanged(running))
+        self.query_one("#dl-jobs-bar").display = finished > 0
         for tab_id, text in labels.items():
             tab = tabs.get_tab(tab_id)
             # Setting a label, even to the same text, restarts the tab
@@ -988,6 +1298,14 @@ class DownloadPanel(Vertical):
         elif kind == "open":
             self._open_folder(job.output_folder or job.values.get("output"))
 
+    @on(Button.Pressed, "#btn-clear-finished")
+    def _on_clear_finished(self) -> None:
+        for job in [job for job in self._jobs.values() if job.finished]:
+            self._row(job).remove()
+            del self._jobs[job.job_id]
+        self.query_one("#dl-jobs-empty").display = not self._jobs
+        self._sync_tab_counts()
+
     @staticmethod
     def _open_folder(folder: Any) -> None:
         from max_cli.common.utils import open_in_file_manager
@@ -1015,41 +1333,111 @@ class DownloadPanel(Vertical):
 
     def _load_history(self) -> None:
         self._history = DownloadHistory().get_recent(limit=HISTORY_LIMIT)
-        table = self.query_one("#download-history-table", DataTable)
-        if not table.columns:
-            table.add_column("", width=2)
-            table.add_column("Title", width=46)
-            table.add_column("Size", width=10)
-            table.add_column("Source", width=16)
-            table.add_column("When", width=10)
-        table.clear()
-        for entry in self._history:
-            ok = entry.get("status") == "completed"
-            files = entry.get("output_files") or []
-            title = entry.get("title") or (Path(files[0]).name if files else "")
-            size = entry.get("file_size") or 0
-            table.add_row(
-                Content.from_markup("[green]✓[/green]" if ok else "[red]✗[/red]"),
-                Content(title),
-                format_size(size) if size else "-",
-                entry.get("domain", ""),
-                _relative_time(entry.get("timestamp", "")),
-            )
+        self._show_history()
+        self._show_stats()
         self._sync_tab_counts()
+
+    def _filtered_history(self) -> list[dict[str, Any]]:
+        needle = self.query_one("#dl-history-filter", Input).value.strip().casefold()
+        if not needle:
+            return self._history
+        return [
+            entry
+            for entry in self._history
+            if needle in (entry.get("title") or "").casefold()
+            or needle in (entry.get("domain") or "").casefold()
+            or needle in (entry.get("url") or "").casefold()
+        ]
+
+    def _history_title_width(self) -> int:
+        fixed = HISTORY_STATE_WIDTH + sum(width for _, width in HISTORY_COLUMNS)
+        padding = CELL_PADDING * (len(HISTORY_COLUMNS) + 2)
+        available = self.size.width - HISTORY_CHROME_WIDTH - fixed - padding
+        return max(HISTORY_MIN_TITLE, available)
+
+    def _show_history(self) -> None:
+        """Show one page of history. It runs on load, filter, page and resize,
+        never on a timer, so a full refill is fine."""
+        entries = self._filtered_history()
+        pages = max(1, -(-len(entries) // HISTORY_PAGE_ROWS))
+        self._history_page = min(self._history_page, pages - 1)
+        start = self._history_page * HISTORY_PAGE_ROWS
+        self._history_shown = entries[start : start + HISTORY_PAGE_ROWS]
+        title_width = self._history_title_width()
+        table = self.query_one("#download-history-table", DataTable)
+        empty = self.query_one("#dl-history-empty", Static)
+        with self.app.batch_update():
+            table.clear(columns=True)
+            table.add_column("", width=HISTORY_STATE_WIDTH)
+            table.add_column("Title", width=title_width)
+            for name, width in HISTORY_COLUMNS:
+                table.add_column(name, width=width)
+            for entry in self._history_shown:
+                ok = entry.get("status") == "completed"
+                files = entry.get("output_files") or []
+                title = entry.get("title") or (Path(files[0]).name if files else "")
+                size = entry.get("file_size") or 0
+                table.add_row(
+                    Content.styled("✓", "$success")
+                    if ok
+                    else Content.styled("✗", "$error"),
+                    Content(_clip(title, title_width)),
+                    history_kind(entry.get("settings") or {}),
+                    short_size(size) if size else "-",
+                    _clip(
+                        (entry.get("domain") or "").removeprefix("www."),
+                        HISTORY_COLUMNS[2][1],
+                    ),
+                    _relative_time(entry.get("timestamp", "")),
+                )
+            table.display = bool(self._history_shown)
+            empty.display = not self._history_shown
+            if not self._history:
+                empty.update("No downloads yet. Finished downloads show up here.")
+            elif not entries:
+                empty.update("Nothing matches the filter.")
+            self.query_one("#dl-history-page", Static).update(
+                f"{self._history_page + 1} of {pages}"
+            )
+            self.query_one("#btn-history-prev", Button).disabled = (
+                self._history_page == 0
+            )
+            self.query_one("#btn-history-next", Button).disabled = (
+                self._history_page >= pages - 1
+            )
+            for button_id in (
+                "#btn-history-again",
+                "#btn-history-open",
+                "#btn-history-copy",
+            ):
+                self.query_one(button_id, Button).disabled = not self._history_shown
+
+    @on(Input.Changed, "#dl-history-filter")
+    def _on_history_filter(self) -> None:
+        self._history_page = 0
+        self._show_history()
+
+    @on(Button.Pressed, "#btn-history-prev, #btn-history-next")
+    def _on_history_page(self, event: Button.Pressed) -> None:
+        step = 1 if event.button.id == "btn-history-next" else -1
+        self._history_page = max(0, self._history_page + step)
+        self._show_history()
 
     def _selected_history(self) -> Optional[dict[str, Any]]:
         table = self.query_one("#download-history-table", DataTable)
-        if not self._history or table.cursor_row < 0:
+        if not self._history_shown or table.cursor_row < 0:
             return None
-        return self._history[min(table.cursor_row, len(self._history) - 1)]
+        return self._history_shown[min(table.cursor_row, len(self._history_shown) - 1)]
 
     @on(Button.Pressed, "#btn-history-again")
+    @on(DataTable.RowSelected, "#download-history-table")
     def _on_history_again(self) -> None:
         entry = self._selected_history()
         if entry is None:
             return
         self.query_one("#dl-url", Input).value = entry.get("url", "")
         self._check()
+        self.query_one("#dl-url", Input).focus()
 
     @on(Button.Pressed, "#btn-history-open")
     def _on_history_open(self) -> None:
@@ -1058,6 +1446,14 @@ class DownloadPanel(Vertical):
             return
         files = entry.get("output_files") or []
         self._open_folder(Path(files[0]).parent if files else entry.get("output_path"))
+
+    @on(Button.Pressed, "#btn-history-copy")
+    def _on_history_copy(self) -> None:
+        entry = self._selected_history()
+        if entry is None:
+            return
+        self.app.copy_to_clipboard(entry.get("url", ""))
+        self.notify("Link copied.")
 
     @on(Button.Pressed, "#btn-clear-history")
     def _on_clear_history(self) -> None:
@@ -1076,3 +1472,132 @@ class DownloadPanel(Vertical):
             ),
             _answered,
         )
+
+    # --- tools ------------------------------------------------------------
+
+    def _show_stats(self) -> None:
+        stats = DownloadHistory().get_stats()
+        if not stats["total"]:
+            text = Content.styled(
+                "No downloads yet. Your totals show here.", "$text-muted"
+            )
+        else:
+            text = Content.assemble(
+                ("STATS  ", "bold $accent"),
+                (f"{stats['total']} downloads", "bold $primary"),
+                (SEPARATOR, "$text-muted"),
+                (f"{stats['completed']} done", "$success"),
+                (SEPARATOR, "$text-muted"),
+                (f"{stats['failed']} failed", "$error" if stats["failed"] else ""),
+                (SEPARATOR, "$text-muted"),
+                (f"{format_size(stats['total_size'])} saved", ""),
+                (SEPARATOR, "$text-muted"),
+                (
+                    f"{stats['unique_domains']} site"
+                    + ("" if stats["unique_domains"] == 1 else "s"),
+                    "",
+                ),
+            )
+        self.query_one("#dl-stats", Static).update(text)
+
+    def _check_youtube_fix(self) -> None:
+        """Runs in a thread: asking yt-dlp about its plugins imports it."""
+        from max_cli.core.operations import grab
+
+        try:
+            status = grab.youtube_fix_status()
+        except (ImportError, AttributeError) as e:
+            # The provider registry is a private yt-dlp module; a new yt-dlp
+            # can move it. Say so rather than guess.
+            self.app.call_from_thread(self._show_fix_error, str(e))
+            return
+        self.app.call_from_thread(self._show_fix_status, status)
+
+    def _show_fix_error(self, error: str) -> None:
+        self.query_one("#dl-fix-status", Static).update(
+            markup(
+                "[bold $accent]YOUTUBE FIX[/bold $accent]  "
+                "[$warning]Couldn't check:[/$warning] $error",
+                error=error,
+            )
+        )
+
+    def _show_fix_status(self, status: Any) -> None:
+        """`status` is a grab.YoutubeFixStatus, or None while checking."""
+        head = ("YOUTUBE FIX  ", "bold $accent")
+        button = self.query_one("#btn-youtube-fix", Button)
+        if status is None:
+            text = Content.assemble(head, ("Checking...", "$text-muted"))
+            button.display = False
+        elif status.installed:
+            text = Content.assemble(
+                head,
+                ("✓ installed", "bold $success"),
+                ("  YouTube's HTTP 403 blocks are handled.", "$text-muted"),
+            )
+            button.display = False
+        elif not status.deno_found:
+            text = Content.assemble(
+                head,
+                ("! needs Deno", "bold $warning"),
+                (
+                    "  If YouTube fails with HTTP 403: winget install DenoLand.Deno,"
+                    " restart max, then install the fix here.",
+                    "$text-muted",
+                ),
+            )
+            button.display = False
+        else:
+            text = Content.assemble(
+                head,
+                ("! not installed", "bold $warning"),
+                (
+                    "  Install it if YouTube downloads fail with HTTP 403.",
+                    "$text-muted",
+                ),
+            )
+            button.display = True
+            button.disabled = False
+            button.label = "Install fix"
+        self.query_one("#dl-fix-status", Static).update(text)
+
+    @on(Button.Pressed, "#btn-youtube-fix")
+    def _on_youtube_fix(self) -> None:
+        from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
+
+        def _answered(confirmed: Optional[bool]) -> None:
+            if not confirmed:
+                return
+            button = self.query_one("#btn-youtube-fix", Button)
+            button.disabled = True
+            button.label = "Installing..."
+            self.run_worker(self._install_youtube_fix, thread=True, group="youtube-fix")
+
+        self.app.push_screen(
+            ConfirmDialog(
+                "Install the YouTube fix? Max runs pip, git and Deno to set up "
+                "the bgutil token provider. It takes a few minutes."
+            ),
+            _answered,
+        )
+
+    def _install_youtube_fix(self) -> None:
+        from max_cli.common.exceptions import MaxError
+        from max_cli.core.operations import grab
+
+        try:
+            result = grab.install_youtube_fix()
+        except MaxError as e:
+            self.app.call_from_thread(self.notify, str(e), severity="error")
+        else:
+            self.app.call_from_thread(self.notify, result.message)
+        self._check_youtube_fix()
+
+    @on(Button.Pressed, "#btn-open-downloads")
+    def _on_open_downloads(self) -> None:
+        self._open_folder(self.query_one("#dl-output", Input).value.strip())
+
+    @on(Button.Pressed, "#btn-goto-queue, #btn-goto-config")
+    def _on_goto(self, event: Button.Pressed) -> None:
+        page = "queue" if event.button.id == "btn-goto-queue" else "config"
+        self.post_message(OpenPage(page))

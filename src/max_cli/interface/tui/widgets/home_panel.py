@@ -16,7 +16,6 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
-from textual.message import Message
 from textual.widgets import Button, Digits, Static
 
 from max_cli.common.utils import format_size
@@ -25,6 +24,7 @@ from max_cli.interface.tui.activity_log import (
     ActivityEntry,
     ActivityLog,
 )
+from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.widgets.charts import (
     Bar,
     BarChart,
@@ -280,12 +280,7 @@ class HomePanel(Vertical):
     }
     """
 
-    class OpenPage(Message):
-        """A quick-launch button asks the app to show a page."""
-
-        def __init__(self, section_id: str) -> None:
-            super().__init__()
-            self.section_id = section_id
+    OpenPage = OpenPage
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="home-header"):
