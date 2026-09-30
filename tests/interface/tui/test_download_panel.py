@@ -920,7 +920,7 @@ async def test_tool_buttons_open_other_pages():
         app.query_one("#btn-goto-config", Button).press()
         await _settle(app, pilot)
 
-    assert opened == ["queue", "config"]
+    assert opened == ["queue", "settings"]
 
 
 @pytest.mark.asyncio

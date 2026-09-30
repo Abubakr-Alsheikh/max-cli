@@ -10,32 +10,28 @@ from textual.widgets import Footer
 from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
-from max_cli.interface.tui.widgets.analytics_panel import AnalyticsPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
-from max_cli.interface.tui.widgets.config_panel import ConfigPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 from max_cli.interface.tui.widgets.queue_panel import QueuePanel
+from max_cli.interface.tui.widgets.settings_panel import SettingsPanel
 from max_cli.interface.tui.widgets.sidebar import (
     SECTION_KEYS,
     SECTIONS,
     Badge,
     Sidebar,
 )
-from max_cli.interface.tui.widgets.system_panel import SystemPanel
 from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 # Panels whose data changes on its own (queue, history, disk use ...).
 REFRESHABLE_PANEL_IDS = (
     "#queue-panel",
     "#history-panel",
-    "#system-panel",
     "#files-panel",
     "#home-panel",
-    "#analytics-panel",
 )
 # Below this width the sidebar shows icons only.
 AUTO_COMPACT_COLUMNS = 100
@@ -43,6 +39,8 @@ BACK_HISTORY_LIMIT = 20
 BADGE_REFRESH_SECONDS = 2.0
 PREF_LAST_PAGE = "last_page"
 PREF_THEME = "theme"
+# Pages that were merged away, and where a saved last page now goes.
+RENAMED_PAGES = {"config": "settings", "system": "settings", "analytics": "home"}
 # Named "collapsed", not the earlier "sidebar_compact": that older choice
 # predates the icons-first default and must not override it.
 PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
@@ -153,38 +151,16 @@ class MaxDashboardApp(App):
     }
 
     /* ── Shared bottom action bars ──────────────────────── */
-    #history-controls, #config-actions,
-    #files-actions, #history-actions,
-    #storage-actions, #quick-actions, #system-actions {
+    #history-controls,
+    #files-actions, #history-actions {
         height: auto;
         margin-top: 1;
         dock: bottom;
     }
-    #storage-actions, #quick-actions, #system-actions {
-        dock: none;
-    }
 
-    /* ── Config Panel ───────────────────────────────────── */
-    .config-row {
-        margin: 0 1;
-        height: auto;
-    }
-    .config-label {
-        width: 30;
-        text-style: bold;
-    }
-    #config-fields {
-        height: 1fr;
-    }
     /* Inner scroll areas keep a usable height; the page scrolls around them. */
-    #config-scroll, #chat-scroll {
+    #chat-scroll {
         min-height: 6;
-    }
-    #log-scroll {
-        height: 8;
-        border: solid $border;
-        background: $surface;
-        padding: 0 1;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -253,86 +229,6 @@ class MaxDashboardApp(App):
     }
 
     /* ══════════════════════════════════════════════════════
-       ANALYTICS PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #analytics-sys-title {
-        text-style: bold;
-        margin-top: 0;
-    }
-    #analytics-sys-info {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        margin: 1 0;
-    }
-
-    #analytics-stats-row {
-        height: auto;
-        grid-size: 2;
-        grid-gutter: 1;
-    }
-
-    .analytics-section {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-    }
-
-    .analytics-section-title {
-        text-style: bold;
-        margin-bottom: 1;
-        border-bottom: solid $accent;
-    }
-
-    #analytics-cat-title {
-        text-style: bold;
-        margin-top: 1;
-    }
-    #analytics-category-bars {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        margin: 1 0;
-    }
-
-    /* ══════════════════════════════════════════════════════
-       SYSTEM PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #system-info {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        margin: 1 0;
-    }
-    #disk-title, #storage-title, #quick-actions-title, #system-log-title {
-        text-style: bold;
-        margin-top: 1;
-    }
-    #disk-progress {
-        margin: 0 1;
-    }
-    #system-disk {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        margin: 1 0;
-    }
-    #storage-details {
-        height: auto;
-        border: round $border;
-        background: $surface;
-        padding: 1;
-        margin: 1 0;
-    }
-
-    /* ══════════════════════════════════════════════════════
        HISTORY PANEL
        ══════════════════════════════════════════════════════ */
 
@@ -362,9 +258,7 @@ class MaxDashboardApp(App):
                 yield HistoryPanel(id="history-panel")
                 yield FilesPanel(id="files-panel")
                 yield ToolsPanel(id="tools-panel")
-                yield AnalyticsPanel(id="analytics-panel")
-                yield ConfigPanel(id="config-panel")
-                yield SystemPanel(id="system-panel")
+                yield SettingsPanel(id="settings-panel")
                 yield ChatPanel(id="chat-panel")
         yield JobsDrawer(id="jobs")
         yield Footer()
@@ -388,7 +282,8 @@ class MaxDashboardApp(App):
         # Failures that happen from now on get a badge on History.
         self._history_seen = datetime.now().isoformat()
         self._apply_compact()
-        start_page = prefs.get(PREF_LAST_PAGE)
+        start_page = str(prefs.get(PREF_LAST_PAGE) or "home")
+        start_page = RENAMED_PAGES.get(start_page, start_page)
         known = {section_id for section_id, _icon, _label in SECTIONS}
         self.navigate(start_page if start_page in known else "home", remember=False)
         self.query_one(Sidebar).focus_nav()

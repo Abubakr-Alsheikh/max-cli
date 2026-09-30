@@ -589,9 +589,7 @@ In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing
 | **History** | Filterable task history |
 | **Files** | File browser |
 | **Tools** | A form for each command, with all its options |
-| **Analytics** | Live usage and system monitoring |
-| **Config** | Editable configuration panel |
-| **System** | Disk usage and system info |
+| **Settings** | Your defaults (AI, downloads, images), plus FFmpeg status and cleanup |
 | **Chat** | AI chat |
 
 Press `q` to quit, `r` to refresh and `Ctrl+B` to collapse the sidebar.

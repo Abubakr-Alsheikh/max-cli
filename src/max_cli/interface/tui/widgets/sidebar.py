@@ -30,14 +30,12 @@ SECTIONS = [
     ("chat", "\U0001f4ac", "Chat"),
     ("queue", "\U0001f4cb", "Queue"),
     ("history", "\U0001f558", "History"),
-    ("analytics", "\U0001f4ca", "Analytics"),
-    ("config", "\U0001f4dd", "Config"),
-    ("system", "\U0001f4bb", "System"),
+    ("settings", "\U0001f527", "Settings"),
 ]
 SECTION_GROUPS = (
     ("DO", ("home", "download", "tools", "files", "chat")),
-    ("TRACK", ("queue", "history", "analytics")),
-    ("SETUP", ("config", "system")),
+    ("TRACK", ("queue", "history")),
+    ("SETUP", ("settings",)),
 )
 # Page id -> its number key: 1 to 9, then 0 for the tenth.
 SECTION_KEYS = {
