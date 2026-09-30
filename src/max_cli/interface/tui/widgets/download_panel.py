@@ -21,12 +21,13 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.events import Resize
 from textual.message import Message
 from textual.timer import Timer
@@ -1492,13 +1493,25 @@ class DownloadPanel(Vertical):
         except (ImportError, AttributeError) as e:
             # The provider registry is a private yt-dlp module; a new yt-dlp
             # can move it. Say so rather than guess.
-            self.app.call_from_thread(self._show_fix_error, str(e))
+            self.app.call_from_thread(self._from_worker, self._show_fix_error, str(e))
             return
-        self.app.call_from_thread(self._show_fix_status, status)
+        self.app.call_from_thread(self._from_worker, self._show_fix_status, status)
+
+    def _from_worker(self, show: Callable[..., None], *args: Any) -> None:
+        """Show a worker's result, unless the page is closing.
+
+        A thread worker can finish after the app starts shutting down; the
+        widgets it updates are gone by then, and the NoMatches failed the
+        worker and a test with it.
+        """
+        if not self.is_attached:
+            return
+        try:
+            show(*args)
+        except NoMatches:
+            return  # the page's widgets were already removed
 
     def _show_fix_error(self, error: str) -> None:
-        if not self.is_attached:
-            return  # the app closed while the check ran
         self.query_one("#dl-fix-status", Static).update(
             markup(
                 "[bold $accent]YOUTUBE FIX[/bold $accent]  "
@@ -1509,8 +1522,6 @@ class DownloadPanel(Vertical):
 
     def _show_fix_status(self, status: Any) -> None:
         """`status` is a grab.YoutubeFixStatus, or None while checking."""
-        if not self.is_attached:
-            return  # the app closed while the check ran
         head = ("YOUTUBE FIX  ", "bold $accent")
         button = self.query_one("#btn-youtube-fix", Button)
         if status is None:

@@ -310,3 +310,23 @@ def test_folder_size_skips_files_that_vanish_mid_walk(tmp_path, monkeypatch):
 
     assert settings_panel._folder_size(tmp_path) == 10
     assert looks["count"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_a_late_worker_result_is_ignored_when_the_page_is_closing():
+    """The sizes worker can finish after shutdown starts; its NoMatches failed
+    a dashboard test on the Python 3.9 CI run."""
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        panel = app.query_one(SettingsPanel)
+        await panel.remove_children()
+
+        facts = {
+            "ffmpeg": None,
+            "data_size": 0,
+            "cache": (0, 0),
+            "backups": (0, 0),
+            "undo": 0,
+        }
+        panel._from_worker(panel._show_upkeep, facts)  # must not raise
