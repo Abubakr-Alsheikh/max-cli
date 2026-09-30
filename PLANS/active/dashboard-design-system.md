@@ -86,6 +86,11 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - Downloads, actions, queue and downloaded-size tiles.
   - Charts: activity over 14 days (today in magenta) and a by-type breakdown, from `widgets/charts.py`.
   - Quick launch with number keys, and a recent-activity feed.
+- [x] Download: the same style (2026-09-30).
+  - `◢◤ DOWNLOAD // MEDIA GRABBER` header with the Simple/Advanced switch.
+  - A LINK card holds the link and Save to, full width, so paths aren't cut.
+  - PREVIEW and OUTPUT cards side by side, then ADVANCED and TRANSFERS.
+  - Download rows get a state-coloured left edge and a `charts.Meter` instead of Textual's ProgressBar.
 - [ ] Mockups as screenshots for the maintainer's approval before building.
 - [ ] Then build, with empty, loading and error states for each section.
 - [ ] Path and URL autocomplete (`textual-autocomplete`).

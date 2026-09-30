@@ -30,7 +30,6 @@ from textual.widgets import (
     DataTable,
     Input,
     Label,
-    ProgressBar,
     SelectionList,
     Static,
     TabbedContent,
@@ -44,6 +43,7 @@ from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.interface.tui.text import markup
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.action_form import ActionForm
+from max_cli.interface.tui.widgets.charts import Meter
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 
 GRAB_ACTION_ID = "grab.download"
@@ -174,28 +174,45 @@ class DownloadJob:
 
 
 class DownloadRow(Vertical):
-    """One download: title and button on top, then progress and details."""
+    """One download: title and button, a slim progress bar, then details.
+
+    The bar is a charts.Meter: Textual's ProgressBar runs a timer of its own
+    and didn't take the theme's colours.
+    """
 
     DEFAULT_CSS = """
     DownloadRow {
         height: auto;
-        border: round $border;
-        padding: 0 1;
+        background: $boost 40%;
+        border-left: outer $primary;
+        padding: 0 1 0 2;
         margin-bottom: 1;
     }
+    DownloadRow.-done {
+        border-left: outer $success;
+    }
+    DownloadRow.-failed {
+        border-left: outer $error;
+    }
+    DownloadRow.-cancelled {
+        border-left: outer $border;
+    }
     DownloadRow .row-head {
-        height: auto;
+        height: 3;
     }
     DownloadRow .row-title {
         width: 1fr;
+        height: 3;
+        content-align: left middle;
         text-style: bold;
-        padding-top: 1;
     }
-    DownloadRow ProgressBar, DownloadRow ProgressBar Bar {
-        width: 1fr;
+    DownloadRow .row-meter {
+        margin-bottom: 0;
     }
     DownloadRow .row-info {
+        height: auto;
         color: $text-muted;
+        margin-bottom: 1;
     }
     DownloadRow Button {
         min-width: 14;
@@ -210,7 +227,7 @@ class DownloadRow(Vertical):
         with Horizontal(classes="row-head"):
             yield Static(Content(self.job.title), classes="row-title")
             yield Button("Cancel", id=f"cancel-{self.job.job_id}", variant="error")
-        yield ProgressBar(total=100, show_eta=False, show_percentage=False)
+        yield Meter(classes="row-meter")
         yield Static("Waiting for a free slot...", classes="row-info")
 
     def _info(self, text: "str | Content", layout: bool = True) -> None:
@@ -231,7 +248,7 @@ class DownloadRow(Vertical):
             parts.append(f"{_duration(eta)} left")
         # One repaint for bar and text; the one-line text needs no page layout.
         with self.app.batch_update():
-            self.query_one(ProgressBar).progress = percent
+            self.query_one(Meter).set_value(percent)
             self._info("  ·  ".join(parts), layout=False)
 
     def _swap_button(
@@ -244,7 +261,8 @@ class DownloadRow(Vertical):
 
     def set_done(self, message: str, size_bytes: int) -> None:
         self.job.finished = True
-        self.query_one(ProgressBar).progress = 100
+        self.add_class("-done")
+        self.query_one(Meter).set_value(100, "$success")
         size = f"  ·  {format_size(size_bytes)}" if size_bytes else ""
         self._info(
             markup("[green]Done.[/green] $message$size", message=message, size=size)
@@ -253,13 +271,15 @@ class DownloadRow(Vertical):
 
     def set_failed(self, error: str) -> None:
         self.job.finished = True
-        self.query_one(ProgressBar).display = False
+        self.add_class("-failed")
+        self.query_one(Meter).display = False
         self._info(markup("[red]Failed:[/red] $error", error=error))
         self._swap_button("Retry", f"retry-{self.job.job_id}", "warning")
 
     def set_cancelled(self) -> None:
         self.job.finished = True
-        self.query_one(ProgressBar).display = False
+        self.add_class("-cancelled")
+        self.query_one(Meter).display = False
         self._info(
             Content.from_markup(
                 "[yellow]Cancelled.[/yellow] Partial files were removed."
@@ -282,16 +302,15 @@ class DownloadPanel(Vertical):
     DownloadPanel {
         height: 1fr;
         overflow-y: auto;
-        padding: 0 1;
+        padding: 1 2;
     }
     #dl-header {
         height: 3;
+        margin-bottom: 1;
     }
     #dl-title {
         width: 1fr;
-        padding-top: 1;
-        text-style: bold;
-        color: $accent;
+        height: 3;
     }
     .segmented {
         width: auto;
@@ -301,20 +320,28 @@ class DownloadPanel(Vertical):
         min-width: 10;
         margin: 0;
         border: tall $boost;
-        background: $surface;
+        background: $boost;
+    }
+    .segmented Button:hover, .chip:hover {
+        border: tall $primary 60%;
     }
     .segmented Button.-selected, .chip.-selected {
-        background: $accent;
+        background: $primary 25%;
+        color: $primary;
         text-style: bold;
-        border: tall $accent;
+        border: tall $primary;
     }
     .card {
         height: auto;
+        background: $surface;
         border: round $border;
-        border-title-color: $accent;
+        border-title-color: $primary;
         border-title-style: bold;
         padding: 0 1;
         margin-bottom: 1;
+    }
+    .card:focus-within {
+        border: round $primary;
     }
     #dl-link-row, #dl-folder-row, #dl-format-row, #dl-actions,
     #dl-playlist-actions, #dl-quality-row {
@@ -323,18 +350,29 @@ class DownloadPanel(Vertical):
     #dl-url, #dl-output {
         width: 1fr;
     }
+    #dl-main {
+        height: auto;
+        grid-size: 2;
+        grid-columns: 3fr 2fr;
+        grid-gutter: 0 2;
+    }
     #dl-preview-title {
         text-style: bold;
+        color: $primary;
+        margin-top: 1;
+    }
+    #dl-preview-meta {
+        margin-bottom: 1;
     }
     #dl-preview-meta, #dl-duplicate, .field-name {
         color: $text-muted;
     }
     .field-name {
-        width: 10;
+        width: 9;
         padding-top: 1;
     }
     #dl-quality {
-        grid-size: 3;
+        grid-size: 2;
         grid-gutter: 0 1;
         grid-rows: 3;
         height: auto;
@@ -350,16 +388,18 @@ class DownloadPanel(Vertical):
     #dl-advanced ActionForm {
         height: auto;
     }
+    #dl-actions {
+        margin-top: 1;
+    }
     #btn-download {
         width: 1fr;
-        max-width: 64;
+        text-style: bold;
     }
     #dl-status {
-        margin-top: 1;
+        margin-bottom: 1;
     }
     #dl-tabs {
         height: auto;
-        margin-top: 1;
     }
     #dl-jobs-empty {
         color: $text-muted;
@@ -403,7 +443,7 @@ class DownloadPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="dl-header"):
-            yield Static("⬇  Download", id="dl-title")
+            yield Static(self._brand(), id="dl-title")
             with Horizontal(id="dl-mode", classes="segmented"):
                 yield Button("Simple", id="mode-simple")
                 yield Button("Advanced", id="mode-advanced")
@@ -415,63 +455,85 @@ class DownloadPanel(Vertical):
                     id="dl-url",
                 )
                 yield Button("Check", id="btn-check")
+            with Horizontal(id="dl-folder-row"):
+                yield Label("Save to", classes="field-name")
+                yield Input(
+                    value=load_prefs().get(FOLDER_PREF)
+                    or str(settings.GRAB_DEFAULT_PATH),
+                    id="dl-output",
+                )
+                yield Button("Change...", id="btn-browse-output")
             yield Static("", id="dl-duplicate")
 
-        with Vertical(id="dl-preview", classes="card"):
-            yield Static(
-                "Paste a link and Max checks it for you. You can also download right away.",
-                id="dl-preview-title",
-            )
-            yield Static("", id="dl-preview-meta")
-            with Horizontal(id="dl-format-row"):
-                yield Label("Format", classes="field-name")
-                with Horizontal(classes="segmented"):
-                    yield Button("Video", id="fmt-video")
-                    yield Button("Audio (MP3)", id="fmt-audio")
-            with Horizontal(id="dl-quality-row"):
-                yield Label("Quality", classes="field-name")
-                yield Grid(id="dl-quality")
-            yield SelectionList[int](id="dl-playlist")
-            with Horizontal(id="dl-playlist-actions"):
-                yield Button("Select all", id="btn-pl-all")
-                yield Button("Select none", id="btn-pl-none")
+        with Grid(id="dl-main"):
+            with Vertical(id="dl-preview", classes="card"):
+                yield Static(
+                    "Paste a link and Max checks it for you.",
+                    id="dl-preview-title",
+                )
+                yield Static(
+                    "Title, length and sizes show here. You can also download right away.",
+                    id="dl-preview-meta",
+                )
+                yield SelectionList[int](id="dl-playlist")
+                with Horizontal(id="dl-playlist-actions"):
+                    yield Button("Select all", id="btn-pl-all")
+                    yield Button("Select none", id="btn-pl-none")
+
+            with Vertical(id="dl-output-card", classes="card"):
+                with Horizontal(id="dl-format-row"):
+                    yield Label("Format", classes="field-name")
+                    with Horizontal(classes="segmented"):
+                        yield Button("Video", id="fmt-video")
+                        yield Button("Audio (MP3)", id="fmt-audio")
+                with Horizontal(id="dl-quality-row"):
+                    yield Label("Quality", classes="field-name")
+                    yield Grid(id="dl-quality")
+                with Horizontal(id="dl-actions"):
+                    yield Button("⬇ Download", id="btn-download", variant="success")
+                    yield Button("Queue for later", id="btn-queue")
+                yield Static("", id="dl-status")
 
         with Vertical(id="dl-advanced", classes="card"):
             yield ActionForm(self._action, include=ADVANCED_FIELDS, embedded=True)
 
-        with Horizontal(id="dl-folder-row"):
-            yield Label("Save to", classes="field-name")
-            yield Input(
-                value=load_prefs().get(FOLDER_PREF) or str(settings.GRAB_DEFAULT_PATH),
-                id="dl-output",
-            )
-            yield Button("Change...", id="btn-browse-output")
-
-        with Horizontal(id="dl-actions"):
-            yield Button("⬇ Download", id="btn-download", variant="success")
-            yield Button("Queue for later", id="btn-queue")
-        yield Static("", id="dl-status")
-
-        with TabbedContent(id="dl-tabs"):
-            with TabPane("Downloads", id="tab-active"):
-                yield Static(
-                    "No downloads yet. Paste a link above to start.",
-                    id="dl-jobs-empty",
-                )
-                yield Vertical(id="dl-jobs")
-            with TabPane("History", id="tab-history"):
-                yield DataTable(id="download-history-table", cursor_type="row")
-                with Horizontal(id="dl-history-actions"):
-                    yield Button("Download again", id="btn-history-again")
-                    yield Button("Open folder", id="btn-history-open")
-                    yield Button(
-                        "Clear history", id="btn-clear-history", variant="error"
+        with Vertical(id="dl-transfers", classes="card"):
+            with TabbedContent(id="dl-tabs"):
+                with TabPane("Downloads", id="tab-active"):
+                    yield Static(
+                        "No downloads yet. Paste a link above to start.",
+                        id="dl-jobs-empty",
                     )
+                    yield Vertical(id="dl-jobs")
+                with TabPane("History", id="tab-history"):
+                    yield DataTable(id="download-history-table", cursor_type="row")
+                    with Horizontal(id="dl-history-actions"):
+                        yield Button("Download again", id="btn-history-again")
+                        yield Button("Open folder", id="btn-history-open")
+                        yield Button(
+                            "Clear history", id="btn-clear-history", variant="error"
+                        )
+
+    @staticmethod
+    def _brand() -> Content:
+        at_once = settings.GRAB_MAX_CONCURRENT
+        return Content.assemble(
+            ("◢◤ ", "bold $secondary"),
+            ("DOWNLOAD", "bold $primary"),
+            (" // MEDIA GRABBER\n", "bold"),
+            (
+                f"YouTube and many other sites  ·  up to {at_once} at once"
+                "  ·  J shows queued jobs",
+                "$text-muted",
+            ),
+        )
 
     async def on_mount(self) -> None:
-        self.query_one("#dl-link-card").border_title = "Link"
-        self.query_one("#dl-preview").border_title = "What you'll get"
-        self.query_one("#dl-advanced").border_title = "Advanced options"
+        self.query_one("#dl-link-card").border_title = "LINK"
+        self.query_one("#dl-preview").border_title = "PREVIEW"
+        self.query_one("#dl-output-card").border_title = "OUTPUT"
+        self.query_one("#dl-advanced").border_title = "ADVANCED"
+        self.query_one("#dl-transfers").border_title = "TRANSFERS"
         self.query_one("#dl-duplicate").display = False
         self._sync_mode()
         self._sync_format_buttons()
