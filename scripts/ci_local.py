@@ -77,33 +77,37 @@ class StepResult:
 def run_step(
     name: str, command: list[str], env: dict[str, str] | None = None
 ) -> StepResult:
+    """Run a step with its output going straight to a file.
+
+    Captured output is lost on Windows when a step is killed for hanging,
+    and with it pytest's stack dump of the stuck test. A file keeps it.
+    """
     started = time.monotonic()
-    try:
-        completed = subprocess.run(
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    live_log = LOG_DIR / f"{log_path(name).stem}.live"
+    with live_log.open("w", encoding="utf-8", errors="replace") as sink:
+        process = subprocess.Popen(
             command,
             cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            stdout=sink,
+            stderr=subprocess.STDOUT,
             env={**os.environ, **(env or {})},
-            timeout=STEP_TIMEOUT_SECONDS,
         )
-    except subprocess.TimeoutExpired as timeout:
-        partial = (timeout.stdout or "") + (timeout.stderr or "")
-        if isinstance(partial, bytes):
-            partial = partial.decode("utf-8", errors="replace")
-        return StepResult(
-            name=name,
-            ok=False,
-            seconds=time.monotonic() - started,
-            output=f"{partial}\nStopped after {STEP_TIMEOUT_SECONDS}s: something hangs.",
-        )
+        try:
+            returncode = process.wait(timeout=STEP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            returncode = None
+    output = live_log.read_text(encoding="utf-8", errors="replace")
+    live_log.unlink(missing_ok=True)
+    if returncode is None:
+        output += f"\nStopped after {STEP_TIMEOUT_SECONDS}s: something hangs."
     return StepResult(
         name=name,
-        ok=completed.returncode == 0,
+        ok=returncode == 0,
         seconds=time.monotonic() - started,
-        output=completed.stdout + completed.stderr,
+        output=output,
     )
 
 
