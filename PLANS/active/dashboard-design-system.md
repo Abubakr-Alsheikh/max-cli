@@ -116,7 +116,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - Settings shows only settings some code reads, with fitting controls, saves only changed keys, applies them at once, and flags a local `.env` that overrides them. Maintenance: versions, FFmpeg, data size, cache and 30-day undo cleanup, reset; each asks first.
   - Nine settings nothing reads (`APP_NAME`, `BATCH_SIZE`, `CONFIRM_DESTRUCTIVE`, `DOWNLOAD_TIMEOUT`, `GRAB_AUDIO_FORMAT`, `GRAB_QUEUE_ENABLED`, `MAX_RETRIES`, `PROGRESS_BAR`, `VERBOSE`) are left off the page. Decide later whether to delete them from `config.py` or make them work.
 - [ ] History becomes Activity: readable times, where the output went, Run again, and Undo for file changes.
-- [ ] Tools, then Files as "start from a file" (actions that fit the picked file's type), then Chat with the AI agent.
+- [ ] Superseded by `dashboard-tool-pages.md` (maintainer, 2026-09-30): a page per command group instead of one Tools page and a "start from a file" Files page.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.
 
 ## The Max TUI rules (draft for R1; the maintained version is the `max-tui-design` skill)

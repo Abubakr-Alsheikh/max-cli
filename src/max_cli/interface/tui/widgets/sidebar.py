@@ -25,6 +25,7 @@ from textual.widgets import Button, Static
 SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
+    ("video", "\U0001f3ac", "Video"),
     ("tools", "\U0001f9f0", "Tools"),
     ("files", "\U0001f4c1", "Files"),
     ("chat", "\U0001f4ac", "Chat"),
@@ -33,7 +34,7 @@ SECTIONS = [
     ("settings", "\U0001f527", "Settings"),
 ]
 SECTION_GROUPS = (
-    ("DO", ("home", "download", "tools", "files", "chat")),
+    ("DO", ("home", "download", "video", "tools", "files", "chat")),
     ("TRACK", ("queue", "history")),
     ("SETUP", ("settings",)),
 )

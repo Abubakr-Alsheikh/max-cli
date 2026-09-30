@@ -6,8 +6,9 @@ catalog (`core/catalog/groups/video.py`). They never prompt or print. Pass
 ask before downloading FFmpeg); otherwise each call builds its own.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.core.operations.result import ActionResult
@@ -26,6 +27,7 @@ from max_cli.core.presets import (
 )
 
 if TYPE_CHECKING:
+    from max_cli.core.engines.ffmpeg_base import FFmpegEngine
     from max_cli.core.engines.media_engine import MediaEngine
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
@@ -336,3 +338,99 @@ def preview(
     _require_file(target)
     _engine(engine).live_preview(target, port=port, bitrate=bitrate)
     return ActionResult(True, "Preview stopped")
+
+
+# --- describing a file (the dashboard's Video page) --------------------------
+
+NO_FFMPEG_NOTE = "FFmpeg isn't installed yet, so only the size is known."
+
+
+@dataclass
+class MediaFacts:
+    """What a video or audio file holds, as ffprobe reports it."""
+
+    path: Path
+    size_bytes: int
+    duration: Optional[float] = None  # seconds
+    width: Optional[int] = None
+    height: Optional[int] = None
+    fps: Optional[float] = None
+    video_codec: str = ""
+    audio_codec: str = ""
+    audio_channels: Optional[int] = None
+    bitrate: Optional[int] = None  # bits per second, the whole file
+    note: str = ""  # why some facts are missing
+
+
+def _number(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _frame_rate(rate: Any) -> Optional[float]:
+    """ffprobe's "30000/1001" as 29.97."""
+    text = str(rate or "")
+    if "/" in text:
+        top, _, bottom = text.partition("/")
+        numerator, denominator = _number(top), _number(bottom)
+        if numerator and denominator:
+            return round(numerator / denominator, 2)
+        return None
+    return _number(text)
+
+
+def facts_from_probe(path: Path, size_bytes: int, probe: dict[str, Any]) -> MediaFacts:
+    """Pick the facts the page shows out of ffprobe's JSON."""
+    streams = probe.get("streams") or []
+    video: dict[str, Any] = next(
+        (
+            stream
+            for stream in streams
+            if stream.get("codec_type") == "video"
+            # A cover picture in a music file is a one-frame "video" stream.
+            and not (stream.get("disposition") or {}).get("attached_pic")
+        ),
+        {},
+    )
+    audio: dict[str, Any] = next(
+        (stream for stream in streams if stream.get("codec_type") == "audio"), {}
+    )
+    info = probe.get("format") or {}
+    bitrate = _number(info.get("bit_rate"))
+    channels = audio.get("channels")
+    return MediaFacts(
+        path=path,
+        size_bytes=size_bytes,
+        duration=_number(info.get("duration")),
+        width=video.get("width"),
+        height=video.get("height"),
+        fps=_frame_rate(video.get("avg_frame_rate")) if video else None,
+        video_codec=str(video.get("codec_name") or ""),
+        audio_codec=str(audio.get("codec_name") or ""),
+        audio_channels=int(channels) if isinstance(channels, int) else None,
+        bitrate=int(bitrate) if bitrate else None,
+    )
+
+
+def describe(target: Path, *, engine: Optional["FFmpegEngine"] = None) -> MediaFacts:
+    """A file's length, picture size, frame rate and codecs, for the Video page.
+
+    Never downloads FFmpeg: without it, only the size comes back, with a note.
+    """
+    target = Path(target)
+    _require_file(target)
+    size = target.stat().st_size
+    if engine is None:
+        from max_cli.core.engines.ffmpeg_base import FFmpegEngine
+
+        try:
+            engine = FFmpegEngine(auto_resolve=False)
+        except RuntimeError:
+            return MediaFacts(path=target, size_bytes=size, note=NO_FFMPEG_NOTE)
+    try:
+        probe = engine.probe_media(target)
+    except RuntimeError as exc:
+        return MediaFacts(path=target, size_bytes=size, note=str(exc))
+    return facts_from_probe(target, size, probe)

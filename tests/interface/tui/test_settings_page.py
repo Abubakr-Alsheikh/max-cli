@@ -252,12 +252,13 @@ async def test_a_local_env_file_is_pointed_out(tmp_path, monkeypatch):
 # --- the dashboard ------------------------------------------------------------
 
 
-def test_the_sidebar_has_eight_pages():
+def test_the_sidebar_pages():
     from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS, SECTIONS
 
     assert [section_id for section_id, _icon, _label in SECTIONS] == [
         "home",
         "download",
+        "video",
         "tools",
         "files",
         "chat",
@@ -265,7 +266,7 @@ def test_the_sidebar_has_eight_pages():
         "history",
         "settings",
     ]
-    assert SECTION_KEYS["settings"] == "8"
+    assert SECTION_KEYS["settings"] == "9"
 
 
 @pytest.mark.asyncio

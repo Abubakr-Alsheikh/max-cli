@@ -10,6 +10,7 @@ from max_cli.interface.tui.ui_prefs import load_prefs
 from max_cli.interface.tui.widgets.dialogs import HelpScreen
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS, Badge, Sidebar
+from tests.interface.tui.waiting import wait_until
 
 WIDE = (120, 40)
 NARROW = (90, 30)
@@ -155,13 +156,14 @@ async def test_running_downloads_show_as_a_badge():
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
         panel = app.query_one(DownloadPanel)
+        sidebar = app.query_one(Sidebar)
         panel.post_message(DownloadPanel.RunningChanged(2))
-        await pilot.pause()
-        assert app.query_one(Sidebar).badge("download") == Badge("running", 2)
+        await wait_until(pilot, lambda: sidebar.badge("download") is not None)
+        assert sidebar.badge("download") == Badge("running", 2)
 
         panel.post_message(DownloadPanel.RunningChanged(0))
-        await pilot.pause()
-        assert app.query_one(Sidebar).badge("download") is None
+        await wait_until(pilot, lambda: sidebar.badge("download") is None)
+        assert sidebar.badge("download") is None
 
 
 @pytest.mark.asyncio

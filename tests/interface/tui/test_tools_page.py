@@ -24,6 +24,7 @@ from max_cli.core.operations.result import ActionResult
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog, PathPicker
+from tests.interface.tui.waiting import wait_until
 
 RUN_ACTION = "max_cli.core.catalog.runner.run_action"
 
@@ -212,7 +213,8 @@ async def test_browse_fills_the_path_field(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_files_page_video_compress_opens_the_prefilled_form(dummy_video):
+async def test_files_page_video_compress_opens_the_video_page(dummy_video):
+    """A group with its own page (Video) gets the file there, not on Tools."""
     from max_cli.interface.tui.app import MaxDashboardApp
     from max_cli.interface.tui.widgets.files_panel import FilesPanel
 
@@ -221,12 +223,16 @@ async def test_files_page_video_compress_opens_the_prefilled_form(dummy_video):
         app.query_one(FilesPanel).post_message(
             FilesPanel.OpenAction("video.compress", {"target": str(dummy_video)})
         )
-        await pilot.pause()
-        await pilot.pause()
+        page = app.query_one("#video-panel")
+        await wait_until(
+            pilot,
+            lambda: page.form.query_one("#field-target", Input).value
+            == str(dummy_video),
+        )
 
-        tools = app.query_one("#tools-panel")
-        assert tools.display
-        form = tools.query_one(ActionForm)
+        assert page.display
+        assert page.query_one("#tool-file", Input).value == str(dummy_video)
+        form = page.form
         assert form.action.id == "video.compress"
         assert form.query_one("#field-target", Input).value == str(dummy_video)
 
@@ -241,10 +247,14 @@ async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
         app.query_one(FilesPanel).post_message(
             FilesPanel.OpenAction("images.compress", {"target": str(dummy_image)})
         )
-        await pilot.pause()
-        await pilot.pause()
+        tools = app.query_one("#tools-panel")
+        await wait_until(
+            pilot,
+            lambda: tools.query_one(ActionForm).query_one("#field-target", Input).value
+            == str(dummy_image),
+        )
 
-        form = app.query_one("#tools-panel").query_one(ActionForm)
+        form = tools.query_one(ActionForm)
         assert form.action.id == "images.compress"
         assert form.query_one("#field-target", Input).value == str(dummy_image)
         # A Setting default shows the user's configured value.
@@ -288,10 +298,14 @@ async def test_files_page_organize_opens_the_form_and_moves_nothing(tmp_path):
         panel = app.query_one(FilesPanel)
         panel._current_path = tmp_path
         panel.query_one("#btn-organize", Button).press()
-        await pilot.pause()
-        await pilot.pause()
+        tools = app.query_one("#tools-panel")
+        await wait_until(
+            pilot,
+            lambda: tools.query_one(ActionForm).query_one("#field-path", Input).value
+            == str(tmp_path),
+        )
 
-        form = app.query_one("#tools-panel").query_one(ActionForm)
+        form = tools.query_one(ActionForm)
         assert form.action.id == "files.smart-sort"
         assert form.query_one("#field-path", Input).value == str(tmp_path)
         assert (tmp_path / "invoice.pdf").exists()

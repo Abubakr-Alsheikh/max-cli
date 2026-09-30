@@ -585,6 +585,7 @@ In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing
 |---------|-------------|
 | **Home** | Quick actions |
 | **Download** | Download form with progress |
+| **Video** | Pick a video or audio file, see what it holds, run any `max video` action |
 | **Queue** | Running, waiting and finished tasks, with pause, cancel and retry |
 | **History** | Filterable task history |
 | **Files** | File browser |

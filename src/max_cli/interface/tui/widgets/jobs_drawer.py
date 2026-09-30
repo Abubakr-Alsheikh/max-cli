@@ -16,6 +16,7 @@ from textual.timer import Timer
 from textual.widgets import Static
 
 from max_cli.core.engines.task_queue import TaskItem, TaskStatus
+from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
 REFRESH_SECONDS = 1.0
 FINISHED_SHOWN = 3
@@ -115,7 +116,10 @@ class JobsDrawer(Vertical):
         yield Static("", id="jobs-title")
         yield Static("", id="jobs-list")
         yield Static(
-            Content("J closes this  ·  6 opens the Queue page to cancel or retry"),
+            Content(
+                f"J closes this  ·  {SECTION_KEYS['queue']} opens the Queue page "
+                "to cancel or retry"
+            ),
             id="jobs-hint",
         )
 

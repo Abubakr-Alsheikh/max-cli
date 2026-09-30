@@ -1497,6 +1497,8 @@ class DownloadPanel(Vertical):
         self.app.call_from_thread(self._show_fix_status, status)
 
     def _show_fix_error(self, error: str) -> None:
+        if not self.is_attached:
+            return  # the app closed while the check ran
         self.query_one("#dl-fix-status", Static).update(
             markup(
                 "[bold $accent]YOUTUBE FIX[/bold $accent]  "
@@ -1507,6 +1509,8 @@ class DownloadPanel(Vertical):
 
     def _show_fix_status(self, status: Any) -> None:
         """`status` is a grab.YoutubeFixStatus, or None while checking."""
+        if not self.is_attached:
+            return  # the app closed while the check ran
         head = ("YOUTUBE FIX  ", "bold $accent")
         button = self.query_one("#btn-youtube-fix", Button)
         if status is None:

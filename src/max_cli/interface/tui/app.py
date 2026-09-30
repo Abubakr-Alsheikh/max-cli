@@ -9,6 +9,7 @@ from textual.widgets import Footer
 
 from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
+from max_cli.interface.tui.tool_pages import TOOL_PAGES
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
@@ -24,6 +25,7 @@ from max_cli.interface.tui.widgets.sidebar import (
     Badge,
     Sidebar,
 )
+from max_cli.interface.tui.widgets.tool_page import ToolPage
 from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 # Panels whose data changes on its own (queue, history, disk use ...).
@@ -106,8 +108,11 @@ class MaxDashboardApp(App):
         height: 1fr;
     }
 
-    /* Every page scrolls when it's taller than the terminal. */
+    /* Every page scrolls when it's taller than the terminal. Pages start
+       hidden; navigate() shows one. Shown all at once for the first frame,
+       a page that takes focus on show (Download) grabbed the keyboard. */
     #content > * {
+        display: none;
         padding: 1 2;
         height: 1fr;
         overflow-y: auto;
@@ -254,6 +259,8 @@ class MaxDashboardApp(App):
             with Container(id="content"):
                 yield HomePanel(id="home-panel")
                 yield DownloadPanel(id="download-panel")
+                for spec in TOOL_PAGES:
+                    yield ToolPage(spec, id=f"{spec.page_id}-panel")
                 yield QueuePanel(id="queue-panel")
                 yield HistoryPanel(id="history-panel")
                 yield FilesPanel(id="files-panel")
@@ -437,7 +444,15 @@ class MaxDashboardApp(App):
         self.navigate(message.section_id)
 
     def on_files_panel_open_action(self, message: FilesPanel.OpenAction) -> None:
-        """The Files page hands a selected file to a Tools form."""
+        """The Files page hands a selected file to its group's page, else Tools."""
+        group = message.action_id.split(".", 1)[0]
+        page = next(
+            (page for page in self.query(ToolPage) if page.spec.group == group), None
+        )
+        if page is not None:
+            self.navigate(page.spec.page_id)
+            page.open_action(message.action_id, **message.values)
+            return
         self.navigate("tools")
         self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
 
