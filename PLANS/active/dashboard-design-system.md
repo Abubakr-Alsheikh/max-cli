@@ -53,8 +53,9 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 
 ### R1: Design rules and checks
 - [ ] Vendor `tui-design-skill` (see Decisions).
-- [ ] Write `.claude/skills/max-tui-design/SKILL.md`: the Max rules below, with examples from our code.
-- [ ] Add a TUI section to `AGENTS.md` that points to it.
+- [x] Write `.claude/skills/max-tui-design/SKILL.md`: theme tokens, page anatomy, components, states, smoothness rules, CSS pitfalls, keyboard, PR checklist (2026-09-30). It supersedes the draft rules below.
+- [x] Point `AGENTS.md` at it.
+- [x] `scripts/tui_screenshot.py`: render any page with a throwaway home, optional sample data and the Jobs window.
 - [ ] Mechanical checks in `.claude/hooks/check_rules.py` for `interface/tui/`: no hex or named colours outside the theme; no `DataTable.clear(columns=True)` or `recompose()` in a `refresh_data`; progress callbacks throttled.
 - [ ] Every UI PR includes Pilot screenshots (SVG to PNG) of the pages it changes.
 
@@ -99,7 +100,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [ ] Queue, History, Files, Tools, Analytics (`textual-plotext` charts), Config, System, Chat, using the same rules.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.
 
-## The Max TUI rules (draft for R1)
+## The Max TUI rules (draft for R1; the maintained version is the `max-tui-design` skill)
 
 - Colours come only from theme variables (`$primary`, `$panel`, `$text-muted`, ...). Never hex or `red` in page CSS.
 - One scroll area per page. Nested scrollables get a fixed height, never `1fr`.
