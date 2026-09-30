@@ -199,3 +199,84 @@ async def test_in_the_dashboard_key_3_opens_video():
 
     assert SECTION_KEYS["video"] == "3"
     assert shown
+
+
+# --- the PDF page -----------------------------------------------------------------
+
+PDF_DESCRIBE = "max_cli.core.operations.pdf.describe"
+
+
+def test_pdf_facts_line(tmp_path):
+    from max_cli.core.operations.pdf import PdfFacts
+    from max_cli.interface.tui.tool_pages import describe_pdf
+
+    facts = PdfFacts(
+        path=tmp_path / "report.pdf",
+        size_bytes=2048,
+        pages=12,
+        page_size="A4 portrait",
+        title="Q3 report",
+        author="Ana",
+        form_fields=8,
+    )
+    with patch(PDF_DESCRIBE, return_value=facts):
+        line = describe_pdf(facts.path).plain
+
+    assert line == (
+        'report.pdf  ·  12 pages  ·  A4 portrait  ·  2.00 KB  ·  "Q3 report" by Ana'
+        "  ·  8 form fields"
+    )
+
+
+def test_a_locked_or_scanned_pdf_gets_its_note(tmp_path):
+    from max_cli.core.operations import pdf
+    from max_cli.interface.tui.tool_pages import describe_pdf
+
+    locked = pdf.PdfFacts(
+        path=tmp_path / "x.pdf", size_bytes=10, encrypted=True, note=pdf.LOCKED_NOTE
+    )
+    scanned = pdf.PdfFacts(
+        path=tmp_path / "s.pdf",
+        size_bytes=10,
+        pages=1,
+        scanned=True,
+        note=pdf.SCANNED_NOTE,
+    )
+    with patch(PDF_DESCRIBE, return_value=locked):
+        assert "password" in describe_pdf(locked.path).plain
+    with patch(PDF_DESCRIBE, return_value=scanned):
+        text = describe_pdf(scanned.path).plain
+    assert "1 page  ·" in text and "OCR" in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action, field", [("merge", "inputs"), ("compare", "file1")])
+async def test_the_picked_pdf_goes_in_the_first_file_field(dummy_pdf, action, field):
+    from max_cli.core.operations.pdf import PdfFacts
+    from max_cli.interface.tui.tool_pages import PDF
+
+    class PdfApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(PDF, id="pdf-panel")
+
+    app = PdfApp()
+    with patch(PDF_DESCRIBE, return_value=PdfFacts(path=dummy_pdf, size_bytes=1)):
+        async with app.run_test(size=SIZE) as pilot:
+            await pilot.pause()
+            app.query_one("#tool-file", Input).value = str(dummy_pdf)
+            app.query_one(f"#act-{action}", Button).press()
+            page = app.query_one(ToolPage)
+            filled = await wait_until(
+                pilot,
+                lambda: page.form.action.id == f"pdf.{action}"
+                and page.form.query_one(f"#field-{field}", Input).value
+                == str(dummy_pdf),
+            )
+
+    assert filled
+
+
+def test_pdf_is_key_4():
+    from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
+
+    assert SECTION_KEYS["pdf"] == "4"

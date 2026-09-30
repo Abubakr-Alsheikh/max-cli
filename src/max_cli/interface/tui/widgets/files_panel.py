@@ -266,6 +266,10 @@ class FilesPanel(Vertical):
                     self.post_message(
                         self.OpenAction("video.compress", {"target": str(full_path)})
                     )
+                elif ext == ".pdf":
+                    self.post_message(
+                        self.OpenAction("pdf.compress", {"target": str(full_path)})
+                    )
                 else:
                     self.notify(
                         "Unsupported file type for compression", severity="warning"

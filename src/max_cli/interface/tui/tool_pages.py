@@ -88,4 +88,53 @@ VIDEO = ToolPageSpec(
     describe=describe_video,
 )
 
-TOOL_PAGES = (VIDEO,)
+
+def describe_pdf(path: Path) -> Content:
+    """report.pdf · 12 pages · A4 portrait · 2.40 MB · "Q3 report" by Ana · 8 form fields"""
+    from max_cli.core.operations import pdf
+
+    facts = pdf.describe(path)
+    pages = facts.pages
+    byline = " by ".join(
+        part
+        for part in (f'"{facts.title}"' if facts.title else "", facts.author)
+        if part
+    )
+    parts = [
+        f"{pages} page{'s' if pages != 1 else ''}" if pages is not None else "",
+        facts.page_size,
+        format_size(facts.size_bytes),
+        byline,
+        f"{facts.form_fields} form fields" if facts.form_fields else "",
+    ]
+    lines = [
+        Content.assemble(
+            (facts.path.name, "bold $primary"),
+            (SEPARATOR + SEPARATOR.join(part for part in parts if part), ""),
+        )
+    ]
+    if facts.note:
+        lines.append(
+            Content.styled(facts.note, "$warning" if facts.encrypted else "$text-muted")
+        )
+    return Content("\n").join(lines)
+
+
+PDF = ToolPageSpec(
+    page_id="pdf",
+    group="pdf",
+    title="PDF",
+    tagline="DOCUMENT DESK",
+    hint="Merge, split, shrink, lock and read PDFs  ·  every action writes a new file",
+    file_prompt="Pick a PDF, or paste its path",
+    sections=(
+        ToolSection("SHRINK", ("compress", "optimize")),
+        ToolSection("COMBINE & SPLIT", ("merge", "bundle", "split", "compare")),
+        ToolSection("PROTECT & MARK", ("lock", "stamp")),
+        ToolSection("EXTRACT", ("rip", "ocr")),
+        ToolSection("FORMS", ("form-data", "form-fill", "form-flatten")),
+    ),
+    describe=describe_pdf,
+)
+
+TOOL_PAGES = (VIDEO, PDF)

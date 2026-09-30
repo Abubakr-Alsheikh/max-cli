@@ -259,6 +259,7 @@ def test_the_sidebar_pages():
         "home",
         "download",
         "video",
+        "pdf",
         "tools",
         "files",
         "chat",
@@ -266,7 +267,7 @@ def test_the_sidebar_pages():
         "history",
         "settings",
     ]
-    assert SECTION_KEYS["settings"] == "9"
+    assert SECTION_KEYS["settings"] == "0"
 
 
 @pytest.mark.asyncio
