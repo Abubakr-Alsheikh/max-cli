@@ -51,7 +51,8 @@ def job_line(task: TaskItem) -> Content:
             ("» ", "bold $primary"),
             (f"{task.progress:>3.0f}% ", "bold $primary"),
             (FULL_BLOCK * filled, "$primary"),
-            (FULL_BLOCK * (BAR_WIDTH - filled), "$boost"),
+            # $border, not $boost: as a text colour $boost came out near-white.
+            (FULL_BLOCK * (BAR_WIDTH - filled), "$border"),
             ("  ", ""),
             (_title(task), "bold"),
             (details, "$text-muted"),
