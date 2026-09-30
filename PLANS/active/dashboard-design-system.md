@@ -87,7 +87,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - Charts: activity over 14 days (today in magenta) and a by-type breakdown, from `widgets/charts.py`.
   - Quick launch with number keys, and a recent-activity feed.
 - [x] Download: the same style (2026-09-30).
-  - `◢◤ DOWNLOAD // MEDIA GRABBER` header with the Simple/Advanced switch.
+  - `◢◤ DOWNLOAD // MEDIA GRABBER` header. (The Simple/Advanced switch went in the second round.)
   - A LINK card holds the link and Save to, full width, so paths aren't cut.
   - PREVIEW and OUTPUT cards side by side, then ADVANCED and TRANSFERS.
   - Download rows get a state-coloured left edge and a `charts.Meter` instead of Textual's ProgressBar.
@@ -97,6 +97,9 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - The preview shows views, likes, upload date, chapters, subtitles, the best audio stream, and MP3 sizes per bitrate.
   - A TOOLS card brings the rest of `max grab` in: stats (`status`), the YouTube fix (`pot-setup`), and links to the folder, the queue and settings.
   - Download rows are four lines: one-line buttons, and "Clear finished".
+  - No Simple/Advanced switch: the OPTIONS card always shows (maintainer: it fits in its corner).
+  - Check locks its button and shows a spinner with elapsed seconds until the site answers.
+  - Found on the way: `test_cancel_stops_a_running_download` called `started.wait(5)`, which blocked the event loop, so the worker never started and the fake download looped forever. Likely the Python 3.9 hang seen under load in `ci_local --full`.
 - [ ] Mockups as screenshots for the maintainer's approval before building.
 - [ ] Then build, with empty, loading and error states for each section.
 - [ ] Path and URL autocomplete (`textual-autocomplete`).

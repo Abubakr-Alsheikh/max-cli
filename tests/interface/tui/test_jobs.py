@@ -5,6 +5,7 @@ pending: nothing in the dashboard started the queue worker.
 """
 
 import threading
+import time
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +22,7 @@ DOWNLOAD = "max_cli.core.operations.grab.download"
 URL = "https://www.youtube.com/watch?v=abc"
 WAIT_SECONDS = 10
 POLL_SECONDS = 0.1
+FAKE_DOWNLOAD_SECONDS = 10
 
 
 async def _wait_for(pilot, condition) -> bool:
@@ -71,7 +73,9 @@ async def test_queued_downloads_report_progress_and_can_be_cancelled(tmp_path):
             }
         )
         started.set()
-        while not kwargs["should_cancel"]():
+        # A deadline, so a test that fails before cancelling can't hang the run.
+        deadline = time.monotonic() + FAKE_DOWNLOAD_SECONDS
+        while not kwargs["should_cancel"]() and time.monotonic() < deadline:
             threading.Event().wait(0.02)
         raise OperationCancelled("Download cancelled")
 

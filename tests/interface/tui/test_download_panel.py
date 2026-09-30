@@ -1,6 +1,7 @@
 """The Download page (grab-page-redesign.md): preview, modes, playlists, several links, rows."""
 
 import threading
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,8 @@ OK = ActionResult(True, "Downloaded: Trailer", [])
 # Waiting for a state change: up to 100 x 0.05 s, for runs under load.
 POLL_ATTEMPTS = 100
 POLL_SECONDS = 0.05
+# A fake download that waits for Cancel gives up after this long.
+FAKE_DOWNLOAD_SECONDS = 10
 
 VIDEO = MediaInfo(
     url=URL,
@@ -139,27 +142,106 @@ def test_short_size():
     assert short_size(3 * 1024**3) == "3.0 GB"
 
 
-# --- modes and preview -----------------------------------------------------
+# --- options and preview ---------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_advanced_mode_is_remembered():
-    app = PanelApp()
-    async with app.run_test(size=(110, 60)) as pilot:
-        assert not app.query_one("#dl-advanced").display
-        assert app.query_one("#mode-simple").has_class("-selected")
-
-        app.query_one("#mode-advanced", Button).press()
-        await pilot.pause()
-
-        assert app.query_one("#dl-advanced").display
-        assert app.query("#field-subtitles")
-    assert load_prefs()["download_mode"] == "advanced"
-
+async def test_options_show_without_a_mode_switch():
+    """The Simple/Advanced switch went: the options card fits in a corner."""
     app = PanelApp()
     async with app.run_test(size=(110, 60)):
-        assert app.query_one("#dl-advanced").display
-        assert app.query_one("#mode-advanced").has_class("-selected")
+        shown = app.query_one("#dl-advanced").display
+        has_fields = bool(app.query("#field-subtitles"))
+        switches = app.query("#mode-simple, #mode-advanced")
+
+    assert shown and has_fields
+    assert not switches
+
+
+# --- checking a link ---------------------------------------------------------
+
+
+def _held_probe(release: threading.Event, answer):
+    """A probe that waits for `release`, then returns `answer` or raises it.
+
+    Keep the patch around the whole test: the worker thread may call the
+    probe after a shorter `with` block ended, and then the real one ran.
+    """
+
+    def held_probe(url):
+        release.wait(5)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    return patch(PROBE, side_effect=held_probe)
+
+
+async def _start_check(app: App, pilot) -> None:
+    app.query_one("#dl-url", Input).value = URL
+    app.query_one("#btn-check", Button).press()
+    await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_check_locks_its_button_and_spins_until_the_answer():
+    release = threading.Event()
+    app = PanelApp()
+    with _held_probe(release, VIDEO):
+        async with app.run_test(size=(110, 60)) as pilot:
+            await _start_check(app, pilot)
+            button = app.query_one("#btn-check", Button)
+            locked, label = button.disabled, str(button.label)
+            first = _text(app, "#dl-preview-title")
+            await pilot.pause(download_panel.SPINNER_SECONDS * 3)
+            later = _text(app, "#dl-preview-title")
+            release.set()
+            await _settle(app, pilot)
+            unlocked, label_after = not button.disabled, str(button.label)
+            title = _text(app, "#dl-preview-title")
+
+    assert locked and label == "Checking"
+    assert "Checking the link" in first
+    assert first[0] != later[0]  # the spinner moved
+    assert unlocked and label_after == "Check"
+    assert title == "Trailer"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_check_unlocks_the_button():
+    release = threading.Event()
+    release.set()
+    app = PanelApp()
+    with _held_probe(release, RuntimeError("no such video")):
+        async with app.run_test(size=(110, 60)) as pilot:
+            await _start_check(app, pilot)
+            await _settle(app, pilot)
+            button = app.query_one("#btn-check", Button)
+            title = _text(app, "#dl-preview-title")
+
+    assert not button.disabled and str(button.label) == "Check"
+    assert title == "Couldn't read this link."
+
+
+def test_a_slow_check_says_why():
+    panel = DownloadPanel()
+    panel._check_started = download_panel.time.monotonic() - 10
+
+    assert "slow on the first check" in panel._checking_line().plain
+
+
+@pytest.mark.asyncio
+async def test_an_older_answer_does_not_end_a_newer_check():
+    app = PanelApp()
+    async with app.run_test(size=(110, 60)) as pilot:
+        panel = app.query_one(DownloadPanel)
+        panel._start_checking("new link")
+        panel._show_probe_error("too late", "old link")
+        await pilot.pause()
+        still_checking = panel.is_checking
+        locked = app.query_one("#btn-check", Button).disabled
+
+    assert still_checking and locked
 
 
 @pytest.mark.asyncio
@@ -371,7 +453,9 @@ async def test_cancel_stops_a_running_download():
 
     def slow_download(**kwargs):
         started.set()
-        while not kwargs["should_cancel"]():
+        # A deadline, so a test that fails before Cancel can't hang the run.
+        deadline = time.monotonic() + FAKE_DOWNLOAD_SECONDS
+        while not kwargs["should_cancel"]() and time.monotonic() < deadline:
             threading.Event().wait(0.01)
         raise OperationCancelled("Download cancelled")
 
@@ -380,8 +464,14 @@ async def test_cancel_stops_a_running_download():
         async with app.run_test(size=(110, 60)) as pilot:
             app.query_one("#dl-url", Input).value = URL
             app.query_one("#btn-download", Button).press()
-            await pilot.pause()
-            assert started.wait(5)
+            # Wait by yielding to the app. started.wait() blocked its event
+            # loop, and a thread worker only starts when that loop runs: under
+            # load the download never started and the test hung.
+            for _ in range(POLL_ATTEMPTS):
+                await pilot.pause(POLL_SECONDS)
+                if started.is_set():
+                    break
+            assert started.is_set()
             app.query_one("#cancel-1", Button).press()
             await _settle(app, pilot)
             row = app.query_one(DownloadRow)
@@ -633,13 +723,12 @@ async def test_audio_chips_show_the_mp3_size_of_a_checked_video():
 
 
 @pytest.mark.asyncio
-async def test_advanced_options_are_compact_and_reach_the_download():
+async def test_options_are_compact_and_reach_the_download():
     from textual.widgets import Checkbox
 
     app = PanelApp()
     with patch(DOWNLOAD, return_value=OK) as download:
         async with app.run_test(size=(140, 60)) as pilot:
-            app.query_one("#mode-advanced", Button).press()
             await _settle(app, pilot)
             height = app.query_one("#dl-advanced").outer_size.height
             app.query_one("#field-subtitles", Checkbox).value = True

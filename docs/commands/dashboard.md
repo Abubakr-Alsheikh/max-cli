@@ -41,9 +41,9 @@ The Queue and History sections read the same task store as `max queue` and `max 
 
 ## Download page
 
-Paste a link and press `Enter`, or wait a moment: the page checks the link and shows its title, channel, length, chapters, views, likes, upload date, the best video and audio streams, the subtitle languages and the site. Each quality button shows the size you'll get, and the Audio (MP3) buttons show the size at each bitrate.
+Paste a link and press `Enter`, or wait a moment: the page checks the link. While it checks, the Check button reads "Checking" and the preview shows a spinner with the seconds so far. Then it shows its title, channel, length, chapters, views, likes, upload date, the best video and audio streams, the subtitle languages and the site. Each quality button shows the size you'll get, and the Audio (MP3) buttons show the size at each bitrate.
 
-- **Advanced** adds the other `max grab download` options in one small card: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
+- **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
 - **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
 - **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Queue page and the settings.
 

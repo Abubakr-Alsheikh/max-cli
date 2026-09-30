@@ -113,7 +113,7 @@ The second round (2026-09-30) moved Advanced beside the preview, paged the histo
 - 2026-09-26, G2:
   - The Download page was rewritten around `core/operations/grab.py`.
   - Advanced mode embeds `ActionForm(grab.download, include=..., embedded=True)`, so its options come from the catalog.
-  - The Simple or Advanced choice and the last folder are saved in `~/.max_cli/dashboard_prefs.json` (`interface/tui/ui_prefs.py`).
+  - The last folder and format are saved in `~/.max_cli/dashboard_prefs.json` (`interface/tui/ui_prefs.py`). The Simple or Advanced choice went in the second round; the OPTIONS card always shows.
   - Each download is a `DownloadRow`, run by a thread worker that waits for one of `GRAB_MAX_CONCURRENT` slots.
   - The old `grab` entries left `command_registry.py` and `command_executor.py`.
   - The page has no Paste button. Ctrl+V pastes into the link box, and reading the system clipboard would need a new dependency.

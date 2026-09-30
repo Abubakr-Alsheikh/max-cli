@@ -115,7 +115,7 @@ Separate facts on one line with `  ·  `. Label cards and headings in UPPERCASE;
 ### States every section needs
 
 - **Empty:** one muted sentence that says what will appear and how to start ("Nothing yet. Press 2 to download something.").
-- **Loading:** set `widget.loading = True` or show "Checking the link..." in `$primary`.
+- **Loading:** disable the button that started the work and relabel it ("Checking"; keep the label within the button's width), and show a one-line spinner with the seconds so far, updated with `layout=False` (`DownloadPanel._start_checking`). Past a few seconds, say why it can take long. Stop it only for the answer to the latest request.
 - **Error:** the reason in `$error`, in plain words, and what to do next. Errors from a finished action also go to `self.notify(..., severity="error")`.
 
 ## Smoothness rules (these caused real flicker)
@@ -154,6 +154,6 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 ## Before you open a PR
 
 1. Screenshots: `python scripts/tui_screenshot.py <page> <out.png>` renders a page at 140x44 with a temporary home folder. Look at it at 120x40 and 90x30 too.
-2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed.
+2. Tests with Pilot for behaviour (see the `max-testing` skill). For flicker fixes, test that nothing redraws when nothing changed. To wait for a thread worker, poll with `await pilot.pause(...)`; never call `event.wait()` in the test: it blocks the app's event loop, the worker never starts, and a fake that waits for Cancel hangs the run. Give such fakes a deadline.
 3. Every colour is a theme token; every user string is `Content`.
 4. `python scripts/ci_local.py --full`.

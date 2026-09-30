@@ -4,8 +4,10 @@
   qualities the video really has, with sizes (MP3 sizes too). A playlist
   lists its items to tick. Several links pasted at once become one download
   each.
-- Simple mode shows only that. Advanced mode adds every other `grab
-  download` option, taken from the command catalog, in a compact card.
+- The OPTIONS card beside the preview holds every other `grab download`
+  option, taken from the command catalog, in a few rows.
+- Check locks its button and shows a spinner with the seconds so far,
+  until the site answers.
 - Each download gets a row with progress and a Cancel that really stops it.
   History sits in the next tab, a page of rows at a time with a filter.
 - The TOOLS card holds the rest of `max grab`: download stats, the YouTube
@@ -52,7 +54,7 @@ from max_cli.interface.tui.widgets.charts import Meter
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 
 GRAB_ACTION_ID = "grab.download"
-# Advanced mode shows these catalog options. The Format and Quality buttons
+# The OPTIONS card shows these catalog options. The Format and Quality buttons
 # already cover media type, quality and (for odd heights) resolution.
 ADVANCED_FIELDS = (
     "resolution",
@@ -72,7 +74,11 @@ PROGRESS_REFRESH_SECONDS = 0.5
 STATE_CHANGES = frozenset({"set_started", "set_done", "set_failed", "set_cancelled"})
 SLOT_POLL_SECONDS = 0.2
 PREVIEW_LINK_LIMIT = 8
-MODE_PREF = "download_mode"
+# The spinner while a link is checked: one frame per tick, on one line.
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+SPINNER_SECONDS = 0.12
+# After this long, say why a check can take a while.
+SLOW_CHECK_SECONDS = 8
 FOLDER_PREF = "download_folder"
 FORMAT_PREF = "download_format"
 
@@ -633,7 +639,6 @@ class DownloadPanel(Vertical):
         super().__init__(**kwargs)
         self._action = get_action(GRAB_ACTION_ID)
         prefs = load_prefs()
-        self._advanced = prefs.get(MODE_PREF) == "advanced"
         self._format = prefs.get(FORMAT_PREF) or settings.GRAB_DEFAULT_TYPE
         self._video_choices: list[QualityChoice] = list(VIDEO_CHOICES)
         self._audio_choices: list[QualityChoice] = list(AUDIO_CHOICES)
@@ -645,6 +650,10 @@ class DownloadPanel(Vertical):
         self._media: Any = None  # the checked MediaInfo, if any
         self._checked_text = ""  # the link box text that _media belongs to
         self._check_timer: Optional[Timer] = None
+        self._spin_timer: Optional[Timer] = None
+        self._spin_frame = 0
+        self._checking_text: Optional[str] = None  # the link box text being checked
+        self._check_started = 0.0
         self._jobs: dict[int, DownloadJob] = {}
         self._last_running = 0
         self._next_job_id = 1
@@ -660,9 +669,6 @@ class DownloadPanel(Vertical):
     def compose(self) -> ComposeResult:
         with Horizontal(id="dl-header"):
             yield Static(self._brand(), id="dl-title")
-            with Horizontal(id="dl-mode", classes="segmented"):
-                yield Button("Simple", id="mode-simple")
-                yield Button("Advanced", id="mode-advanced")
 
         with Vertical(id="dl-link-card", classes="card"):
             with Horizontal(id="dl-link-row"):
@@ -771,13 +777,12 @@ class DownloadPanel(Vertical):
         self.query_one("#dl-link-card").border_title = "LINK"
         self.query_one("#dl-preview").border_title = "PREVIEW"
         self.query_one("#dl-output-card").border_title = "OUTPUT"
-        self.query_one("#dl-advanced").border_title = "ADVANCED OPTIONS"
+        self.query_one("#dl-advanced").border_title = "OPTIONS"
         self.query_one("#dl-transfers").border_title = "TRANSFERS"
         self.query_one("#dl-tools").border_title = "TOOLS"
         self.query_one("#dl-duplicate").display = False
         self.query_one("#dl-jobs-bar").display = False
         self._show_fix_status(None)
-        self._sync_mode()
         self._sync_format_buttons()
         self._show_playlist(False)
         await self._render_choices()
@@ -795,17 +800,6 @@ class DownloadPanel(Vertical):
             self._show_history()
 
     # --- mode and format --------------------------------------------------
-
-    def _sync_mode(self) -> None:
-        self.query_one("#dl-advanced").display = self._advanced
-        self.query_one("#mode-simple").set_class(not self._advanced, "-selected")
-        self.query_one("#mode-advanced").set_class(self._advanced, "-selected")
-
-    @on(Button.Pressed, "#mode-simple, #mode-advanced")
-    def _on_mode(self, event: Button.Pressed) -> None:
-        self._advanced = event.button.id == "mode-advanced"
-        self._sync_mode()
-        save_pref(MODE_PREF, "advanced" if self._advanced else "simple")
 
     def _sync_format_buttons(self) -> None:
         self.query_one("#fmt-video").set_class(self._format == "video", "-selected")
@@ -924,9 +918,7 @@ class DownloadPanel(Vertical):
         if len(links) > 1:
             self._show_many(links)
             return
-        self._set_preview(
-            Content.from_markup("[$primary]Checking the link...[/$primary]"), ""
-        )
+        self._start_checking(text)
         url = links[0]
         self.run_worker(
             lambda: self._probe(url, text), thread=True, exclusive=True, group="probe"
@@ -938,15 +930,70 @@ class DownloadPanel(Vertical):
         try:
             media = grab.probe(url)
         except Exception as e:
-            self.app.call_from_thread(self._show_probe_error, str(e))
+            self.app.call_from_thread(self._show_probe_error, str(e), text)
             return
         self.app.call_from_thread(self._show_media, media, text)
+
+    @property
+    def is_checking(self) -> bool:
+        return self._checking_text is not None
+
+    def _start_checking(self, text: str) -> None:
+        """Lock Check and show a spinner until the site answers."""
+        self._checking_text = text
+        self._check_started = time.monotonic()
+        self._spin_frame = 0
+        button = self.query_one("#btn-check", Button)
+        button.disabled = True
+        button.label = "Checking"  # "Checking..." didn't fit the button
+        self._set_preview(self._checking_line(), "")
+        if self._spin_timer is None:
+            self._spin_timer = self.set_interval(SPINNER_SECONDS, self._spin)
+        else:
+            self._spin_timer.resume()
+
+    def _checking_line(self) -> Content:
+        seconds = int(time.monotonic() - self._check_started)
+        parts: list[tuple[str, str]] = [
+            (
+                f"{SPINNER_FRAMES[self._spin_frame % len(SPINNER_FRAMES)]} ",
+                "bold $secondary",
+            ),
+            ("Checking the link", "bold $primary"),
+            (f"  {seconds}s", "$text-muted"),
+        ]
+        if seconds >= SLOW_CHECK_SECONDS:
+            parts.append(
+                ("  ·  YouTube is often slow on the first check", "$text-muted")
+            )
+        return Content.assemble(*parts)
+
+    def _spin(self) -> None:
+        self._spin_frame += 1
+        # One line that changes often: no page layout (smoothness rule 3).
+        self.query_one("#dl-preview-title", Static).update(
+            self._checking_line(), layout=False
+        )
+
+    def _stop_checking(self, text: str) -> bool:
+        """End the check for `text`. False when a newer check replaced it."""
+        if text != self._checking_text:
+            return False
+        self._checking_text = None
+        if self._spin_timer is not None:
+            self._spin_timer.pause()
+        button = self.query_one("#btn-check", Button)
+        button.disabled = False
+        button.label = "Check"
+        return True
 
     def _set_preview(self, title: "str | Content", meta: "str | Content") -> None:
         self.query_one("#dl-preview-title", Static).update(title)
         self.query_one("#dl-preview-meta", Static).update(meta)
 
-    def _show_probe_error(self, error: str) -> None:
+    def _show_probe_error(self, error: str, text: str) -> None:
+        if not self._stop_checking(text):
+            return  # a newer check is running
         self._media = None
         self._set_preview(
             Content.from_markup("[$error]Couldn't read this link.[/$error]"),
@@ -962,6 +1009,8 @@ class DownloadPanel(Vertical):
         self._set_preview(f"{len(links)} links", Content(shown + more))
 
     def _show_media(self, media: Any, text: str) -> None:
+        if not self._stop_checking(text):
+            return  # a newer check is running
         if self.query_one("#dl-url", Input).value != text:
             return  # the link changed while we were checking
         self._media = media
@@ -1039,11 +1088,10 @@ class DownloadPanel(Vertical):
             items = playlist_items(selected, len(self._media.entries))
             if items:
                 values["playlist_items"] = items
-        if self._advanced:
-            form = self.query_one("#dl-advanced ActionForm", ActionForm)
-            for name, value in form.values().items():
-                if value not in (None, ""):
-                    values[name] = value
+        form = self.query_one("#dl-advanced ActionForm", ActionForm)
+        for name, value in form.values().items():
+            if value not in (None, ""):
+                values[name] = value
         return values
 
     def _set_status(self, text: "str | Content") -> None:
@@ -1108,6 +1156,8 @@ class DownloadPanel(Vertical):
         self._reset_link()
 
     def _reset_link(self) -> None:
+        if self._checking_text is not None:
+            self._stop_checking(self._checking_text)
         self._media = None
         self._checked_text = ""
         self.query_one("#dl-url", Input).value = ""
