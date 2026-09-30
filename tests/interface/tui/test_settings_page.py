@@ -285,3 +285,27 @@ async def test_a_saved_old_page_opens_settings(old_page):
 
 def test_keep_days_matches_the_buttons():
     assert settings_panel.KEEP_DAYS == 30
+
+
+def test_folder_size_skips_files_that_vanish_mid_walk(tmp_path, monkeypatch):
+    """The task store renames temp files while the page adds up sizes; a
+    FileNotFoundError from one of them crashed the page's worker."""
+    (tmp_path / "kept.json").write_bytes(b"x" * 10)
+    gone = tmp_path / "queue.json.tmp"
+    gone.write_bytes(b"y" * 5)
+    real_stat = Path.stat
+    looks = {"count": 0}
+
+    def stat(self, *args, **kwargs):
+        # The walk sees the file (first look); it's renamed before its size
+        # is read (second look).
+        if self.name == gone.name:
+            looks["count"] += 1
+            if looks["count"] > 1:
+                gone.unlink(missing_ok=True)
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat)
+
+    assert settings_panel._folder_size(tmp_path) == 10
+    assert looks["count"] >= 2
