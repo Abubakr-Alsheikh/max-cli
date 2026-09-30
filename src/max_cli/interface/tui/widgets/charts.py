@@ -228,6 +228,8 @@ class Meter(Widget):
         full, part = divmod(eighths, 8)
         filled = FULL_BLOCK * full + (EIGHTHS_H[part] if part else "")
         return Content.assemble(
-            (filled, f"{self._style} on $boost"),
-            (" " * max(0, width - len(filled)), "on $boost"),
+            (filled, self._style),
+            # A drawn track in $border: an "on $boost" background vanished on
+            # cards and rows whose own background is close to $boost.
+            (FULL_BLOCK * max(0, width - len(filled)), "$border"),
         )
