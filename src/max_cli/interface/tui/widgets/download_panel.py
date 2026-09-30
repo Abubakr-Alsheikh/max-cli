@@ -20,7 +20,6 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -47,7 +46,7 @@ from max_cli.config import settings
 from max_cli.core.catalog import get_action
 from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.interface.tui.messages import OpenPage
-from max_cli.interface.tui.text import markup
+from max_cli.interface.tui.text import markup, relative_time
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.charts import Meter
@@ -210,22 +209,6 @@ def _duration(seconds: Optional[float]) -> str:
     minutes, secs = divmod(int(seconds), 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours}:{minutes:02}:{secs:02}" if hours else f"{minutes}:{secs:02}"
-
-
-def _relative_time(timestamp_raw: str) -> str:
-    try:
-        seconds = (
-            datetime.now() - datetime.fromisoformat(timestamp_raw)
-        ).total_seconds()
-    except (ValueError, TypeError):
-        return ""
-    if seconds < 60:
-        return "just now"
-    if seconds < 3600:
-        return f"{int(seconds // 60)}m ago"
-    if seconds < 86400:
-        return f"{int(seconds // 3600)}h ago"
-    return f"{int(seconds // 86400)}d ago"
 
 
 def _joined(*parts: str) -> str:
@@ -1388,7 +1371,7 @@ class DownloadPanel(Vertical):
                         (entry.get("domain") or "").removeprefix("www."),
                         HISTORY_COLUMNS[2][1],
                     ),
-                    _relative_time(entry.get("timestamp", "")),
+                    relative_time(entry.get("timestamp", "")),
                 )
             table.display = bool(self._history_shown)
             empty.display = not self._history_shown

@@ -16,6 +16,7 @@ Every page in `max` (the Textual dashboard) should look like one product: the Ho
 | `interface/tui/widgets/charts.py` | `BarChart`, `HBarChart`, `Spark`, `Meter` |
 | `interface/tui/widgets/sidebar.py` | Large click targets, badges, compact mode, CSS that depends on a parent's state |
 | `interface/tui/widgets/jobs_drawer.py` | Live list with aligned columns, refresh while open only |
+| `interface/tui/widgets/queue_panel.py` | Live lists of widget rows updated in place (`TaskRow.show`, `QueuePanel._sync`), tiles that dim at zero |
 | `interface/tui/tables.py` | `show_rows`: refill a `DataTable` without flicker |
 
 ## The look: futuristic command center
@@ -142,6 +143,7 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 - `$text-muted` isn't allowed as a border colour; use `$border`.
 - Don't dock anything else at the bottom: the `Footer` docks there and covers it.
 - Use ASCII or single-width marks for badges and states (`»`, `!`, `·`, `✓`, `✗`). Ambiguous-width symbols such as `●` or `▶` are two columns wide in some fonts and break alignment.
+- Don't name a widget attribute `_task`: `MessagePump` keeps its asyncio task there, and overwriting it crashes the widget on mount. Other private names Textual uses: `_parent`, `_id`, `_classes`, `_nodes`.
 - User text (titles, paths, URLs, errors) goes in as `Content(text)` or through `text.markup()`'s `$variables`, never as markup: `Song [red]` loses text, and some strings crash the parser.
 
 ## Keyboard

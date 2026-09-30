@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from textual.widgets import DataTable
 
-from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
 from max_cli.interface.tui.widgets.sidebar import Sidebar
 
 
@@ -49,61 +48,6 @@ class TestMaxDashboardApp:
 
         async with MaxDashboardApp().run_test() as pilot:
             assert pilot.app.query_one(Sidebar) is not None
-
-    @pytest.mark.asyncio
-    async def test_queue_panel_renders_empty(self, mock_manager, mock_activity_log):
-        from max_cli.interface.tui.app import MaxDashboardApp
-
-        async with MaxDashboardApp().run_test() as pilot:
-            table = pilot.app.query_one("#queue-table", DataTable)
-            assert table.row_count == 1
-
-    @pytest.mark.asyncio
-    async def test_queue_panel_shows_tasks(self, mock_manager, mock_activity_log):
-        from max_cli.interface.tui.app import MaxDashboardApp
-
-        mock_task = TaskItem(
-            id="abc123",
-            type=TaskType.DOWNLOAD,
-            status=TaskStatus.RUNNING,
-            title="Test Download",
-            progress=45.0,
-        )
-        mock_manager.get_all.return_value = [mock_task]
-
-        async with MaxDashboardApp().run_test() as pilot:
-            panel = pilot.app.query_one("#queue-panel")
-            panel.refresh_data()
-            await pilot.pause()
-
-            table = pilot.app.query_one("#queue-table", DataTable)
-            assert table.row_count == 1
-
-    @pytest.mark.asyncio
-    async def test_cancel_button_calls_manager(self, mock_manager, mock_activity_log):
-        from max_cli.interface.tui.app import MaxDashboardApp
-
-        mock_task = TaskItem(
-            id="abc123",
-            type=TaskType.DOWNLOAD,
-            status=TaskStatus.PENDING,
-            title="Test",
-        )
-        mock_manager.get_all.return_value = [mock_task]
-
-        async with MaxDashboardApp().run_test() as pilot:
-            panel = pilot.app.query_one("#queue-panel")
-            panel.refresh_data()
-            await pilot.pause()
-
-            table = pilot.app.query_one("#queue-table", DataTable)
-            table.cursor_coordinate = (0, 0)
-
-            btn = pilot.app.query_one("#btn-cancel")
-            btn.press()
-            await pilot.pause()
-
-            mock_manager.cancel.assert_called_once_with("abc123")
 
     @pytest.mark.asyncio
     async def test_history_filter(self, mock_manager, mock_activity_log):

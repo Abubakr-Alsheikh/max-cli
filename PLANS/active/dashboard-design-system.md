@@ -111,7 +111,8 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] Jobs window (`J`): running job with a progress bar, speed and time left, waiting jobs, the last finished ones. Opens when you queue something.
 
 ### R4: The other pages
-- [ ] Queue, History, Files, Tools, Analytics (`textual-plotext` charts), Config, System, Chat, using the same rules.
+- [x] Queue (2026-09-30): tiles for running, waiting, done today and failed today; NOW RUNNING, UP NEXT and FINISHED lists with pause, resume, cancel, retry, run again and open folder; Pause all, Resume all, Clear waiting (asks first). Replaces a bare table whose buttons acted on the table cursor.
+- [ ] History, Files, Tools, Analytics (`textual-plotext` charts), Config, System, Chat, using the same rules.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.
 
 ## The Max TUI rules (draft for R1; the maintained version is the `max-tui-design` skill)

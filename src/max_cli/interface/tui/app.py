@@ -153,7 +153,7 @@ class MaxDashboardApp(App):
     }
 
     /* ── Shared bottom action bars ──────────────────────── */
-    #queue-actions, #history-controls, #config-actions,
+    #history-controls, #config-actions,
     #files-actions, #history-actions,
     #storage-actions, #quick-actions, #system-actions {
         height: auto;
@@ -330,22 +330,6 @@ class MaxDashboardApp(App):
         background: $surface;
         padding: 1;
         margin: 1 0;
-    }
-
-    /* ══════════════════════════════════════════════════════
-       QUEUE PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #queue-title {
-        text-style: bold;
-    }
-    #queue-hint {
-        color: $text-muted;
-        margin: 0 1;
-    }
-    #queue-status {
-        margin: 0 1;
-        color: $text-muted;
     }
 
     /* ══════════════════════════════════════════════════════
