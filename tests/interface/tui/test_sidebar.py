@@ -10,7 +10,8 @@ from max_cli.interface.tui.ui_prefs import load_prefs
 from max_cli.interface.tui.widgets.dialogs import HelpScreen
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS, Badge, Sidebar
-from tests.interface.tui.waiting import wait_until
+
+from .waiting import wait_until
 
 WIDE = (120, 40)
 NARROW = (90, 30)

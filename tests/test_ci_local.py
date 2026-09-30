@@ -49,6 +49,14 @@ class TestMatchesCiWorkflow:
     def test_same_install_extras(self):
         assert f"pip install -e {ci_local.PACKAGE_EXTRAS}" in self.workflow
 
+    def test_same_pytest_launcher(self):
+        """GitHub runs the `pytest` script; `python -m pytest` also puts the
+        working folder on sys.path, which hid a broken `tests.` import."""
+        assert re.search(r"^\s+pytest ", self.workflow, re.MULTILINE)
+        source = Path(ci_local.__file__).read_text(encoding="utf-8")
+        assert '"-m", "pytest"' not in source
+        assert '"-m",\n            "pytest"' not in source
+
 
 @pytest.fixture
 def fake_repo(monkeypatch, tmp_path):

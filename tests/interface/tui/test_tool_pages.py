@@ -15,7 +15,8 @@ from max_cli.core.operations.video import MediaFacts
 from max_cli.interface.tui.tool_pages import TOOL_PAGES, VIDEO, describe_video
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.tool_page import ToolPage
-from tests.interface.tui.waiting import wait_until
+
+from .waiting import wait_until
 
 DESCRIBE = "max_cli.core.operations.video.describe"
 RUN_ACTION = "max_cli.core.catalog.runner.run_action"

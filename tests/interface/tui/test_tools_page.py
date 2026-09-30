@@ -24,7 +24,8 @@ from max_cli.core.operations.result import ActionResult
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog, PathPicker
-from tests.interface.tui.waiting import wait_until
+
+from .waiting import wait_until
 
 RUN_ACTION = "max_cli.core.catalog.runner.run_action"
 

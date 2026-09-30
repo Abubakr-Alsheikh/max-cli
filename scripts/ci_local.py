@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -159,7 +160,11 @@ def quick_steps() -> list[StepResult]:
         ("mypy baseline", [python, "scripts/mypy_baseline.py"]),
         (
             f"pytest (Python {current_version()})",
-            [python, "-m", "pytest", *PYTEST_ARGS, *COVERAGE_ARGS],
+            [
+                pytest_program(Path(sysconfig.get_path("scripts"))),
+                *PYTEST_ARGS,
+                *COVERAGE_ARGS,
+            ],
         ),
     ]
     results = []
@@ -177,6 +182,15 @@ def venv_python(venv: Path) -> Path:
     if sys.platform == "win32":
         return venv / "Scripts" / "python.exe"
     return venv / "bin" / "python"
+
+
+def pytest_program(scripts_dir: Path) -> str:
+    """The `pytest` script in `scripts_dir`, run the way GitHub CI runs it.
+
+    `python -m pytest` also puts the working folder on sys.path, so a test
+    importing `tests.interface...` passed here and failed on every GitHub job.
+    """
+    return str(scripts_dir / ("pytest.exe" if sys.platform == "win32" else "pytest"))
 
 
 def test_step_name(version: str) -> str:
@@ -216,9 +230,7 @@ def run_tests_on(version: str) -> StepResult:
     tested = run_step(
         name,
         [
-            str(python),
-            "-m",
-            "pytest",
+            pytest_program(python.parent),
             *PYTEST_ARGS,
             *coverage,
             "-m",
@@ -237,7 +249,7 @@ def run_timing_tests(version: str) -> StepResult:
     return announce(
         run_step(
             f"timing tests (Python {version})",
-            [str(python), "-m", "pytest", *PYTEST_ARGS, "-m", TIMING_MARKER],
+            [pytest_program(python.parent), *PYTEST_ARGS, "-m", TIMING_MARKER],
         )
     )
 
