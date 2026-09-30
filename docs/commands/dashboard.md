@@ -26,7 +26,7 @@ The sidebar on the left lists ten sections in three groups. It starts as a strip
 | `4` | **Files** | File browser with quick actions |
 | `5` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
-| `6` | **Queue** | Live task queue; refreshes every 2 seconds |
+| `6` | **Queue** | What's running, waiting and finished, with buttons to pause, cancel and retry |
 | `7` | **History** | Finished tasks, with filters |
 | `8` | **Analytics** | Live usage and system monitoring |
 | | **Setup** | |
@@ -46,6 +46,14 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 - **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
 - **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
 - **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Queue page and the settings.
+
+## Queue page
+
+The Queue page (`6`) shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
+
+- **Now running** shows the running task with its progress, speed and time left. Cancel stops it.
+- **Up next** lists the waiting tasks in the order they'll run. Each one has Pause (or Resume) and Cancel. "Pause all", "Resume all" and "Clear waiting" act on the whole list; "Clear waiting" asks first and leaves the running task alone.
+- **Finished** shows the last 8 tasks. Retry puts a failed or cancelled task back in line, "Run again" repeats a finished one, and "Open folder" opens where its files went. The History page (`7`) has everything else.
 
 ## Jobs window
 

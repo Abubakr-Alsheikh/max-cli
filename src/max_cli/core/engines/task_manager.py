@@ -351,6 +351,11 @@ class TaskManager:
                 stats["by_type"][t] = stats["by_type"].get(t, 0) + 1
         return stats
 
+    @property
+    def is_worker_running(self) -> bool:
+        """True while this process runs queued tasks (the dashboard is open)."""
+        return self._running
+
     def start_worker(self) -> None:
         if self._running:
             return

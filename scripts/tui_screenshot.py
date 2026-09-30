@@ -95,6 +95,25 @@ def _seed_sample_data() -> None:
         )
     )
     manager.add(TaskItem(type=TaskType.ACTION, title="Sample download, waiting"))
+    manager.record(
+        TaskItem(
+            type=TaskType.ACTION,
+            status=TaskStatus.COMPLETED,
+            title="Sample download, done",
+            payload={"action": "grab.download"},
+            output_files=[str(Path.home() / "Max Downloads" / "sample.mp4")],
+            result={"details": {"size_bytes": 412_000_000}},
+        )
+    )
+    manager.record(
+        TaskItem(
+            type=TaskType.ACTION,
+            status=TaskStatus.FAILED,
+            title="Sample compress, failed",
+            payload={"action": "video.compress"},
+            error="FFmpeg exited with code 1",
+        )
+    )
 
 
 async def _render(page: str, size: tuple[int, int], open_jobs: bool) -> str:
