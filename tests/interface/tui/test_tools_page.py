@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import (
     Button,
     Collapsible,
+    DataTable,
     Input,
     OptionList,
     Select,
@@ -42,14 +43,18 @@ class FormApp(App):
 
 
 async def _picker_ready(pilot, app: App) -> bool:
-    """The picker is open and has listed its first folder, so typing into its
-    path box isn't overwritten by that first listing."""
-    return await wait_until(
-        pilot,
-        lambda: isinstance(app.screen, PathPicker)
-        and "Reading"
-        not in str(app.screen.query_one("#picker-status", Static).content),
-    )
+    """The picker has listed its first folder, so typing into its path box
+    isn't overwritten by that first listing. An empty status isn't enough:
+    it is empty before the picker's on_mount too."""
+
+    def listed() -> bool:
+        if not isinstance(app.screen, PathPicker):
+            return False
+        status = str(app.screen.query_one("#picker-status", Static).content)
+        table = app.screen.query_one("#picker-table", DataTable)
+        return bool(status) and "Reading" not in status and table.row_count > 0
+
+    return await wait_until(pilot, listed)
 
 
 def _status(app: App) -> str:
