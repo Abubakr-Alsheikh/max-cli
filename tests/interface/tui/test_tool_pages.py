@@ -382,3 +382,221 @@ async def test_the_images_page_takes_a_folder(tmp_path):
 
     assert title == "FILE OR FOLDER"
     assert filled
+
+
+# --- which field gets the picked path -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "action_id, field",
+    [
+        ("pdf.rip", "target"),  # its output folder stays as it is
+        ("files.order", "folder"),
+        ("files.smart-sort", "path"),
+        ("files.undo", None),
+    ],
+)
+def test_the_picked_path_goes_to_the_input(action_id, field):
+    from max_cli.core.catalog import get_action
+    from max_cli.interface.tui.widgets.tool_page import file_param
+
+    assert file_param(get_action(action_id)) == field
+
+
+# --- the Files page ---------------------------------------------------------------
+
+FILES_DESCRIBE = "max_cli.core.operations.files.describe"
+
+
+def test_files_facts_for_a_folder(tmp_path):
+    from max_cli.core.operations import files
+    from max_cli.interface.tui.tool_pages import describe_files
+
+    facts = files.PathFacts(
+        path=tmp_path / "Downloads",
+        size_bytes=3 * 1024 * 1024,
+        is_folder=True,
+        file_count=4,
+        folder_count=1,
+        kinds={"image": 2, "pdf": 1, "other": 1},
+        biggest=tmp_path / "Downloads" / "scan.pdf",
+        biggest_bytes=2 * 1024 * 1024,
+        note=files.ORGANIZE_NOTE,
+    )
+    with patch(FILES_DESCRIBE, return_value=facts):
+        lines = describe_files(facts.path).plain.splitlines()
+
+    assert lines == [
+        "Downloads  ·  4 files  ·  1 folder  ·  3.00 MB  ·  2 images, 1 PDF, 1 other file",
+        "Biggest: scan.pdf (2.00 MB)",
+        files.ORGANIZE_NOTE,
+    ]
+
+
+def test_files_facts_for_a_file(tmp_path):
+    from datetime import datetime
+
+    from max_cli.core.operations import files
+    from max_cli.interface.tui.tool_pages import describe_files
+
+    facts = files.PathFacts(
+        path=tmp_path / "report.pdf",
+        size_bytes=2048,
+        kind="pdf",
+        modified=datetime(2024, 5, 1, 9, 30),
+    )
+    with patch(FILES_DESCRIBE, return_value=facts):
+        line = describe_files(facts.path).plain
+
+    assert line == "report.pdf  ·  PDF  ·  2.00 KB  ·  modified 2024-05-01 09:30"
+
+
+@pytest.mark.asyncio
+async def test_a_pdf_picked_on_files_opens_on_the_pdf_page(dummy_pdf):
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.navigate("files")
+        files_page = app.query_one("#files-panel", ToolPage)
+        files_page.query_one("#tool-file", Input).value = str(dummy_pdf)
+        button = files_page.query_one("#tool-open-page", Button)
+        offered = await wait_until(pilot, lambda: button.has_class("-offered"))
+        label = str(button.label)
+
+        button.press()
+        pdf_page = app.query_one("#pdf-panel", ToolPage)
+        filled = await wait_until(
+            pilot,
+            lambda: pdf_page.display
+            and pdf_page.form.query_one("#field-target", Input).value == str(dummy_pdf),
+        )
+
+    assert offered and label == "Open on the PDF page (5)"
+    assert filled
+
+
+@pytest.mark.asyncio
+async def test_a_page_offers_no_link_for_its_own_kind(dummy_pdf):
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.navigate("pdf")
+        page = app.query_one("#pdf-panel", ToolPage)
+        page.query_one("#tool-file", Input).value = str(dummy_pdf)
+        await wait_until(pilot, lambda: "page" in _facts_of(page))
+        offered = page.query_one("#tool-open-page", Button).has_class("-offered")
+
+    assert not offered
+
+
+def _facts_of(page: ToolPage) -> str:
+    return str(page.query_one("#tool-facts", Static).content)
+
+
+@pytest.mark.asyncio
+async def test_smart_sort_on_the_files_page_asks_before_moving(tmp_path):
+    """Organize used to run smart-sort at once, with no question asked."""
+    from max_cli.interface.tui.tool_pages import FILES
+    from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
+
+    class FilesApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(FILES, id="files-panel")
+
+    (tmp_path / "invoice.pdf").write_bytes(b"%PDF")
+    app = FilesApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        app.query_one("#tool-file", Input).value = str(tmp_path)
+        app.query_one("#act-smart-sort", Button).press()
+        page = app.query_one(ToolPage)
+        filled = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "files.smart-sort"
+            and page.form.query_one("#field-path", Input).value == str(tmp_path),
+        )
+        page.form.query_one("#form-run", Button).press()
+        asked = await wait_until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+
+    assert filled and asked
+    assert (tmp_path / "invoice.pdf").exists()
+
+
+@pytest.mark.asyncio
+async def test_backups_keeps_its_restore_field_empty(tmp_path):
+    from max_cli.interface.tui.tool_pages import FILES
+
+    class FilesApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(FILES, id="files-panel")
+
+    app = FilesApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        app.query_one("#tool-file", Input).value = str(tmp_path)
+        app.query_one("#act-backups", Button).press()
+        page = app.query_one(ToolPage)
+        # The form's fields mount after its action is set: wait for the field.
+        empty = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "files.backups"
+            and page.form.query_one("#field-restore", Input).value == "",
+        )
+        # The picked folder would have landed by now; check again.
+        await pilot.pause()
+        still_empty = page.form.query_one("#field-restore", Input).value == ""
+
+    assert empty and still_empty
+
+
+@pytest.mark.asyncio
+async def test_a_folder_action_gets_the_picked_files_folder(dummy_pdf):
+    from max_cli.interface.tui.tool_pages import FILES
+
+    class FilesApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(FILES, id="files-panel")
+
+    app = FilesApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        app.query_one("#tool-file", Input).value = str(dummy_pdf)
+        app.query_one("#act-order", Button).press()
+        page = app.query_one(ToolPage)
+        filled = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "files.order"
+            and page.form.query_one("#field-folder", Input).value
+            == str(dummy_pdf.parent),
+        )
+
+    assert filled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("width, columns", [(160, 3), (110, 2)])
+async def test_chips_drop_a_column_when_names_would_be_cut(width, columns):
+    """At 120 columns three chips a row cut "backup-cleanup" to "backup-clea"."""
+    from textual.containers import Grid
+
+    from max_cli.interface.tui.tool_pages import FILES
+
+    class FilesApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(FILES, id="files-panel")
+
+    app = FilesApp()
+    async with app.run_test(size=(width, 50)) as pilot:
+        grid = app.query(".section-chips").first(Grid)
+        chip = app.query_one("#act-backup-cleanup", Button)
+        # One wait for both: the chips get their new width a layout pass
+        # after the column count changes (it failed on macOS CI).
+        fitted = await wait_until(
+            pilot,
+            lambda: grid.styles.grid_size_columns == columns
+            and chip.content_region.width >= len("backup-cleanup"),
+        )
+
+    assert fitted

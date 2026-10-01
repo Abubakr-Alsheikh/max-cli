@@ -8,6 +8,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Checkbox, DataTable, Input, OptionList, Static
 
+from max_cli.common.file_kinds import IMAGE, KIND_SUFFIXES
 from max_cli.interface.tui.widgets import path_picker
 from max_cli.interface.tui.widgets.path_picker import PathPicker, PickMode
 
@@ -59,7 +60,7 @@ def test_list_folder_sorts_folders_first_and_filters(tree):
     photos = tree / "photos"
 
     everything = path_picker.list_folder(photos)
-    images = path_picker.list_folder(photos, suffixes=path_picker.IMAGE_SUFFIXES)
+    images = path_picker.list_folder(photos, suffixes=KIND_SUFFIXES[IMAGE])
     folders = path_picker.list_folder(photos, folders_only=True)
     hidden = path_picker.list_folder(photos, show_hidden=True)
 

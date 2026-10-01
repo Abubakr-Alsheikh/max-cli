@@ -9,6 +9,8 @@ TransactionLog and returns its id as `ActionResult.undo_group`, so
 must not leave a copy.
 """
 
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -436,3 +438,68 @@ def history(limit: int = DEFAULT_HISTORY_LIMIT, verbose: bool = False) -> Action
         else "No transaction history found."
     )
     return ActionResult(True, message, details={"groups": entries})
+
+
+# --- describing a file or folder (the dashboard's Files page) ----------------
+
+ORGANIZE_NOTE = "Organize actions work on the files directly in this folder."
+EMPTY_FOLDER_NOTE = "This folder holds no files, only what its subfolders hold."
+
+
+@dataclass
+class PathFacts:
+    """What a file, or a folder's own files, are, for the Files page."""
+
+    path: Path
+    size_bytes: int  # the file, or the folder's own files together
+    is_folder: bool = False
+    kind: str = ""  # a file's kind: file_kinds.VIDEO, PDF ...
+    modified: Optional[datetime] = None
+    # a folder: its own files, not those in subfolders
+    file_count: int = 0
+    folder_count: int = 0
+    kinds: dict[str, int] = field(default_factory=dict)  # kind -> count, largest first
+    biggest: Optional[Path] = None
+    biggest_bytes: int = 0
+    note: str = ""
+
+
+def describe(target: Path) -> PathFacts:
+    """A file's kind, size and date; for a folder, how many files and
+    subfolders it holds, its files' total size, their kinds and the biggest."""
+    from max_cli.common.file_kinds import kind_of
+
+    target = Path(target).expanduser()
+    if not target.exists():
+        raise ResourceNotFoundError(f"Not found: {target}")
+    if target.is_file():
+        info = target.stat()
+        return PathFacts(
+            path=target,
+            size_bytes=info.st_size,
+            kind=kind_of(target),
+            modified=datetime.fromtimestamp(info.st_mtime),
+        )
+    files: list[tuple[Path, int]] = []
+    folder_count = 0
+    for child in target.iterdir():
+        try:
+            if child.is_dir():
+                folder_count += 1
+            elif child.is_file():
+                files.append((child, child.stat().st_size))
+        except OSError:
+            continue  # vanished, or a broken link
+    kinds = Counter(kind_of(path) for path, _size in files)
+    biggest = max(files, key=lambda item: item[1], default=None)
+    return PathFacts(
+        path=target,
+        size_bytes=sum(size for _path, size in files),
+        is_folder=True,
+        file_count=len(files),
+        folder_count=folder_count,
+        kinds=dict(kinds.most_common()),
+        biggest=biggest[0] if biggest else None,
+        biggest_bytes=biggest[1] if biggest else 0,
+        note=ORGANIZE_NOTE if files else EMPTY_FOLDER_NOTE,
+    )

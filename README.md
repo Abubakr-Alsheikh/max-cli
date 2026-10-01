@@ -590,7 +590,7 @@ In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing
 | **PDF** | Pick a PDF, see its pages and whether it's locked or scanned, run any `max pdf` action |
 | **Queue** | Running, waiting and finished tasks, with pause, cancel and retry |
 | **History** | Filterable task history |
-| **Files** | File browser |
+| **Files** | Pick a folder, see its files by kind and size, sort, clean, back up or undo |
 | **Tools** | A form for each command, with all its options |
 | **Settings** | Your defaults (AI, downloads, images), plus FFmpeg status and cleanup |
 | **Chat** | AI chat |

@@ -7,13 +7,12 @@ from textual.containers import Container, Horizontal
 from textual.widget import Widget
 from textual.widgets import Footer
 
-from max_cli.interface.tui.messages import OpenPage
+from max_cli.interface.tui.messages import OpenFile, OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.tool_pages import TOOL_PAGES
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
-from max_cli.interface.tui.widgets.files_panel import FilesPanel
 from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
@@ -34,7 +33,6 @@ from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 REFRESHABLE_PANEL_IDS = (
     "#queue-panel",
     "#history-panel",
-    "#files-panel",
     "#home-panel",
 )
 # Below this width the sidebar shows icons only.
@@ -269,7 +267,6 @@ class MaxDashboardApp(App):
                     yield ToolPage(spec, id=f"{spec.page_id}-panel")
                 yield QueuePanel(id="queue-panel")
                 yield HistoryPanel(id="history-panel")
-                yield FilesPanel(id="files-panel")
                 yield ToolsPanel(id="tools-panel")
                 yield SettingsPanel(id="settings-panel")
                 yield ChatPanel(id="chat-panel")
@@ -449,18 +446,11 @@ class MaxDashboardApp(App):
     def on_sidebar_section_selected(self, message: Sidebar.SectionSelected) -> None:
         self.navigate(message.section_id)
 
-    def on_files_panel_open_action(self, message: FilesPanel.OpenAction) -> None:
-        """The Files page hands a selected file to its group's page, else Tools."""
-        group = message.action_id.split(".", 1)[0]
-        page = next(
-            (page for page in self.query(ToolPage) if page.spec.group == group), None
-        )
-        if page is not None:
-            self.navigate(page.spec.page_id)
-            page.open_action(message.action_id, **message.values)
-            return
-        self.navigate("tools")
-        self.query_one(ToolsPanel).open_action(message.action_id, **message.values)
+    def on_open_file(self, message: OpenFile) -> None:
+        """A page hands a file to the page made for its kind."""
+        page = self.query_one(f"#{message.page_id}-panel", ToolPage)
+        self.navigate(message.page_id)
+        page.open_file(message.path)
 
     def on_open_page(self, message: OpenPage) -> None:
         self.navigate(message.section_id)

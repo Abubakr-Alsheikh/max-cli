@@ -126,12 +126,3 @@ class ToolsPanel(Vertical):
             return  # another action was picked meanwhile
         for name, value in values.items():
             form.set_value(name, value)
-
-    def open_action(self, action_id: str, **values: Any) -> None:
-        """Jump to an action from another page: select its group, show its form."""
-        action = get_action(action_id)
-        select = self.query_one("#tools-group", Select)
-        if select.value != action.group:
-            select.value = action.group
-            self._show_group(action.group)
-        self.show_action(action, **values)
