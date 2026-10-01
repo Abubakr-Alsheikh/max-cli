@@ -27,7 +27,6 @@ from max_cli.interface.tui.widgets.sidebar import (
     Sidebar,
 )
 from max_cli.interface.tui.widgets.tool_page import ToolPage
-from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 # Panels whose data changes on its own (queue, history, disk use ...).
 REFRESHABLE_PANEL_IDS = (
@@ -42,7 +41,13 @@ BADGE_REFRESH_SECONDS = 2.0
 PREF_LAST_PAGE = "last_page"
 PREF_THEME = "theme"
 # Pages that were merged away, and where a saved last page now goes.
-RENAMED_PAGES = {"config": "settings", "system": "settings", "analytics": "home"}
+RENAMED_PAGES = {
+    "config": "settings",
+    "system": "settings",
+    "analytics": "home",
+    # Every action has its group's page now (PLANS/active/dashboard-tool-pages.md).
+    "tools": "home",
+}
 # Named "collapsed", not the earlier "sidebar_compact": that older choice
 # predates the icons-first default and must not override it.
 PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
@@ -267,7 +272,6 @@ class MaxDashboardApp(App):
                     yield ToolPage(spec, id=f"{spec.page_id}-panel")
                 yield QueuePanel(id="queue-panel")
                 yield HistoryPanel(id="history-panel")
-                yield ToolsPanel(id="tools-panel")
                 yield SettingsPanel(id="settings-panel")
                 yield ChatPanel(id="chat-panel")
         yield JobsDrawer(id="jobs")

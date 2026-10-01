@@ -53,7 +53,7 @@ async def test_alt_left_goes_back():
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
         app.navigate("download")
-        app.navigate("tools")
+        app.navigate("audio")
         await pilot.press("alt+left")
         await pilot.pause()
         assert _shown(app) == "download"
@@ -118,10 +118,10 @@ async def test_arrow_keys_move_when_the_pages_dont_fit():
 async def test_clicking_a_page_opens_it():
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
-        await pilot.click("#nav-tools")
+        await pilot.click("#nav-audio")
         await pilot.pause()
 
-        assert _shown(app) == "tools"
+        assert _shown(app) == "audio"
 
 
 @pytest.mark.asyncio

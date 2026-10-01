@@ -27,9 +27,9 @@ SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
     ("video", "\U0001f3ac", "Video"),
+    ("audio", "\U0001f3b5", "Audio"),
     ("images", "\U0001f4f7", "Images"),
     ("pdf", "\U0001f4c4", "PDF"),
-    ("tools", "\U0001f9f0", "Tools"),
     ("files", "\U0001f4c1", "Files"),
     ("chat", "\U0001f4ac", "Chat"),
     ("queue", "\U0001f4cb", "Queue"),
@@ -39,7 +39,7 @@ SECTIONS = [
 SECTION_GROUPS = (
     (
         "DO",
-        ("home", "download", "video", "images", "pdf", "tools", "files", "chat"),
+        ("home", "download", "video", "audio", "images", "pdf", "files", "chat"),
     ),
     ("TRACK", ("queue", "history")),
     ("SETUP", ("settings",)),

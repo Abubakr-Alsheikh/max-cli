@@ -26,7 +26,7 @@ CONFIRM_DANGERS = {Danger.MOVES, Danger.OVERWRITES, Danger.DELETES}
 # Groups whose Typer flags match their catalog entries. `max grab download`
 # calls its operation too, but keeps flags such as --video/--audio and
 # --no-meta that scripts rely on, so only its operation is checked.
-CLI_CHECKED_GROUPS = ("video", "images", "pdf", "files")
+CLI_CHECKED_GROUPS = ("video", "images", "pdf", "files", "audio")
 
 
 def _cli_commands(group_name: str) -> dict[str, Any]:
@@ -63,7 +63,13 @@ def test_every_visible_command_has_an_action(group_name):
 )
 def test_cli_options_match_the_catalog(group_name: str, action: Action):
     command = _cli_commands(group_name)[action.name]
-    cli_params = {param.name: param for param in command.params}
+    # A hidden option is a no-op kept for old scripts (`audio clear
+    # --keep-duration`); the catalog leaves it out.
+    cli_params = {
+        param.name: param
+        for param in command.params
+        if not getattr(param, "hidden", False)
+    }
 
     has_queue = cli_params.pop(QUEUE_OPTION, None) is not None
     assert has_queue == action.queueable

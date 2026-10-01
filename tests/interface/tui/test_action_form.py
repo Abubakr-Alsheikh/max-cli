@@ -1,4 +1,4 @@
-"""The Tools page and the catalog-built ActionForm (command-catalog.md, build step 2)."""
+"""The catalog-built ActionForm (command-catalog.md, build step 2): fields, run, queue, Browse."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -10,7 +10,6 @@ from textual.widgets import (
     Collapsible,
     DataTable,
     Input,
-    OptionList,
     Select,
     Static,
     Switch,
@@ -64,23 +63,6 @@ async def _settle(app: App, pilot) -> None:
     await pilot.pause()
     await app.workers.wait_for_complete()
     await pilot.pause()
-
-
-@pytest.mark.asyncio
-async def test_tools_page_lists_dashboard_actions_only():
-    from max_cli.interface.tui.app import MaxDashboardApp
-
-    app = MaxDashboardApp()
-    async with app.run_test(size=(120, 40)) as pilot:
-        app._show_panel("tools")
-        await pilot.pause()
-
-        assert app.query_one("#tools-group", Select).value == "video"
-        options = app.query_one("#tools-actions", OptionList)
-        ids = [options.get_option_at_index(i).id for i in range(options.option_count)]
-        assert "video.compress" in ids
-        assert "video.record" not in ids
-        assert "video.stream" not in ids
 
 
 @pytest.mark.asyncio

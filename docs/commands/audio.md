@@ -2,6 +2,8 @@
 
 Manage audio files: read/write metadata, compress large recordings, and organize your music library using the `max audio` command group.
 
+Tags use the same names in every format (title, artist, album ...). `batch` and `organize` take files, a folder (its audio files, not those in subfolders) or a pattern such as `"*.mp3"`. The dashboard's Audio page runs every command here.
+
 ## compress
 
 Compress an audio file by re-encoding to a lower bitrate. Use it to shrink large recordings. A 4-minute WAV at 80MB becomes an MP3 of about 3MB.
@@ -60,7 +62,7 @@ max audio denoise lecture.mp3 -o cleaned_lecture.mp3
 
 ## get
 
-Display all metadata from an audio file.
+Show an audio file's tags in a fixed order (title, artist, album, album artist, genre, date, track, disc, composer, comment, then any other tag), then its length, bitrate, sample rate and channels.
 
 ```bash
 max audio get <file>
@@ -73,7 +75,7 @@ max audio get song.mp3
 
 ## set
 
-Set metadata on an audio file. Use flags to set specific fields.
+Set metadata on an audio file. Use flags to set specific fields; tags you don't pass stay as they are. With no flag at all, Max stops with exit code 1.
 
 ```bash
 max audio set <file> [OPTIONS]
@@ -85,8 +87,8 @@ max audio set <file> [OPTIONS]
 - `--album`, `-b` - Album name
 - `--album-artist` - Album artist name
 - `--genre`, `-g` - Genre
-- `--date`, `-d` - Release date (YYYY-MM-DD)
-- `--track`, `-n` - Track number
+- `--date`, `-d` - Release date (2024 or 2024-05-01)
+- `--track`, `-n` - Track number (3, or 3/12)
 - `--disc` - Disc number
 - `--composer` - Composer name
 - `--comment`, `-c` - Comment/description
@@ -99,15 +101,16 @@ max audio set song.mp3 --artist "The Band" --album "Greatest Hits" --genre "Rock
 
 ## clear
 
-Remove all metadata from an audio file.
+Remove all metadata from an audio file. The audio itself, and so its length, stays the same.
 
 ```bash
 max audio clear <file> [OPTIONS]
 ```
 
 **Options:**
-- `--keep-duration/--no-duration` - Preserve audio info (default: keep)
-- `--output`, `-o` - Output file
+- `--output`, `-o` - Write the cleared copy here and leave the original as it is
+
+`--keep-duration` and `--no-duration` still run but do nothing: clearing tags never touched the audio.
 
 **Example:**
 ```bash
@@ -129,8 +132,13 @@ max audio batch <files...> [OPTIONS]
 - `--album-artist` - Album artist name
 - `--genre`, `-g` - Genre
 - `--date`, `-d` - Release date
-- `--track`, `-n` - Track number
+- `--track`, `-n` - One track number for every file
 - `--start` - First track number; Max numbers the files in order from here
+- `--disc` - Disc number
+- `--composer` - Composer name
+- `--comment`, `-c` - Comment
+
+A file that fails is reported and the rest go on.
 
 **Example:**
 ```bash
@@ -139,6 +147,9 @@ max audio batch "folder/*.mp3" --album "My Album" --artist "John Doe"
 
 # Auto-increment track numbers
 max audio batch "folder/*.mp3" --album "My Album" --start 1
+
+# A folder works too
+max audio batch folder --genre Jazz
 ```
 
 ## organize
@@ -153,6 +164,7 @@ max audio organize <files...> [OPTIONS]
 - `--output`, `-o` - Target directory (default: same as source)
 - `--pattern`, `-p` - Folder structure: `artist`, `album`, `genre`, `artist-album` or `contributing-artists` (default: `artist`)
 - `--filter`, `-f` - Only organize files inside a folder with this name, such as `--filter 'Electronic Gems'`
+- `--dry-run` - Show where each file would go and move nothing
 
 **Patterns:**
 - `artist` - `Music/Artist Name/Song.mp3`
@@ -171,6 +183,9 @@ max audio organize "downloads/*.mp3" --output "Music Library" --pattern album
 
 # Organize by artist and album
 max audio organize "downloads/*.mp3" --pattern artist-album
+
+# See the moves first
+max audio organize downloads --pattern artist-album --dry-run
 ```
 
 ## Supported Formats
@@ -179,4 +194,5 @@ max audio organize "downloads/*.mp3" --pattern artist-album
 - FLAC
 - M4A/AAC
 - OGG
+- Opus
 - WAV

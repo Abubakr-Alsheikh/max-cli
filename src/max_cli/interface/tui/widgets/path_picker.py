@@ -60,6 +60,7 @@ UP_KEY = ".."
 # A command group -> the files its pages work on, and what to call them.
 FILE_TYPES: dict[str, tuple[str, frozenset[str]]] = {
     "video": ("videos and audio", KIND_SUFFIXES[VIDEO] | KIND_SUFFIXES[AUDIO]),
+    "audio": ("audio files", KIND_SUFFIXES[AUDIO]),
     "images": ("images", KIND_SUFFIXES[IMAGE]),
     "pdf": ("PDFs", KIND_SUFFIXES[PDF]),
 }

@@ -15,8 +15,25 @@ app = typer.Typer(
 )
 
 
+UTF8_NAMES = frozenset({"utf-8", "utf8"})
+
+
+def tolerate_unencodable_output() -> None:
+    """Print a character the output's encoding lacks as "?" instead of crashing.
+
+    Output redirected to a file or a pipe on Windows uses the code page
+    (cp1252, cp1256 ...), which has no spinner frames or emoji. A spinner
+    raised UnicodeEncodeError halfway through `max audio organize > log.txt`.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", "") or "").lower()
+        if encoding not in UTF8_NAMES and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def main():
     """Main entry point."""
+    tolerate_unencodable_output()
     register(app)
 
     try:

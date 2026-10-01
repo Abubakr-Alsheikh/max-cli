@@ -7,7 +7,6 @@ import pytest
 from max_cli.core import presets
 from max_cli.core.engines.pdf_engine import find_pdfs
 from max_cli.core.engines.video_engine import resolve_concat_inputs
-from max_cli.interface.tui.command_registry import CommandRegistry
 
 
 class TestPresetHelpers:
@@ -47,7 +46,7 @@ class TestEngineHelpers:
 
 
 def test_dashboard_organizes_music_by_artist_and_album():
-    """Maintainer's choice: the TUI default stays "artist-album"."""
-    schema = CommandRegistry.get_command("audio", "organize")
-    pattern = next(f for f in schema["fields"] if f["name"] == "pattern")
-    assert pattern["default"] == "artist-album"
+    """Maintainer's choice: the dashboard's organize starts at "artist-album"."""
+    from max_cli.interface.tui.tool_pages import AUDIO
+
+    assert AUDIO.action_defaults["organize"]["pattern"] == "artist-album"

@@ -78,7 +78,7 @@ DASHBOARD_SECTIONS = [
     "queue",
     "history",
     "files",
-    "tools",
+    "audio",
     "settings",
     "chat",
 ]
