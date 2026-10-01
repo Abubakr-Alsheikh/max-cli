@@ -4,6 +4,10 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from PIL import Image
 
+# EXIF orientations 5 to 8 turn the picture a quarter: its stored width is
+# the shown height.
+ROTATED_ORIENTATIONS = {5, 6, 7, 8}
+
 
 def _pixels_only(img: "Image.Image") -> "Image.Image":
     """A copy of `img` with its pixels (and palette) but no EXIF or other info.
@@ -32,6 +36,41 @@ class ImageEngine:
         if size_bytes < 1024 * 1024:
             return f"{size_bytes / 1024:.2f} KB"
         return f"{size_bytes / (1024 * 1024):.2f} MB"
+
+    def inspect_image(self, input_path: Path) -> dict[str, Any]:
+        """What an image holds, read without changing it.
+
+        Keys: format, mode, width, height (as shown, after the EXIF rotation),
+        frames, has_exif, has_gps, taken (EXIF date and time, "" without one)
+        and camera (the EXIF model). Raises RuntimeError for a file Pillow
+        can't open.
+        """
+        from PIL import ExifTags, Image, UnidentifiedImageError
+
+        try:
+            img = Image.open(input_path)
+        except (UnidentifiedImageError, OSError) as e:
+            raise RuntimeError(f"Couldn't read this image: {e}") from e
+        with img:
+            exif = img.getexif()
+            details = exif.get_ifd(ExifTags.IFD.Exif)
+            width, height = img.size
+            if exif.get(ExifTags.Base.Orientation) in ROTATED_ORIENTATIONS:
+                width, height = height, width
+            taken = details.get(ExifTags.Base.DateTimeOriginal) or exif.get(
+                ExifTags.Base.DateTime
+            )
+            return {
+                "format": img.format or "",
+                "mode": img.mode,
+                "width": width,
+                "height": height,
+                "frames": getattr(img, "n_frames", 1),
+                "has_exif": bool(exif),
+                "has_gps": bool(exif.get_ifd(ExifTags.IFD.GPSInfo)),
+                "taken": str(taken or "").strip(),
+                "camera": str(exif.get(ExifTags.Base.Model) or "").strip(),
+            }
 
     def strip_metadata(self, input_path: Path, output_path: Path) -> None:
         """Removes EXIF and other metadata by re-saving pixel data only."""

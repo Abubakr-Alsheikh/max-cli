@@ -148,11 +148,13 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 - Don't name a widget attribute `_task`: `MessagePump` keeps its asyncio task there, and overwriting it crashes the widget on mount. Other private names Textual uses: `_parent`, `_id`, `_classes`, `_nodes`.
 - Pages start hidden (`#content > * { display: none }` in the app CSS). When every page showed for the first frame, the Download page took focus in its `on_show` and swallowed the number keys.
 - Replacing a widget: `remove_children()` finishes later, so a query right after can still find the old widget. Keep a reference to the new one (`ToolPage.form`), and fill a form only after `await mount(...)`.
+- Never use `Select.BLANK`: on Textual 8 it is `False`, and `Select.NULL` marks an empty Select. Passing it as `value` crashed the dashboard (`images.convert`). Leave `value` out for an empty Select, and use `is_blank()` (or `event.select.is_blank()`) and `clear()`.
+- `test_every_dashboard_form_opens` (`tests/interface/tui/test_tools_page.py`) builds the form of every dashboard action; a new action or param kind gets checked there for free.
 - User text (titles, paths, URLs, errors) goes in as `Content(text)` or through `text.markup()`'s `$variables`, never as markup: `Song [red]` loses text, and some strings crash the parser.
 
 ## Keyboard
 
-- Pages are `1`-`9`, `0` (`sidebar.SECTION_KEYS`; write keys in text from it, never as digits); `J` Jobs; `?` help; `Esc` back to the sidebar.
+- Pages are `1`-`9`, `0`, and `,` for Settings (`sidebar.SECTION_KEYS`; write keys in text from it, never as digits); `J` Jobs; `?` help; `Esc` back to the sidebar.
 - The field a page is for gets focus when it shows (`on_show`).
 - Every action has a key or a button; the footer shows a page's keys.
 - New global keys go in the app's `BINDINGS` and in `GLOBAL_KEYS` (the help screen).

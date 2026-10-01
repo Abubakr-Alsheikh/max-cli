@@ -10,10 +10,16 @@ Output naming, the same for every caller:
   under its own name.
 """
 
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
+from max_cli.common.exceptions import (
+    ProcessingError,
+    ResourceNotFoundError,
+    ValidationError,
+)
 from max_cli.core.operations.result import ActionResult
 from max_cli.core.presets import STRIP_IMAGE_METADATA
 
@@ -209,3 +215,75 @@ def strip(
 ) -> ActionResult:
     """Remove GPS and other EXIF data."""
     return _run_batch(target, "Stripping", workers, engine, emitter, strip_exif=True)
+
+
+# --- describing a file or folder (the dashboard's Images page) ---------------
+
+GPS_NOTE = "Holds a GPS location: strip removes it."
+EMPTY_FOLDER_NOTE = (
+    "No images here. Max reads the images in this folder, not in its subfolders."
+)
+
+
+@dataclass
+class ImageFacts:
+    """What an image, or a folder of images, holds, for the Images page."""
+
+    path: Path
+    size_bytes: int  # the image, or all the folder's images together
+    is_folder: bool = False
+    # one image
+    width: Optional[int] = None
+    height: Optional[int] = None
+    format: str = ""  # JPEG, PNG ...
+    mode: str = ""  # Pillow's mode: RGB, RGBA, L, P ...
+    frames: int = 1
+    has_gps: bool = False
+    taken: str = ""  # 2024-05-01
+    camera: str = ""
+    # a folder
+    image_count: int = 0
+    formats: dict[str, int] = field(default_factory=dict)  # {"JPG": 30, "PNG": 18}
+    output_dir: Optional[Path] = None
+    note: str = ""
+
+
+def _exif_date(stamp: str) -> str:
+    """EXIF's "2024:05:01 10:22:33" as "2024-05-01"."""
+    return stamp.split(" ", 1)[0].replace(":", "-")
+
+
+def describe(target: Path, *, engine: Optional["ImageEngine"] = None) -> ImageFacts:
+    """An image's size in pixels, format, colour mode, date and camera, and
+    whether it holds a GPS location. A folder gives its image count, total
+    size and formats. Raises ProcessingError for a file that isn't an image."""
+    images, out_dir = resolve_batch(Path(target))
+    target = Path(target).expanduser().resolve()
+    if target.is_dir():
+        formats = Counter(image.suffix.lstrip(".").upper() for image in images)
+        return ImageFacts(
+            path=target,
+            size_bytes=sum(image.stat().st_size for image in images),
+            is_folder=True,
+            image_count=len(images),
+            formats=dict(formats.most_common()),
+            output_dir=out_dir,
+            note="" if images else EMPTY_FOLDER_NOTE,
+        )
+    try:
+        info = _engine(engine).inspect_image(target)
+    except RuntimeError as e:
+        raise ProcessingError(str(e)) from e
+    return ImageFacts(
+        path=target,
+        size_bytes=target.stat().st_size,
+        width=info["width"],
+        height=info["height"],
+        format=info["format"],
+        mode=info["mode"],
+        frames=info["frames"],
+        has_gps=info["has_gps"],
+        taken=_exif_date(info["taken"]) if info["taken"] else "",
+        camera=info["camera"],
+        note=GPS_NOTE if info["has_gps"] else "",
+    )

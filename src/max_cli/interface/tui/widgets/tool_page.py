@@ -50,6 +50,7 @@ class ToolPageSpec:
     # Runs in a thread: the facts line for a picked file. Raises MaxError for
     # a file it can't read.
     describe: Callable[[Path], Content]
+    file_title: str = "FILE"  # the path card's title: "FILE OR FOLDER" ...
 
 
 def file_param(action: Action) -> Optional[str]:
@@ -148,7 +149,7 @@ class ToolPage(Vertical):
         spec = self.spec
         yield Static(self._brand(), classes="tool-header")
         with Vertical(classes="tool-card tool-file-card") as file_card:
-            file_card.border_title = "FILE"
+            file_card.border_title = spec.file_title
             with Horizontal(classes="tool-file-row"):
                 yield Input(placeholder=spec.file_prompt, id="tool-file")
                 yield Button("Browse...", id="tool-browse")

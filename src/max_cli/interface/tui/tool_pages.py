@@ -137,4 +137,84 @@ PDF = ToolPageSpec(
     describe=describe_pdf,
 )
 
-TOOL_PAGES = (VIDEO, PDF)
+MEGAPIXEL = 1_000_000
+# Pillow's colour modes, in words. Others show as Pillow names them (CMYK ...).
+COLOUR_MODES = {
+    "RGB": "colour",
+    "RGBA": "colour with transparency",
+    "L": "greyscale",
+    "LA": "greyscale with transparency",
+    "1": "black and white",
+    "P": "palette colours",
+}
+
+
+def _image_count(count: int) -> str:
+    return f"{count} image{'s' if count != 1 else ''}"
+
+
+def describe_images(path: Path) -> Content:
+    """photo.jpg · 4032x3024 (12.2 MP) · JPEG · colour · 3.10 MB · taken
+    2024-05-01 on Pixel 7. A folder: photos · 48 images · 312 MB · 30 JPG, 18 PNG"""
+    from max_cli.core.operations import images
+
+    facts = images.describe(path)
+    if facts.is_folder:
+        parts = [
+            _image_count(facts.image_count),
+            format_size(facts.size_bytes) if facts.image_count else "",
+            ", ".join(f"{count} {kind}" for kind, count in facts.formats.items()),
+        ]
+    else:
+        pixels = (facts.width or 0) * (facts.height or 0)
+        dimensions = f"{facts.width}x{facts.height}" if pixels else ""
+        if pixels >= MEGAPIXEL:
+            dimensions += f" ({pixels / MEGAPIXEL:.1f} MP)"
+        shot = " on ".join(
+            part
+            for part in (f"taken {facts.taken}" if facts.taken else "", facts.camera)
+            if part
+        )
+        parts = [
+            dimensions,
+            facts.format,
+            COLOUR_MODES.get(facts.mode, facts.mode),
+            f"{facts.frames} frames" if facts.frames > 1 else "",
+            format_size(facts.size_bytes),
+            shot,
+        ]
+    lines = [
+        Content.assemble(
+            (facts.path.name, "bold $primary"),
+            (SEPARATOR + SEPARATOR.join(part for part in parts if part), ""),
+        )
+    ]
+    if facts.is_folder and facts.output_dir is not None and facts.image_count:
+        where = facts.output_dir.name
+        lines.append(
+            Content.styled(
+                f"Actions run on each image here; results go to {where}.",
+                "$text-muted",
+            )
+        )
+    if facts.note:
+        lines.append(Content.styled(facts.note, "$warning"))
+    return Content("\n").join(lines)
+
+
+IMAGES = ToolPageSpec(
+    page_id="images",
+    group="images",
+    title="IMAGES",
+    tagline="PIXEL LAB",
+    hint="Shrink, resize, convert and clean images  ·  one image or a whole folder",
+    file_prompt="Pick an image or a folder of images, or paste its path",
+    sections=(
+        ToolSection("SHRINK", ("compress", "resize")),
+        ToolSection("CONVERT & CLEAN", ("convert", "strip")),
+    ),
+    describe=describe_images,
+    file_title="FILE OR FOLDER",
+)
+
+TOOL_PAGES = (VIDEO, IMAGES, PDF)

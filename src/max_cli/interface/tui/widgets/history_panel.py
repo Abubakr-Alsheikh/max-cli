@@ -47,9 +47,7 @@ class HistoryPanel(Vertical):
 
     def refresh_data(self) -> None:
         category_select = self.query_one("#history-category-filter", Select)
-        category = category_select.value
-        if category == Select.BLANK:
-            category = "all"
+        category = "all" if category_select.is_blank() else category_select.value
 
         filter_input = self.query_one("#history-filter", Input)
         filter_text = filter_input.value.strip().lower()

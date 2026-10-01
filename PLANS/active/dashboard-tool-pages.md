@@ -1,6 +1,6 @@
 # Dashboard: a page per command group
 
-**Status:** in progress. Video (2026-09-30) and PDF (2026-10-01) pages built.
+**Status:** in progress. Video (2026-09-30), PDF and Images (2026-10-01) pages built.
 **Decided by:** the maintainer, 2026-09-30 ("lets build on top of this plan").
 
 ## Goal
@@ -15,7 +15,7 @@ You start from a file ("I have a PDF"), not from a command name. Each big comman
 | pdf | 13 | **PDF** (done) |
 | files | 10 | Files, rebuilt on the same layout |
 | audio | 7 (needs its catalog port) | Audio, with a tag table |
-| images | 4 | Images |
+| images | 4 | **Images** (done) |
 | ai | 7 (not ported) | AI, today's Chat, later the agent |
 | tools | 4 (share, qr, paste, copy; not ported) | Extras |
 
@@ -33,7 +33,7 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 - [x] Settings page (PR #37).
 - [x] Shared `ToolPage` and the Video page.
 - [x] PDF page (`pdf.describe`: pages, paper size, title and author, form fields, locked, scanned). The Files page's Compress on a PDF opens it.
-- [ ] Images page (`images.describe`: size in pixels, format, colour mode; a folder shows its image count).
+- [x] Images page (`images.describe`: pixels, format, colour mode, frames, EXIF date and camera, a GPS warning; a folder shows its image count, size and formats). Settings moved to `,`: eleven pages outgrew the number keys. The sidebar's arrow keys became priority bindings, because the overflowing page list scrolled instead.
 - [ ] Files page on the same layout (a folder instead of a file: counts by type, size).
 - [ ] Audio: port the `audio` group to the catalog, then its page with a tag table.
 - [ ] `Ctrl+P` finds every action and opens its page.
