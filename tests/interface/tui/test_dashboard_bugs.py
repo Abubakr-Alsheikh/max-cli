@@ -5,36 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, Input
-
-
-@pytest.mark.asyncio
-async def test_files_filter_hides_rows_that_do_not_match(tmp_path):
-    """The filter set Row.visible, which Textual ignores, so nothing changed."""
-    from max_cli.interface.tui.widgets.files_panel import FilesPanel
-
-    (tmp_path / "holiday.jpg").write_bytes(b"x")
-    (tmp_path / "report.pdf").write_bytes(b"x")
-    (tmp_path / "notes.txt").write_bytes(b"x")
-
-    class TestApp(App):
-        def compose(self) -> ComposeResult:
-            panel = FilesPanel()
-            panel._current_path = tmp_path
-            yield panel
-
-    async with TestApp().run_test() as pilot:
-        table = pilot.app.query_one("#files-table", DataTable)
-        assert table.row_count == 3
-
-        pilot.app.query_one("#files-filter", Input).value = "report"
-        await pilot.pause()
-        assert table.row_count == 1
-        assert "report.pdf" in str(table.get_row_at(0)[0])
-
-        pilot.app.query_one("#files-filter", Input).value = ""
-        await pilot.pause()
-        assert table.row_count == 3
+from textual.widgets import Input
 
 
 def test_grab_activity_counts_as_download():

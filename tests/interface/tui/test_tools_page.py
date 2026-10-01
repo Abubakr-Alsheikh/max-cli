@@ -16,7 +16,6 @@ from textual.widgets import (
     Switch,
 )
 
-from max_cli.config import settings
 from max_cli.core.catalog import actions_for, get_action, group_names
 from max_cli.core.catalog.spec import Action, Danger, Param, ParamKind, Surface
 from max_cli.core.engines.task_manager import get_task_manager
@@ -26,7 +25,6 @@ from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 from max_cli.interface.tui.widgets.path_picker import PathPicker
-from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 from .waiting import wait_until
 
@@ -235,57 +233,6 @@ async def test_browse_fills_the_path_field(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_files_page_video_compress_opens_the_video_page(dummy_video):
-    """A group with its own page (Video) gets the file there, not on Tools."""
-    from max_cli.interface.tui.app import MaxDashboardApp
-    from max_cli.interface.tui.widgets.files_panel import FilesPanel
-
-    app = MaxDashboardApp()
-    async with app.run_test(size=(120, 40)) as pilot:
-        app.query_one(FilesPanel).post_message(
-            FilesPanel.OpenAction("video.compress", {"target": str(dummy_video)})
-        )
-        page = app.query_one("#video-panel")
-        await wait_until(
-            pilot,
-            lambda: page.form.query_one("#field-target", Input).value
-            == str(dummy_video),
-        )
-
-        assert page.display
-        assert page.query_one("#tool-file", Input).value == str(dummy_video)
-        form = page.form
-        assert form.action.id == "video.compress"
-        assert form.query_one("#field-target", Input).value == str(dummy_video)
-
-
-@pytest.mark.asyncio
-async def test_files_page_image_compress_opens_the_images_page(dummy_image):
-    from max_cli.interface.tui.app import MaxDashboardApp
-    from max_cli.interface.tui.widgets.files_panel import FilesPanel
-
-    app = MaxDashboardApp()
-    async with app.run_test(size=(120, 40)) as pilot:
-        app.query_one(FilesPanel).post_message(
-            FilesPanel.OpenAction("images.compress", {"target": str(dummy_image)})
-        )
-        page = app.query_one("#images-panel")
-        await wait_until(
-            pilot,
-            lambda: page.form.query_one("#field-target", Input).value
-            == str(dummy_image),
-        )
-
-        assert page.display
-        form = page.form
-        assert form.action.id == "images.compress"
-        assert form.query_one("#field-target", Input).value == str(dummy_image)
-        # A Setting default shows the user's configured value.
-        quality = form.query_one("#field-quality", Input).value
-        assert quality == str(settings.DEFAULT_QUALITY)
-
-
-@pytest.mark.asyncio
 async def test_password_fields_are_masked():
     app = FormApp(get_action("pdf.lock"))
     async with app.run_test(size=(100, 40)):
@@ -309,34 +256,6 @@ async def test_browse_adds_to_a_list_field(tmp_path):
         added = await wait_until(pilot, lambda: field.value == f"{first}; {second}")
 
         assert added
-
-
-@pytest.mark.asyncio
-async def test_files_page_organize_opens_the_form_and_moves_nothing(tmp_path):
-    """Organize used to run smart-sort at once, with no question asked."""
-    from max_cli.interface.tui.app import MaxDashboardApp
-    from max_cli.interface.tui.widgets.files_panel import FilesPanel
-
-    (tmp_path / "invoice.pdf").write_bytes(b"%PDF")
-    app = MaxDashboardApp()
-    async with app.run_test(size=(120, 40)) as pilot:
-        panel = app.query_one(FilesPanel)
-        panel._current_path = tmp_path
-        panel.query_one("#btn-organize", Button).press()
-        tools = app.query_one(ToolsPanel)
-        await wait_until(
-            pilot,
-            lambda: tools.form.query_one("#field-path", Input).value == str(tmp_path),
-        )
-
-        form = tools.form
-        assert form.action.id == "files.smart-sort"
-        assert form.query_one("#field-path", Input).value == str(tmp_path)
-        assert (tmp_path / "invoice.pdf").exists()
-
-        form.query_one("#form-run", Button).press()
-        await pilot.pause()
-        assert isinstance(app.screen, ConfirmDialog)
 
 
 def _dashboard_actions() -> list[Action]:

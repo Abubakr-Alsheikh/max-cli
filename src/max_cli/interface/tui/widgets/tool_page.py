@@ -6,7 +6,8 @@ and a function that describes a picked file (`interface/tui/tool_pages.py`).
 
 - FILE: a path box with Browse. A picked file is described in a thread
   worker (ffprobe for video, page count for PDF ...) and fills the chosen
-  action's file field.
+  action's file field. A file another page works on (a PDF picked on the
+  Files page) gets a button that opens it there.
 - ACTIONS: the group's actions as buttons, in sections.
 - The chosen action's form, built from the catalog (`ActionForm`), with
   Run and, where the action allows it, Add to queue.
@@ -24,12 +25,21 @@ from textual.css.query import NoMatches
 from textual.timer import Timer
 from textual.widgets import Button, Input, Label, Static
 
+from max_cli.common.file_kinds import kind_of
 from max_cli.core.catalog import get_action
 from max_cli.core.catalog.spec import Action, ParamKind
+from max_cli.interface.tui.messages import OpenFile
 from max_cli.interface.tui.widgets.action_form import ActionForm
+from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS, SECTIONS
 from max_cli.interface.tui.workers import show_from_worker
 
 DESCRIBE_DELAY_SECONDS = 0.4
+MAX_CHIP_COLUMNS = 3
+CHIP_GUTTER = 1
+CHIP_BORDER = 2  # a chip's left and right border
+# Folder params an action writes to; the picked path never goes there.
+OUTPUT_FOLDER_NAMES = frozenset({"output", "output_dir"})
+PAGE_LABELS = {section_id: label for section_id, _icon, label in SECTIONS}
 
 
 @dataclass(frozen=True)
@@ -51,13 +61,22 @@ class ToolPageSpec:
     # a file it can't read.
     describe: Callable[[Path], Content]
     file_title: str = "FILE"  # the path card's title: "FILE OR FOLDER" ...
+    # File kinds (common/file_kinds) this page is the place for. Another
+    # page offers to open such a file here.
+    kinds: tuple[str, ...] = ()
+    # Actions whose path fields aren't for the picked file (files.backups
+    # takes a backup to restore).
+    no_fill: tuple[str, ...] = ()
 
 
 def file_param(action: Action) -> Optional[str]:
-    """The name of the action's input file parameter, if it has one."""
-    return next(
-        (param.name for param in action.params if param.kind == ParamKind.FILE), None
-    )
+    """The parameter that takes the picked path: the first input file, else
+    the first folder the action reads (not one it writes to)."""
+    for kind in (ParamKind.FILE, ParamKind.FOLDER):
+        for param in action.params:
+            if param.kind == kind and param.name not in OUTPUT_FOLDER_NAMES:
+                return param.name
+    return None
 
 
 class ToolPage(Vertical):
@@ -89,6 +108,23 @@ class ToolPage(Vertical):
     ToolPage .tool-facts {
         height: auto;
         margin-bottom: 1;
+    }
+    ToolPage #tool-open-page {
+        display: none;
+        height: 1;
+        min-width: 10;
+        border: none;
+        padding: 0 1;
+        margin-bottom: 1;
+        background: $primary 20%;
+        color: $primary;
+        text-style: bold;
+    }
+    ToolPage #tool-open-page.-offered {
+        display: block;
+    }
+    ToolPage #tool-open-page:hover {
+        background: $primary 40%;
     }
     ToolPage .tool-main {
         height: auto;
@@ -142,6 +178,7 @@ class ToolPage(Vertical):
         self._form: Optional[ActionForm] = None
         self._describe_timer: Optional[Timer] = None
         self._described = ""  # the path the facts line belongs to
+        self._offered_page = ""  # the page the open-on button goes to
 
     # --- layout -------------------------------------------------------------
 
@@ -162,6 +199,7 @@ class ToolPage(Vertical):
                 classes="tool-facts",
                 id="tool-facts",
             )
+            yield Button("", id="tool-open-page")
         with Grid(classes="tool-main"):
             with Vertical(classes="tool-card tool-actions-card") as actions_card:
                 actions_card.border_title = "ACTIONS"
@@ -184,6 +222,28 @@ class ToolPage(Vertical):
     def on_mount(self) -> None:
         first = self.spec.sections[0].actions[0]
         self.show_action(first)
+
+    def on_resize(self) -> None:
+        self.call_after_refresh(self._fit_chips)
+
+    def _fit_chips(self) -> None:
+        """As many chip columns as fit the longest action name: in a narrow
+        window three columns cut "backup-cleanup" to "backup-clea"."""
+        grids = list(self.query(".section-chips").results(Grid))
+        if not grids:
+            return
+        longest = max(
+            len(name) for section in self.spec.sections for name in section.actions
+        )
+        chip_width = longest + CHIP_BORDER
+        width = grids[0].content_region.width
+        columns = max(
+            1,
+            min(MAX_CHIP_COLUMNS, (width + CHIP_GUTTER) // (chip_width + CHIP_GUTTER)),
+        )
+        for grid in grids:
+            if grid.styles.grid_size_columns != columns:
+                grid.styles.grid_size_columns = columns
 
     # --- actions ------------------------------------------------------------
 
@@ -220,13 +280,9 @@ class ToolPage(Vertical):
         for key, value in values.items():
             form.set_value(key, value)
 
-    def open_action(self, action_id: str, **values: Any) -> None:
-        """Show an action from another page: its file goes in the FILE box."""
-        name = action_id.split(".", 1)[1]
-        field = file_param(get_action(action_id))
-        if field and values.get(field):
-            self.query_one("#tool-file", Input).value = str(values.pop(field))
-        self.show_action(name, **values)
+    def open_file(self, path: Path) -> None:
+        """Pick `path`, as if typed in the FILE box (from another page)."""
+        self.query_one("#tool-file", Input).value = str(path)
 
     @on(Button.Pressed, ".chip")
     def _on_chip(self, event: Button.Pressed) -> None:
@@ -234,11 +290,19 @@ class ToolPage(Vertical):
         self.show_action((event.button.id or "").removeprefix("act-"))
 
     def _fill_file(self) -> None:
-        """Put the picked file into the form's input file field."""
+        """Put the picked path into the form's input field."""
         path = self.query_one("#tool-file", Input).value.strip()
-        field = file_param(self._action) if self._action else None
-        if not path or field is None or self._form is None:
+        action = self._action
+        field = (
+            file_param(action)
+            if action and action.name not in self.spec.no_fill
+            else None
+        )
+        if not path or field is None or self._form is None or action is None:
             return
+        picked = Path(path).expanduser()
+        if action.param(field).kind == ParamKind.FOLDER and picked.is_file():
+            path = str(picked.parent)  # a folder action works on the file's folder
         if self._form.is_mounted:
             try:
                 self._form.set_value(field, path)
@@ -261,6 +325,7 @@ class ToolPage(Vertical):
             return
         self._described = path
         self._set_facts(Content.styled("Reading the file...", "$primary"))
+        self._offer_page(None)
         self.run_worker(
             lambda: self._describe_in_thread(path),
             thread=True,
@@ -271,15 +336,45 @@ class ToolPage(Vertical):
     def _describe_in_thread(self, path: str) -> None:
         from max_cli.common.exceptions import MaxError
 
+        picked = Path(path).expanduser()
+        kind = ""
         try:
-            facts = self.spec.describe(Path(path).expanduser())
+            facts = self.spec.describe(picked)
+            kind = kind_of(picked) if picked.is_file() else ""
         except MaxError as e:
             facts = Content.styled(str(e), "$error")
-        show_from_worker(self, self._show_facts, path, facts)
+        show_from_worker(self, self._show_facts, path, facts, kind)
 
-    def _show_facts(self, path: str, facts: Content) -> None:
+    def _show_facts(self, path: str, facts: Content, kind: str = "") -> None:
         if path == self.query_one("#tool-file", Input).value.strip():
             self._set_facts(facts)
+            self._offer_page(self._page_for(kind))
+
+    def _page_for(self, kind: str) -> Optional["ToolPage"]:
+        """Another page that is the place for this kind of file."""
+        if not kind or kind in self.spec.kinds:
+            return None
+        return next(
+            (page for page in self.app.query(ToolPage) if kind in page.spec.kinds),
+            None,
+        )
+
+    def _offer_page(self, page: Optional["ToolPage"]) -> None:
+        button = self.query_one("#tool-open-page", Button)
+        button.set_class(page is not None, "-offered")
+        if page is not None:
+            page_id = page.spec.page_id
+            button.label = (
+                f"Open on the {PAGE_LABELS[page_id]} page ({SECTION_KEYS[page_id]})"
+            )
+        self._offered_page = page.spec.page_id if page is not None else ""
+
+    @on(Button.Pressed, "#tool-open-page")
+    def _on_open_page(self, event: Button.Pressed) -> None:
+        event.stop()
+        path = self.query_one("#tool-file", Input).value.strip()
+        if path and self._offered_page:
+            self.post_message(OpenFile(self._offered_page, Path(path).expanduser()))
 
     def _set_facts(self, facts: Content) -> None:
         self.query_one("#tool-facts", Static).update(facts)

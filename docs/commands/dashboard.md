@@ -26,7 +26,7 @@ The sidebar on the left lists eleven sections in three groups. It starts as a st
 | `4` | **Images** | Pick an image or a folder, see its size in pixels, format, date and camera (or how many images a folder holds), and run any `max images` action on it |
 | `5` | **PDF** | Pick a PDF, see its pages, paper size and whether it's locked or scanned, and run any `max pdf` action on it |
 | `6` | **Tools** | A form for each command, with all its options |
-| `7` | **Files** | File browser with quick actions |
+| `7` | **Files** | Pick a folder or a file, see what it holds, and sort, clean, back up or undo with any `max files` action |
 | `8` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
 | `9` | **Queue** | What's running, waiting and finished, with buttons to pause, cancel and retry |
@@ -52,19 +52,29 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 
 The Video page (`3`) works on one file at a time. Paste a path or press Browse: the FILE card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
 
-Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue. The Files page's Compress button on a video opens this page too.
+Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue.
 
 ## Images page
 
 The Images page (`4`) takes one image or a whole folder. Pick an image: the FILE OR FOLDER card shows its size in pixels and megapixels, format, colour mode (colour, greyscale, transparency), frames for an animated GIF, file size, and the date and camera from its EXIF data. It warns you when the image holds a GPS location, which **strip** removes. Pick a folder: the card shows how many images it holds, their total size and formats, and the folder the results go to (`<folder>_optimized`). Max reads the images in that folder, not in its subfolders.
 
-The actions sit in two groups: **Shrink** (compress, resize) and **Convert & clean** (convert, strip). The picked image or folder fills the action's target. The Files page's Compress on an image opens this page.
+The actions sit in two groups: **Shrink** (compress, resize) and **Convert & clean** (convert, strip). The picked image or folder fills the action's target.
 
 ## PDF page
 
 The PDF page (`5`) works like the Video page. Pick a PDF: the FILE card shows its pages, paper size (A4, Letter or millimetres), size, title and author, and how many form fields it has. It tells you when the PDF is locked with a password, and when it has no text on its first pages, which means it's a scan that **ocr** can read.
 
-The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more. The Files page's Compress on a PDF opens this page.
+The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more.
+
+## Files page
+
+The Files page (`7`) works on a folder or one file. Pick a folder: the FILE OR FOLDER card counts the files directly in it and its subfolders, shows their total size, how many of each kind (images, videos, PDFs ...) and the biggest file. Pick a file: it shows the kind, size and date.
+
+The actions sit in four groups: **Organize** (order, smart-sort, duplicates), **Look** (preview, history), **Backup & undo** (backup, backups, backup-cleanup, undo) and **Destroy** (shred). Picking a file and then a folder action (order, smart-sort, duplicates) fills in the file's folder. Actions that move or delete files ask first, and **undo** reverses the last change Max recorded.
+
+### Open on another page
+
+When you pick a video, an audio file, an image or a PDF on a page that isn't made for it, the card shows a button such as **Open on the PDF page (5)**. It opens that page with the file picked. This works on every page with a FILE card: a PDF picked on the Images page offers the PDF page too.
 
 ## Browse
 

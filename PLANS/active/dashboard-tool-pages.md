@@ -1,6 +1,6 @@
 # Dashboard: a page per command group
 
-**Status:** in progress. Video (2026-09-30), PDF and Images (2026-10-01) pages built.
+**Status:** in progress. Video (2026-09-30), PDF, Images and Files (2026-10-01) pages built.
 **Decided by:** the maintainer, 2026-09-30 ("lets build on top of this plan").
 
 ## Goal
@@ -13,7 +13,7 @@ You start from a file ("I have a PDF"), not from a command name. Each big comman
 |-------|---------|------|
 | video | 15 on the dashboard (record, stream and preview stay CLI-only) | **Video** (done) |
 | pdf | 13 | **PDF** (done) |
-| files | 10 | Files, rebuilt on the same layout |
+| files | 10 | **Files** (done) |
 | audio | 7 (needs its catalog port) | Audio, with a tag table |
 | images | 4 | **Images** (done) |
 | ai | 7 (not ported) | AI, today's Chat, later the agent |
@@ -26,7 +26,7 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 - One widget, `widgets/tool_page.py`, set up by a `ToolPageSpec` per page in `interface/tui/tool_pages.py`: group, header, action sections, and a `describe(path) -> Content` that runs in a thread.
 - Layout: FILE card (path, Browse, facts), then ACTIONS (buttons in sections) beside the chosen action's `ActionForm` with the file filled in.
 - Each group's core module gets a `describe` operation that reads a file without side effects (`video.describe` uses ffprobe and never downloads FFmpeg).
-- `FilesPanel.OpenAction` opens the group's page when it has one.
+- A file picked on the wrong page gets a button that opens it on its kind's page (`ToolPageSpec.kinds`, `messages.OpenFile`).
 
 ## Steps
 
@@ -34,7 +34,7 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 - [x] Shared `ToolPage` and the Video page.
 - [x] PDF page (`pdf.describe`: pages, paper size, title and author, form fields, locked, scanned). The Files page's Compress on a PDF opens it.
 - [x] Images page (`images.describe`: pixels, format, colour mode, frames, EXIF date and camera, a GPS warning; a folder shows its image count, size and formats). Settings moved to `,`: eleven pages outgrew the number keys. The sidebar's arrow keys became priority bindings, because the overflowing page list scrolled instead.
-- [ ] Files page on the same layout (a folder instead of a file: counts by type, size).
+- [x] Files page on the same layout (`files.describe`: a folder's own files by kind, size, subfolders, the biggest file). The old file browser is gone: Browse (PR #42) replaced it, and any page offers "Open on the <kind> page" for a file another page is made for.
 - [ ] Audio: port the `audio` group to the catalog, then its page with a tag table.
 - [ ] `Ctrl+P` finds every action and opens its page.
 - [ ] Activity: Queue and History as two tabs of one page.

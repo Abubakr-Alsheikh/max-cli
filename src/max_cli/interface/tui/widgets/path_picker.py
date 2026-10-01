@@ -42,6 +42,7 @@ from textual.widgets import (
 from textual.widgets.data_table import RowDoesNotExist
 from textual.widgets.option_list import Option
 
+from max_cli.common.file_kinds import AUDIO, IMAGE, KIND_SUFFIXES, PDF, VIDEO, kind_of
 from max_cli.common.utils import format_size
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.workers import show_from_worker
@@ -56,24 +57,18 @@ RECENT_DAYS = 7
 SECONDS_PER_DAY = 86400
 UP_KEY = ".."
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".m4v"})
-AUDIO_SUFFIXES = frozenset({".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"})
-IMAGE_SUFFIXES = frozenset(
-    {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tiff", ".tif"}
-)
-PDF_SUFFIXES = frozenset({".pdf"})
 # A command group -> the files its pages work on, and what to call them.
 FILE_TYPES: dict[str, tuple[str, frozenset[str]]] = {
-    "video": ("videos and audio", VIDEO_SUFFIXES | AUDIO_SUFFIXES),
-    "images": ("images", IMAGE_SUFFIXES),
-    "pdf": ("PDFs", PDF_SUFFIXES),
+    "video": ("videos and audio", KIND_SUFFIXES[VIDEO] | KIND_SUFFIXES[AUDIO]),
+    "images": ("images", KIND_SUFFIXES[IMAGE]),
+    "pdf": ("PDFs", KIND_SUFFIXES[PDF]),
 }
-ICONS = (
-    (VIDEO_SUFFIXES, "\U0001f3ac"),
-    (AUDIO_SUFFIXES, "\U0001f3b5"),
-    (IMAGE_SUFFIXES, "\U0001f4f7"),
-    (PDF_SUFFIXES, "\U0001f4c4"),
-)
+ICONS = {
+    VIDEO: "\U0001f3ac",
+    AUDIO: "\U0001f3b5",
+    IMAGE: "\U0001f4f7",
+    PDF: "\U0001f4c4",
+}
 FOLDER_ICON = "\U0001f4c1"
 FILE_ICON = "\U0001f4ce"
 # Folders under your home that most people have, in the order PLACES lists them.
@@ -214,8 +209,7 @@ def start_folder(start: Optional[Path]) -> Path:
 def _icon(entry: Entry) -> str:
     if entry.is_dir:
         return FOLDER_ICON
-    suffix = entry.path.suffix.lower()
-    return next((icon for group, icon in ICONS if suffix in group), FILE_ICON)
+    return ICONS.get(kind_of(entry.path), FILE_ICON)
 
 
 def _when(modified: float, now: datetime) -> str:

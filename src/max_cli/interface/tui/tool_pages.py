@@ -8,6 +8,7 @@ from pathlib import Path
 
 from textual.content import Content
 
+from max_cli.common import file_kinds
 from max_cli.common.utils import format_size
 from max_cli.interface.tui.widgets.tool_page import ToolPageSpec, ToolSection
 
@@ -86,6 +87,7 @@ VIDEO = ToolPageSpec(
         ToolSection("PICTURE", ("brightness", "color", "stabilize")),
     ),
     describe=describe_video,
+    kinds=(file_kinds.VIDEO, file_kinds.AUDIO),
 )
 
 
@@ -135,6 +137,7 @@ PDF = ToolPageSpec(
         ToolSection("FORMS", ("form-data", "form-fill", "form-flatten")),
     ),
     describe=describe_pdf,
+    kinds=(file_kinds.PDF,),
 )
 
 MEGAPIXEL = 1_000_000
@@ -215,6 +218,91 @@ IMAGES = ToolPageSpec(
     ),
     describe=describe_images,
     file_title="FILE OR FOLDER",
+    kinds=(file_kinds.IMAGE,),
 )
 
-TOOL_PAGES = (VIDEO, IMAGES, PDF)
+# A kind of file in words: (one, several).
+KIND_NAMES = {
+    file_kinds.VIDEO: ("video", "videos"),
+    file_kinds.AUDIO: ("audio file", "audio files"),
+    file_kinds.IMAGE: ("image", "images"),
+    file_kinds.PDF: ("PDF", "PDFs"),
+    file_kinds.DOCUMENT: ("document", "documents"),
+    file_kinds.ARCHIVE: ("archive", "archives"),
+    file_kinds.OTHER: ("other file", "other"),
+}
+
+
+def _sentence_case(text: str) -> str:
+    """First letter up, the rest as is: "PDF" stays "PDF"."""
+    return text[:1].upper() + text[1:]
+
+
+def _count(count: int, one: str, several: str) -> str:
+    return f"{count} {one if count == 1 else several}"
+
+
+def describe_files(path: Path) -> Content:
+    """report.pdf · PDF · 2.40 MB · modified 2024-05-01. A folder:
+    Downloads · 48 files · 12 folders · 1.20 GB · 30 images, 10 videos, 8 other"""
+    from max_cli.core.operations import files
+
+    facts = files.describe(path)
+    lines = []
+    if facts.is_folder:
+        parts = [
+            _count(facts.file_count, "file", "files"),
+            _count(facts.folder_count, "folder", "folders")
+            if facts.folder_count
+            else "",
+            format_size(facts.size_bytes) if facts.file_count else "",
+            ", ".join(
+                _count(count, *KIND_NAMES[kind]) for kind, count in facts.kinds.items()
+            ),
+        ]
+    else:
+        parts = [
+            _sentence_case(KIND_NAMES[facts.kind][0])
+            if facts.kind != file_kinds.OTHER
+            else "",
+            format_size(facts.size_bytes),
+            f"modified {facts.modified:%Y-%m-%d %H:%M}" if facts.modified else "",
+        ]
+    lines.append(
+        Content.assemble(
+            (facts.path.name or str(facts.path), "bold $primary"),
+            (SEPARATOR + SEPARATOR.join(part for part in parts if part), ""),
+        )
+    )
+    if facts.biggest is not None and facts.file_count > 1:
+        lines.append(
+            Content.assemble(
+                ("Biggest: ", "$text-muted"),
+                (facts.biggest.name, ""),
+                (f" ({format_size(facts.biggest_bytes)})", "$text-muted"),
+            )
+        )
+    if facts.note:
+        lines.append(Content.styled(facts.note, "$text-muted"))
+    return Content("\n").join(lines)
+
+
+FILES = ToolPageSpec(
+    page_id="files",
+    group="files",
+    title="FILES",
+    tagline="FOLDER CONTROL",
+    hint="Sort, clean, back up and undo  ·  Max records what it moves or deletes",
+    file_prompt="Pick a folder or a file, or paste its path",
+    sections=(
+        ToolSection("ORGANIZE", ("order", "smart-sort", "duplicates")),
+        ToolSection("LOOK", ("preview", "history")),
+        ToolSection("BACKUP & UNDO", ("backup", "backups", "backup-cleanup", "undo")),
+        ToolSection("DESTROY", ("shred",)),
+    ),
+    describe=describe_files,
+    file_title="FILE OR FOLDER",
+    no_fill=("backups",),
+)
+
+TOOL_PAGES = (VIDEO, IMAGES, PDF, FILES)
