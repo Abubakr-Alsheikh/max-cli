@@ -1300,18 +1300,16 @@ class DownloadPanel(Vertical):
 
     @on(Button.Pressed, "#btn-browse-output")
     def _on_browse(self) -> None:
-        from max_cli.interface.tui.widgets.dialogs import PathPicker
+        from max_cli.interface.tui.widgets.path_picker import PathPicker, PickMode
 
         folder_input = self.query_one("#dl-output", Input)
-        start = (
-            Path(folder_input.value).expanduser() if folder_input.value else Path.home()
-        )
+        start = Path(folder_input.value) if folder_input.value.strip() else None
 
         def _picked(path: Optional[Path]) -> None:
             if path is not None:
                 folder_input.value = str(path)
 
-        self.app.push_screen(PathPicker(start, pick_folder=True), _picked)
+        self.app.push_screen(PathPicker(start, PickMode.FOLDER), _picked)
 
     # --- history ----------------------------------------------------------
 

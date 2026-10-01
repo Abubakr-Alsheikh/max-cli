@@ -66,6 +66,18 @@ The PDF page (`5`) works like the Video page. Pick a PDF: the FILE card shows it
 
 The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more. The Files page's Compress on a PDF opens this page.
 
+## Browse
+
+Every Browse button opens the same window. It starts in the folder of the path already in the field, or where you picked from last time.
+
+- **Places** on the left: Home, Desktop, Documents, Downloads, Pictures, Videos and Music (the ones you have), Max's download folder, your pinned folders, folders you picked from lately, and the drives.
+- **The path bar:** `<` goes back, `^` goes up a folder. Type or paste a path and press `Enter` to go there; a file path picks that file.
+- **The list:** folders first, then files with their size and date. Type in the filter box (`Ctrl+F`) to narrow it. `Enter` opens a folder or picks a file, `Backspace` goes up and puts you back on the folder you left, `Alt+Left` goes back.
+- On the Video, Images and PDF pages the list shows only the files that page works on. Tick **All files** to see everything, and **Hidden files** to see hidden ones.
+- **Pin this folder** adds the open folder to Places for next time.
+
+Fields that take a folder list folders only and pick the open one. Fields for a file Max writes (an output) ask for a file name and save it in the open folder. Fields that take a file also have **Use this folder**, for actions that work on a whole folder.
+
 ## Queue page
 
 The Queue page (`9`) shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
