@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
 
 
-SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
+SUPPORTED_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav"}
 
 # ID3 frame for each field set_metadata writes. Formats that mutagen can't
 # open in "easy" mode (WAV) keep raw ID3 tags, which need frame objects.
@@ -21,6 +21,21 @@ ID3_FRAME_IDS = {
     "composer": "TCOM",
 }
 ID3_TEXT_ENCODING_UTF8 = 3
+ID3_COMMENT_LANGUAGE = "eng"
+MP4_COMPOSER_ATOM = "\xa9wrt"
+# The tag names every format reads and writes, in the order Max shows them.
+TAG_FIELDS = (
+    "title",
+    "artist",
+    "album",
+    "albumartist",
+    "genre",
+    "date",
+    "tracknumber",
+    "discnumber",
+    "composer",
+    "comment",
+)
 
 
 def _tag_text(value: Any) -> str:
@@ -45,11 +60,61 @@ def _prepare_target(file_path: Path, output_path: Optional[Path]) -> Path:
     return output_path
 
 
-def _open_for_tagging(path: Path) -> Any:
-    """Open `path` with tags ready to edit (easy key names where possible)."""
+def _id3_comment_get(tags: Any, key: str) -> list[str]:
+    texts = [text for frame in tags.getall("COMM") for text in frame.text]
+    if not texts:
+        # EasyID3 lists a key only when its getter raises KeyError for a
+        # missing tag; an empty list showed every MP3 with comment "".
+        raise KeyError(key)
+    return texts
+
+
+def _id3_comment_set(tags: Any, key: str, value: list[str]) -> None:
+    from mutagen.id3 import COMM
+
+    tags.setall(
+        "COMM",
+        [
+            COMM(
+                encoding=ID3_TEXT_ENCODING_UTF8,
+                lang=ID3_COMMENT_LANGUAGE,
+                desc="",
+                text=value,
+            )
+        ],
+    )
+
+
+def _id3_comment_delete(tags: Any, key: str) -> None:
+    tags.delall("COMM")
+
+
+def _register_easy_keys() -> None:
+    """Teach mutagen's easy tags the fields it leaves out: MP3 has no
+    "comment" and M4A no "composer", so `max audio set` failed on both."""
+    from mutagen.easyid3 import EasyID3
+    from mutagen.easymp4 import EasyMP4Tags
+
+    if "comment" not in EasyID3.valid_keys:
+        EasyID3.RegisterKey(
+            "comment", _id3_comment_get, _id3_comment_set, _id3_comment_delete
+        )
+    if "composer" not in EasyMP4Tags.Get:
+        EasyMP4Tags.RegisterTextKey("composer", MP4_COMPOSER_ATOM)
+
+
+def _open_easy(path: Path) -> Any:
+    """Open `path` with the same tag names for every format (title, artist ...).
+    WAV has no easy mode and keeps raw ID3 frames."""
     from mutagen._file import File as MutagenFile
 
-    audio = MutagenFile(path, easy=True)
+    _register_easy_keys()
+    return MutagenFile(path, easy=True)
+
+
+def _open_for_tagging(path: Path) -> Any:
+    """Open `path` with tags ready to edit (easy key names where possible)."""
+    audio = _open_easy(path)
     if audio is None:
         raise ValueError(f"Unable to read file: {path}")
     if audio.tags is None:
@@ -93,10 +158,14 @@ class AudioMetadataEngine:
 
     def get_metadata(self, file_path: Path) -> dict[str, Any]:
         """
-        Retrieve all metadata from an audio file.
-        Returns all raw frame keys plus convenience names for known fields.
+        Read an audio file's tags and stream info.
+
+        Tags use the same names for every format (title, artist, album ...;
+        M4A's "\xa9nam" is "title"), in TAG_FIELDS order, then any other tag.
+        Then duration (seconds), bitrate (bits per second), sample_rate and
+        channels.
         """
-        from mutagen._file import File as MutagenFile
+        from mutagen import id3
 
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -104,51 +173,64 @@ class AudioMetadataEngine:
         if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             raise ValueError(
                 f"Unsupported format: {file_path.suffix}. "
-                f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
+                f"Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
             )
 
-        audio = MutagenFile(file_path)
+        from mutagen._file import File as MutagenFile
 
+        # ID3 files (MP3, WAV) read their raw frames: the easy view would
+        # drop custom tags such as TXXX:mood. Other formats read easy names.
+        audio = MutagenFile(file_path)
+        if audio is not None and not isinstance(audio.tags, id3.ID3):
+            audio = _open_easy(file_path)
         if audio is None:
             raise ValueError(f"Unable to read metadata from: {file_path}")
 
-        metadata: dict[str, Any] = {}
+        found: dict[str, str] = {}
+        if isinstance(audio.tags, id3.ID3):
+            names = {frame_id: name for name, frame_id in ID3_FRAME_IDS.items()}
+            names["COMM"] = "comment"
+            for key in audio.tags.keys():
+                short = key.split(":")[0]
+                if short == "APIC":
+                    continue
+                found[names.get(short, key)] = _tag_text(audio.tags[key].text)
+        elif audio.tags is not None:
+            for key in audio.tags.keys():
+                found[key] = _tag_text(audio.tags[key])
 
-        ID3_CONVENIENCE = {
-            "TIT2": "title",
-            "TPE1": "artist",
-            "TALB": "album",
-            "TPE2": "albumartist",
-            "TCON": "genre",
-            "TDRC": "date",
-            "TRCK": "tracknumber",
-            "TPOS": "discnumber",
-            "TCOM": "composer",
-            "COMM": "comment",
+        metadata: dict[str, Any] = {
+            field: found.pop(field) for field in TAG_FIELDS if found.get(field)
         }
+        metadata.update(sorted(found.items()))
 
-        for frame_id in sorted(audio.keys()):
-            if frame_id.startswith("APIC"):
-                continue
-            try:
-                value = audio.get(frame_id)
-            except Exception:
-                value = None
-            if value is not None:
-                val_str = _tag_text(value)
-                short = frame_id.split(":")[0]
-                if short in ID3_CONVENIENCE:
-                    metadata[ID3_CONVENIENCE[short]] = val_str
-                else:
-                    metadata[frame_id] = val_str
-
-        if hasattr(audio, "info"):
-            metadata["duration"] = round(audio.info.length, 2)
-            metadata["bitrate"] = getattr(audio.info, "bitrate", None)
-            metadata["sample_rate"] = getattr(audio.info, "sample_rate", None)
-            metadata["channels"] = getattr(audio.info, "channels", None)
+        info = getattr(audio, "info", None)
+        if info is not None:
+            metadata["duration"] = round(info.length, 2)
+            metadata["bitrate"] = getattr(info, "bitrate", None)
+            metadata["sample_rate"] = getattr(info, "sample_rate", None)
+            metadata["channels"] = getattr(info, "channels", None)
 
         return metadata
+
+    def has_cover_art(self, file_path: Path) -> bool:
+        """Whether the file holds an embedded picture (album art)."""
+        from mutagen._file import File as MutagenFile
+
+        audio = MutagenFile(file_path)
+        if audio is None:
+            return False
+        if getattr(audio, "pictures", None):  # FLAC
+            return True
+        tags = audio.tags
+        if tags is None:
+            return False
+        return any(
+            str(key).startswith("APIC")
+            or key == "covr"
+            or str(key).lower() == "metadata_block_picture"
+            for key in tags.keys()
+        )
 
     def set_metadata(
         self,
@@ -313,6 +395,7 @@ class AudioMetadataEngine:
         pattern: str = "artist",
         transaction_log: Optional["TransactionLog"] = None,
         filter_value: Optional[str] = None,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
         """
         Organize audio files into folders by metadata.
@@ -322,6 +405,7 @@ class AudioMetadataEngine:
             target_dir: Root directory to organize into
             pattern: Folder structure - 'artist', 'album', 'artist-album', 'genre', 'contributing-artists'
             filter_value: If set, only move files whose destination folder name matches this value
+            dry_run: Work out where each file would go, but move nothing
 
         Returns:
             Dict with 'moved', 'skipped', 'errors' counts and details
@@ -378,8 +462,6 @@ class AudioMetadataEngine:
                     skipped.append(f"{file_path.name} (filter: {filter_value})")
                     continue
 
-                dest_dir.mkdir(parents=True, exist_ok=True)
-
                 new_name = f"{title}{file_path.suffix}"
                 dest_path = dest_dir / new_name
                 counter = 1
@@ -388,6 +470,11 @@ class AudioMetadataEngine:
                     dest_path = dest_dir / new_name
                     counter += 1
 
+                if dry_run:
+                    moved.append(f"{file_path.name} -> {dest_path}")
+                    continue
+
+                dest_dir.mkdir(parents=True, exist_ok=True)
                 if transaction_log:
                     from max_cli.common.transaction_log import TransactionLog
 

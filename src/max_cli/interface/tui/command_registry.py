@@ -1,7 +1,5 @@
 from typing import Any, Literal, Optional, TypedDict
 
-from max_cli.core import presets
-
 FieldType = Literal[
     "str",
     "int",
@@ -57,87 +55,6 @@ def _f(
 
 
 COMMANDS: dict[str, dict[str, CommandSchema]] = {
-    "audio": {
-        "set": {
-            "label": "Set Audio Metadata",
-            "icon": "\U0001f3f7",
-            "category": "audio",
-            "engine": "AudioMetadataEngine",
-            "method": "set_metadata",
-            "description": "Set ID3/metadata tags on audio files",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Audio File", required=True),
-                _f("title", "str", "Title"),
-                _f("artist", "str", "Artist"),
-                _f("album", "str", "Album"),
-                _f("genre", "str", "Genre"),
-                _f("date", "str", "Year"),
-                _f("track", "int", "Track Number"),
-                _f("composer", "str", "Composer"),
-                _f("comment", "str", "Comment"),
-            ],
-        },
-        "organize": {
-            "label": "Organize Audio Files",
-            "icon": "\U0001f4c2",
-            "category": "audio",
-            "engine": "AudioMetadataEngine",
-            "method": "organize",
-            "description": "Organize audio files by metadata tags",
-            "has_queue_option": False,
-            "fields": [
-                _f("targets", "path_folder", "Input Folder", required=True),
-                _f("output", "path_folder", "Output Folder"),
-                _f(
-                    "pattern",
-                    "select",
-                    "Naming Pattern",
-                    default=presets.TUI_AUDIO_ORGANIZE_PATTERN,
-                    options=["artist", "album", "genre", "artist-album"],
-                ),
-            ],
-        },
-        "get": {
-            "label": "Get Audio Metadata",
-            "icon": "\U0001f4cb",
-            "category": "audio",
-            "engine": "AudioMetadataEngine",
-            "method": "get_metadata",
-            "description": "Display metadata from audio file",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Audio File", required=True),
-            ],
-        },
-        "clear": {
-            "label": "Clear Audio Metadata",
-            "icon": "\U0001f9f9",
-            "category": "audio",
-            "engine": "AudioMetadataEngine",
-            "method": "clear_metadata",
-            "description": "Remove all metadata from audio file",
-            "has_queue_option": False,
-            "fields": [
-                _f("target", "path", "Audio File", required=True),
-            ],
-        },
-        "batch": {
-            "label": "Batch Set Metadata",
-            "icon": "\U0001f3f7",
-            "category": "audio",
-            "engine": "AudioMetadataEngine",
-            "method": "set_metadata",
-            "description": "Set metadata on multiple audio files",
-            "has_queue_option": False,
-            "fields": [
-                _f("targets", "path_folder", "Input Folder", required=True),
-                _f("title", "str", "Title"),
-                _f("artist", "str", "Artist"),
-                _f("album", "str", "Album"),
-            ],
-        },
-    },
     "ai": {
         "ask": {
             "label": "Ask AI",

@@ -1,11 +1,17 @@
+"""`max audio`: parse options, call `core/operations/audio.py`, print the result.
+
+The options match the catalog (`core/catalog/groups/audio.py`);
+`tests/test_catalog_drift.py` fails when they drift apart.
+"""
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import typer
-from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+from rich.markup import escape
 from rich.table import Table
 
-from max_cli.common.events import EventType, get_emitter
+from max_cli.common.exceptions import ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 from max_cli.core.presets import (
@@ -13,10 +19,16 @@ from max_cli.core.presets import (
     DEFAULT_AUDIO_COMPRESS_QUALITY,
     DEFAULT_AUDIO_ORGANIZE_PATTERN,
     bitrate_for_quality,
-    sibling_path,
 )
 
+if TYPE_CHECKING:
+    from max_cli.core.operations.result import ActionResult
+
 app = typer.Typer()
+
+MAX_LISTED_MOVES = 5
+BITS_PER_KILOBIT = 1000
+SECONDS_PER_MINUTE = 60
 
 
 def _get_engine():
@@ -36,6 +48,35 @@ def _get_media_engine():
         raise typer.Exit(1) from None
 
 
+def _run(
+    operation: Callable[..., "ActionResult"], fail_message: str, **kwargs: Any
+) -> Optional["ActionResult"]:
+    """Call an audio operation and report its errors.
+
+    Bad input (a missing file, no tags given) exits 1 before any work. Other
+    failures print `fail_message` and return None; `max` still exits 1.
+    """
+    try:
+        return operation(**kwargs)
+    except (ResourceNotFoundError, ValidationError) as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    except Exception as e:
+        log_error(escape(f"{fail_message}: {e}"))
+        return None
+
+
+def _ops():
+    from max_cli.core.operations import audio
+
+    return audio
+
+
+def _clock(seconds: float) -> str:
+    minutes, secs = divmod(int(round(seconds)), SECONDS_PER_MINUTE)
+    return f"{minutes}:{secs:02}"
+
+
 @app.command("compress")
 @app.command("c", hidden=True)
 def compress_audio(
@@ -44,7 +85,7 @@ def compress_audio(
         None, "-o", "--output", help="Output audio file path."
     ),
     quality: str = typer.Option(
-        "h",
+        DEFAULT_AUDIO_COMPRESS_QUALITY,
         "--quality",
         "-q",
         help="Quality: [s]mall (64k), [m]edium (96k), [h]igh (128k), [x]treme (192k).",
@@ -60,44 +101,36 @@ def compress_audio(
     Defaults to high-quality MP3 (128k) with stereo.
     Use --quality s and --mono for maximum space savings.
     """
-    _get_media_engine()
-
-    if not target.exists():
-        log_error(f"File not found: {target}")
+    if not target.is_file():
+        log_error(escape(f"File not found: {target}"))
         raise typer.Exit(1)
-
     bitrate = bitrate_for_quality(
         AUDIO_COMPRESS_BITRATES, quality, DEFAULT_AUDIO_COMPRESS_QUALITY
     )
-
-    if not output:
-        output = sibling_path(target, "_compressed", "mp3")
-
     console.print(
         f"[cyan]Compressing audio ({bitrate}, {'mono' if mono else 'stereo'})...[/cyan]"
     )
-
+    engine = _get_media_engine()
     with console.status("[bold green]Encoding audio...[/bold green]"):
-        try:
-            media_eng = _get_media_engine()
-            media_eng.compress_audio(
-                target,
-                output,
-                bitrate=bitrate,
-                channels=1 if mono else None,
-            )
-
-            orig_size = target.stat().st_size
-            new_size = output.stat().st_size
-            reduction = ((orig_size - new_size) / orig_size) * 100
-
-            log_success(f"Audio compressed: {output}")
-            console.print(
-                f"Size: {format_size(orig_size)} -> [bold green]{format_size(new_size)}[/bold green] (-{reduction:.1f}%)"
-            )
-
-        except Exception as e:
-            log_error(f"Compression failed: {e}")
+        result = _run(
+            _ops().compress,
+            "Compression failed",
+            target=target,
+            output=output,
+            quality=quality,
+            mono=mono,
+            engine=engine,
+        )
+    if result is None:
+        return
+    log_success(escape(result.message))
+    before, after = result.details["input_size"], result.details["output_size"]
+    if before and after is not None:
+        reduction = (before - after) / before * 100
+        console.print(
+            f"Size: {format_size(before)} -> [bold green]{format_size(after)}[/bold green]"
+            f" (-{reduction:.1f}%)"
+        )
 
 
 @app.command("denoise")
@@ -121,7 +154,7 @@ def denoise_audio_cmd(
     """
     Remove background noise from audio.
 
-    Uses AI-powered filtering to clean up hiss, hum, fan noise, and ambient sounds.
+    Uses FFmpeg filters to clean up hiss, hum, fan noise, and ambient sounds.
     The --strength parameter only applies to 'auto' mode.
 
     Examples:
@@ -129,50 +162,35 @@ def denoise_audio_cmd(
       max audio denoise podcast.mp3 --mode hiss --strength aggressive
       max audio denoise lecture.mp3 --mode hum --output clean_lecture.mp3
     """
-    _get_media_engine()
+    from max_cli.core.operations import video
+    from max_cli.core.presets import DENOISE_MODES
 
-    if not output:
-        ext = target.suffix
-        output = target.parent / f"{target.stem}_denoised{ext}"
-
-    if mode != "auto":
-        valid_strength_modes = {"mild", "medium", "aggressive"}
-        if strength in valid_strength_modes:
-            strength = "medium"
-
-    console.print(f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]")
-
-    emitter = get_emitter()
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
-        TextColumn("{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(compact=True),
-        transient=True,
+    if not target.is_file():
+        log_error(escape(f"File not found: {target}"))
+        raise typer.Exit(1)
+    if mode not in DENOISE_MODES:
+        log_error(f"Unknown mode '{escape(mode)}'. Use: {', '.join(DENOISE_MODES)}.")
+        raise typer.Exit(1)
+    engine = _get_media_engine()
+    console.print(
+        f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]"
     )
-
-    task_id = progress.add_task("Removing background noise...", total=100)
-
-    def _on_progress(event):
-        if event.type == EventType.PROGRESS and event.file == target.name:
-            progress.update(task_id, completed=event.percentage)
-
-    emitter.subscribe(_on_progress)
-
-    with progress:
-        try:
-            eng = _get_media_engine()
-            eng.denoise_audio(target, output, mode=mode, strength=strength)
-            progress.update(task_id, completed=100, description="[green]Complete[/green]")
-
-            final_size = output.stat().st_size
-            log_success(f"Denoised audio saved: {output.name}")
-            console.print(f"File Size: [green]{format_size(final_size)}[/green]")
-
-        except Exception as e:
-            log_error(f"Denoising failed: {e}")
-        finally:
-            emitter.unsubscribe(_on_progress)
+    with console.status("[bold green]Removing background noise...[/bold green]"):
+        result = _run(
+            video.denoise,
+            "Denoising failed",
+            target=target,
+            mode=mode,
+            strength=strength,
+            output=output,
+            engine=engine,
+        )
+    if result is None:
+        return
+    log_success(escape(result.message))
+    size = result.details.get("output_size")
+    if size is not None:
+        console.print(f"File Size: [green]{format_size(size)}[/green]")
 
 
 @app.command("get")
@@ -183,23 +201,28 @@ def get_metadata(
     """
     Display all metadata from an audio file (title, artist, album, genre, etc.).
     """
-    try:
-        from rich.text import Text
+    from rich.text import Text
 
-        eng = _get_engine()
-        metadata = eng.get_metadata(target)
-
-        table = Table(title=f"Metadata: {target.name}", show_header=False)
-        table.add_column("Field", style="cyan")
-        table.add_column("Value", style="white")
-
-        for key, value in metadata.items():
-            table.add_row(key, Text(str(value)))
-
-        console.print(table)
-
-    except Exception as e:
-        log_error(f"Failed to read metadata: {e}")
+    result = _run(
+        _ops().get, "Failed to read metadata", target=target, engine=_get_engine()
+    )
+    if result is None:
+        return
+    table = Table(title=f"Metadata: {escape(target.name)}", show_header=False)
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    for key, value in result.details["tags"].items():
+        table.add_row(key, Text(str(value)))
+    stream = result.details["stream"]
+    if stream.get("duration") is not None:
+        table.add_row("length", _clock(stream["duration"]))
+    if stream.get("bitrate"):
+        table.add_row("bitrate", f"{stream['bitrate'] // BITS_PER_KILOBIT} kbps")
+    if stream.get("sample_rate"):
+        table.add_row("sample rate", f"{stream['sample_rate']} Hz")
+    if stream.get("channels"):
+        table.add_row("channels", str(stream["channels"]))
+    console.print(table)
 
 
 @app.command("set")
@@ -214,10 +237,10 @@ def set_metadata(
     ),
     genre: Optional[str] = typer.Option(None, "--genre", "-g", help="Genre."),
     date: Optional[str] = typer.Option(
-        None, "--date", "-d", help="Release date (YYYY-MM-DD)."
+        None, "--date", "-d", help="Release date (2024 or 2024-05-01)."
     ),
     tracknumber: Optional[str] = typer.Option(
-        None, "--track", "-n", help="Track number."
+        None, "--track", "-n", help="Track number (3, or 3/12)."
     ),
     discnumber: Optional[str] = typer.Option(None, "--disc", help="Disc number."),
     composer: Optional[str] = typer.Option(None, "--composer", help="Composer name."),
@@ -231,75 +254,61 @@ def set_metadata(
     """
     Set metadata on an audio file. Use flags to set specific fields.
     """
-    if not any(
-        [
-            title,
-            artist,
-            album,
-            albumartist,
-            genre,
-            date,
-            tracknumber,
-            discnumber,
-            composer,
-            comment,
-        ]
-    ):
-        console.print(
-            "[yellow]No metadata fields specified. Use --help to see available options.[/yellow]"
-        )
-        return
-
-    try:
-        eng = _get_engine()
-        result = eng.set_metadata(
-            target,
-            output,
-            title=title,
-            artist=artist,
-            album=album,
-            albumartist=albumartist,
-            genre=genre,
-            date=date,
-            tracknumber=tracknumber,
-            discnumber=discnumber,
-            composer=composer,
-            comment=comment,
-        )
-        log_success(f"Metadata saved: {result}")
-
-    except Exception as e:
-        log_error(f"Failed to set metadata: {e}")
+    result = _run(
+        _ops().set_tags,
+        "Failed to set metadata",
+        target=target,
+        title=title,
+        artist=artist,
+        album=album,
+        albumartist=albumartist,
+        genre=genre,
+        date=date,
+        tracknumber=tracknumber,
+        discnumber=discnumber,
+        composer=composer,
+        comment=comment,
+        output=output,
+        engine=_get_engine(),
+    )
+    if result is not None:
+        log_success(escape(result.message))
 
 
 @app.command("clear")
 @app.command("cl", hidden=True)
 def clear_metadata(
     target: Path = typer.Argument(..., help="Audio file to clear metadata from."),
-    keep_duration: bool = typer.Option(
-        True, "--keep-duration/--no-duration", help="Preserve audio info."
-    ),
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output file (default: overwrite)."
     ),
+    keep_duration: bool = typer.Option(
+        True,
+        "--keep-duration/--no-duration",
+        hidden=True,
+        help="Does nothing: clearing tags never changes the audio. Kept so old "
+        "scripts still run.",
+    ),
 ):
     """
-    Remove all metadata from an audio file.
+    Remove all metadata from an audio file. The audio itself stays the same.
     """
-    try:
-        eng = _get_engine()
-        result = eng.clear_metadata(target, output, keep_duration=keep_duration)
-        log_success(f"Cleared metadata: {result}")
-
-    except Exception as e:
-        log_error(f"Failed to clear metadata: {e}")
+    result = _run(
+        _ops().clear,
+        "Failed to clear metadata",
+        target=target,
+        output=output,
+        engine=_get_engine(),
+    )
+    if result is not None:
+        log_success(escape(result.message))
 
 
 @app.command("batch")
 @app.command("b", hidden=True)
 def batch_set_metadata(
     targets: list[Path] = typer.Argument(
-        ..., help="Audio files to update (supports glob patterns)."
+        ..., help="Audio files, a folder of them, or a pattern such as *.mp3."
     ),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="Song title."),
     artist: Optional[str] = typer.Option(None, "--artist", "-a", help="Artist name."),
@@ -309,65 +318,63 @@ def batch_set_metadata(
     ),
     genre: Optional[str] = typer.Option(None, "--genre", "-g", help="Genre."),
     date: Optional[str] = typer.Option(
-        None, "--date", "-d", help="Release date (YYYY-MM-DD)."
+        None, "--date", "-d", help="Release date (2024 or 2024-05-01)."
     ),
     tracknumber: Optional[str] = typer.Option(
-        None, "--track", "-n", help="Track number (auto-increment with --start)."
+        None,
+        "--track",
+        "-n",
+        help="One track number for every file. To count up, use --start.",
     ),
     start: Optional[int] = typer.Option(
-        None, "--start", help="Starting track number for auto-increment."
+        None, "--start", help="Number the tracks in file order, starting here."
+    ),
+    discnumber: Optional[str] = typer.Option(None, "--disc", help="Disc number."),
+    composer: Optional[str] = typer.Option(None, "--composer", help="Composer name."),
+    comment: Optional[str] = typer.Option(
+        None, "--comment", "-c", help="Comment/description."
     ),
 ):
     """
     Set the same metadata on multiple audio files at once.
     Useful for organizing files into an album or artist.
     """
-    if not targets:
-        log_error("No files provided.")
+    result = _run(
+        _ops().batch,
+        "Batch tagging failed",
+        targets=targets,
+        title=title,
+        artist=artist,
+        album=album,
+        albumartist=albumartist,
+        genre=genre,
+        date=date,
+        tracknumber=tracknumber,
+        start=start,
+        discnumber=discnumber,
+        composer=composer,
+        comment=comment,
+        engine=_get_engine(),
+    )
+    if result is None:
         return
-
-    if not any([title, artist, album, albumartist, genre, date, tracknumber]):
+    for failure in result.details["failed"]:
         console.print(
-            "[yellow]No metadata fields specified. Use --help to see available options.[/yellow]"
+            f"[red]Failed on {escape(failure['file'])}: {escape(failure['error'])}[/red]"
         )
-        return
-
-    count = 0
-    current_track = start if start else 0
-
-    for target in targets:
-        try:
-            track = str(current_track) if tracknumber or start else None
-
-            eng = _get_engine()
-            eng.set_metadata(
-                target,
-                title=title,
-                artist=artist,
-                album=album,
-                albumartist=albumartist,
-                genre=genre,
-                date=date,
-                tracknumber=track,
-            )
-            count += 1
-
-            if start:
-                current_track += 1
-
-        except Exception as e:
-            console.print(f"[red]Failed on {target.name}: {e}[/red]")
-
-    log_success(f"Updated {count} files successfully.")
+    if result.ok:
+        log_success(escape(result.message))
+    else:
+        log_error(escape(result.message))
 
 
 @app.command("organize")
 @app.command("org", hidden=True)
 def organize_files(
     targets: list[Path] = typer.Argument(
-        ..., help="Audio files to organize (supports glob patterns)."
+        ..., help="Audio files, a folder of them, or a pattern such as *.mp3."
     ),
-    output: Path = typer.Option(
+    output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Target directory (default: same as source)."
     ),
     pattern: str = typer.Option(
@@ -382,6 +389,9 @@ def organize_files(
         "-f",
         help="Only organize files matching this folder name (e.g. --filter 'Electronic Gems').",
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show where each file would go; move nothing."
+    ),
 ):
     """
     Organize audio files into folders by metadata.
@@ -394,52 +404,37 @@ def organize_files(
       - artist-album:        Music/Artist Name/Album Name/Song.mp3
       - contributing-artists: Music/Contributing Artist/Song.mp3 (uses albumartist, falls back to artist)
     Use --filter to only process files matching a specific folder name (e.g. --filter 'Electronic Gems').
+    Use --dry-run to see the moves first.
     """
-    if not targets:
-        log_error("No files provided.")
-        return
-
-    valid_patterns = [
-        "artist",
-        "album",
-        "genre",
-        "artist-album",
-        "contributing-artists",
-    ]
-    if pattern not in valid_patterns:
-        log_error(f"Invalid pattern. Use: {', '.join(valid_patterns)}")
-        return
-
-    target_dir = output if output else targets[0].parent
-
-    console.print(f"[cyan]Organizing {len(targets)} files into {target_dir}...[/cyan]")
-
-    from max_cli.common.transaction_log import TransactionLog
-
-    txn = TransactionLog(command="audio organize")
-
     with console.status("[bold green]Organizing files...[/bold green]"):
-        eng = _get_engine()
-        eng_filter = filter_value if filter_value else None
-        result = eng.organize(
-            targets, target_dir, pattern, transaction_log=txn, filter_value=eng_filter
+        result = _run(
+            _ops().organize,
+            "Organizing failed",
+            targets=targets,
+            output=output,
+            pattern=pattern,
+            filter_value=filter_value,
+            dry_run=dry_run,
+            engine=_get_engine(),
         )
-
-    txn.save()
-
-    if result["total_moved"]:
-        console.print(f"[green]Moved {result['total_moved']} files:[/green]")
-        for move in result["moved"][:5]:
-            console.print(f"  [dim]{move}[/dim]")
-        if len(result["moved"]) > 5:
-            console.print(f"  [dim]...and {len(result['moved']) - 5} more[/dim]")
-
-    if result["total_errors"]:
-        console.print(f"[red]Errors ({result['total_errors']}):[/red]")
-        for err in result["errors"][:5]:
-            console.print(f"  [red]{err}[/red]")
-
-    log_success(
-        f"Done! Moved: {result['total_moved']}, Errors: {result['total_errors']}"
-    )
-    console.print("[dim]Undo with: max files undo[/dim]")
+    if result is None:
+        return
+    moves = result.details["moves"]
+    if moves:
+        heading = "Would move" if dry_run else "Moved"
+        console.print(f"[green]{heading} {len(moves)} files:[/green]")
+        for move in moves[:MAX_LISTED_MOVES]:
+            console.print(f"  [dim]{escape(move)}[/dim]")
+        if len(moves) > MAX_LISTED_MOVES:
+            console.print(f"  [dim]...and {len(moves) - MAX_LISTED_MOVES} more[/dim]")
+    errors = result.details["errors"]
+    if errors:
+        console.print(f"[red]Errors ({len(errors)}):[/red]")
+        for error in errors[:MAX_LISTED_MOVES]:
+            console.print(f"  [red]{escape(error)}[/red]")
+    if dry_run:
+        log_success(f"Dry run: nothing moved. Errors: {len(errors)}")
+    else:
+        log_success(f"Done! Moved: {len(moves)}, Errors: {len(errors)}")
+    if result.undo_group:
+        console.print("[dim]Undo with: max files undo[/dim]")

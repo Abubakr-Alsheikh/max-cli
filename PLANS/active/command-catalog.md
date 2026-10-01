@@ -128,7 +128,7 @@ Each step is one PR, with tests first.
    - `images` (batching and output naming). Done 2026-09-26, branch `feat/catalog-images`: `core/operations/images.py`, the CLI calls it, the drift test checks it, and the old dashboard entries are gone;
    - `pdf` (folder compress, the split modes). Done 2026-09-26, branch `feat/catalog-pdf`: 14 actions. Added `Param.multiple` for lists and `ParamKind.SECRET` for the `lock` password; `lock` stays off the agent's surfaces;
    - `files` (transaction log, `smart-sort`'s two engines). Done 2026-09-27, branch `feat/catalog-files`: 10 actions; mutating ones return `undo_group`. The Files page's Organize, Duplicates and Backup buttons open forms that ask first; Organize and Duplicates used to run at once;
-   - `audio` (the batch loop).
+   - `audio` (the batch loop). Done 2026-10-01, branch `feat/audio-page`: 7 actions in `core/operations/audio.py`; `denoise` reuses `video.denoise`. Fixed on the way: `set --comment` on MP3 and `--composer` on M4A failed, `get` showed M4A's raw atom names, `batch --track N` wrote 0, `clear --keep-duration` did nothing (now hidden). `batch` and `organize` take folders and patterns; `organize --dry-run` is new;
 4. **`grab download`: next, by the maintainer's choice.**
    - Split out a core `download` operation: retries, URL cleaning and playlist rules.
    - The CLI keeps its interactive prompt loop, and the dashboard's Download page calls the operation.

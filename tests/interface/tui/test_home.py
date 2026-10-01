@@ -141,15 +141,15 @@ async def test_home_shows_activity_and_counts(isolated_home):
 async def test_quick_launch_opens_pages():
     app = MaxDashboardApp()
     async with app.run_test(size=(140, 50)) as pilot:
-        app.query_one("#launch-tools", Button).press()
+        app.query_one("#launch-audio", Button).press()
         # Two hops: Button.Pressed -> HomePanel.OpenPage -> the app navigates.
         # Wait for the result instead of guessing a pause count.
         for _ in range(POLL_ATTEMPTS):
             await pilot.pause(POLL_SECONDS)
-            if app.query_one("#tools-panel").display:
+            if app.query_one("#audio-panel").display:
                 break
 
-        assert app.query_one("#tools-panel").display
+        assert app.query_one("#audio-panel").display
 
 
 @pytest.mark.asyncio

@@ -279,7 +279,11 @@ async def test_the_picked_pdf_goes_in_the_first_file_field(dummy_pdf, action, fi
 def test_images_and_pdf_keys():
     from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
-    assert (SECTION_KEYS["images"], SECTION_KEYS["pdf"]) == ("4", "5")
+    assert (SECTION_KEYS["audio"], SECTION_KEYS["images"], SECTION_KEYS["pdf"]) == (
+        "4",
+        "5",
+        "6",
+    )
 
 
 # --- the Images page --------------------------------------------------------------
@@ -472,7 +476,7 @@ async def test_a_pdf_picked_on_files_opens_on_the_pdf_page(dummy_pdf):
             and pdf_page.form.query_one("#field-target", Input).value == str(dummy_pdf),
         )
 
-    assert offered and label == "Open on the PDF page (5)"
+    assert offered and label == "Open on the PDF page (6)"
     assert filled
 
 
@@ -600,3 +604,161 @@ async def test_chips_drop_a_column_when_names_would_be_cut(width, columns):
         )
 
     assert fitted
+
+
+# --- the Audio page ---------------------------------------------------------------
+
+AUDIO_DESCRIBE = "max_cli.core.operations.audio.describe"
+MP3_FRAME = bytes([0xFF, 0xFB, 0x90, 0x64]) + bytes(413)
+
+
+def _song(path: Path) -> Path:
+    path.write_bytes(MP3_FRAME * 20)
+    return path
+
+
+class AudioApp(App):
+    def compose(self) -> ComposeResult:
+        from max_cli.interface.tui.tool_pages import AUDIO
+
+        yield ToolPage(AUDIO, id="audio-panel")
+
+
+def test_audio_facts_for_a_song(tmp_path):
+    from max_cli.core.operations import audio
+    from max_cli.interface.tui.tool_pages import describe_audio
+
+    facts = audio.AudioFacts(
+        path=tmp_path / "song.mp3",
+        size_bytes=3 * 1024 * 1024,
+        tags={
+            "title": "My Song",
+            "artist": "Ana",
+            "album": "LP",
+            "date": "2024",
+            "tracknumber": "3",
+        },
+        duration=225,
+        bitrate=320_000,
+        sample_rate=44_100,
+        channels=2,
+        cover_art=True,
+    )
+    with patch(AUDIO_DESCRIBE, return_value=facts):
+        lines = describe_audio(facts.path).plain.splitlines()
+
+    assert lines == [
+        "song.mp3  ·  3:45  ·  320 kbps  ·  44.1 kHz stereo  ·  3.00 MB  ·  cover art",
+        '"My Song" by Ana  ·  LP  ·  2024  ·  track 3',
+    ]
+
+
+def test_audio_facts_for_an_untagged_song_and_a_folder(tmp_path):
+    from max_cli.core.operations import audio
+    from max_cli.interface.tui.tool_pages import describe_audio
+
+    bare = audio.AudioFacts(path=tmp_path / "x.mp3", size_bytes=1024, duration=61)
+    folder = audio.AudioFacts(
+        path=tmp_path / "Album",
+        size_bytes=2048,
+        is_folder=True,
+        track_count=12,
+        total_duration=2900,
+        formats={"MP3": 12},
+        untagged=2,
+        note=audio.MISSING_TAGS_NOTE.format(count=2),
+    )
+    with patch(AUDIO_DESCRIBE, return_value=bare):
+        bare_lines = describe_audio(bare.path).plain.splitlines()
+    with patch(AUDIO_DESCRIBE, return_value=folder):
+        folder_lines = describe_audio(folder.path).plain.splitlines()
+
+    assert bare_lines[1].startswith("No tags yet")
+    assert folder_lines == [
+        "Album  ·  12 tracks  ·  48:20  ·  2.00 KB  ·  12 MP3",
+        "2 without title or artist: batch or set can fill them.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_starts_from_the_songs_current_tags(tmp_path):
+    from max_cli.core.operations import audio
+
+    song = _song(tmp_path / "song.mp3")
+    audio.set_tags(song, title="My Song", artist="Ana", tracknumber="3")
+    app = AudioApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        app.query_one("#tool-file", Input).value = str(song)
+        page = app.query_one(ToolPage)
+
+        def _field(name: str) -> str:
+            return page.form.query_one(f"#field-{name}", Input).value
+
+        filled = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "audio.set"
+            and _field("title") == "My Song"
+            and _field("artist") == "Ana"
+            and _field("tracknumber") == "3",
+        )
+        album = _field("album")
+
+    assert filled and album == ""
+
+
+@pytest.mark.asyncio
+async def test_a_typed_tag_isnt_replaced_by_the_prefill(tmp_path):
+    from max_cli.core.operations import audio
+
+    song = _song(tmp_path / "song.mp3")
+    audio.set_tags(song, title="Old Title", artist="Ana")
+    app = AudioApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        page = app.query_one(ToolPage)
+        await wait_until(pilot, lambda: page.form.action.id == "audio.set")
+        page.form.query_one("#field-title", Input).value = "Typed"
+        app.query_one("#tool-file", Input).value = str(song)
+        artist_in = await wait_until(
+            pilot, lambda: page.form.query_one("#field-artist", Input).value == "Ana"
+        )
+        title = page.form.query_one("#field-title", Input).value
+
+    assert artist_in and title == "Typed"
+
+
+@pytest.mark.asyncio
+async def test_organize_on_the_audio_page_starts_at_artist_album():
+    from textual.widgets import Select
+
+    app = AudioApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        app.query_one("#act-organize", Button).press()
+        page = app.query_one(ToolPage)
+        chosen = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "audio.organize"
+            and page.form.query_one("#field-pattern", Select).value == "artist-album",
+        )
+
+    assert chosen
+
+
+@pytest.mark.asyncio
+async def test_an_mp3_picked_on_video_offers_the_audio_page(tmp_path):
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    song = _song(tmp_path / "song.mp3")
+    app = MaxDashboardApp()
+    with patch(DESCRIBE, return_value=MediaFacts(path=song, size_bytes=1)):
+        async with app.run_test(size=(140, 44)) as pilot:
+            app.navigate("video")
+            page = app.query_one("#video-panel", ToolPage)
+            page.query_one("#tool-file", Input).value = str(song)
+            button = page.query_one("#tool-open-page", Button)
+            offered = await wait_until(pilot, lambda: button.has_class("-offered"))
+            label = str(button.label)
+
+    assert offered and label == "Open on the Audio page (4)"

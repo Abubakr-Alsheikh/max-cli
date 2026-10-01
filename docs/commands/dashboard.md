@@ -23,9 +23,9 @@ The sidebar on the left lists eleven sections in three groups. It starts as a st
 | `1` | **Home** | Command center: live CPU, memory and disk, your download and action counts, activity over the last 14 days, a breakdown by type, quick launch and recent activity |
 | `2` | **Download** | Download form with progress and recent downloads |
 | `3` | **Video** | Pick a video or audio file, see its length, size and codecs, and run any `max video` action on it |
-| `4` | **Images** | Pick an image or a folder, see its size in pixels, format, date and camera (or how many images a folder holds), and run any `max images` action on it |
-| `5` | **PDF** | Pick a PDF, see its pages, paper size and whether it's locked or scanned, and run any `max pdf` action on it |
-| `6` | **Tools** | A form for each command, with all its options |
+| `4` | **Audio** | Pick a song or a folder of music, see its tags, length and bitrate (or how many tracks lack tags), edit tags, sort music into folders, compress or clean it |
+| `5` | **Images** | Pick an image or a folder, see its size in pixels, format, date and camera (or how many images a folder holds), and run any `max images` action on it |
+| `6` | **PDF** | Pick a PDF, see its pages, paper size and whether it's locked or scanned, and run any `max pdf` action on it |
 | `7` | **Files** | Pick a folder or a file, see what it holds, and sort, clean, back up or undo with any `max files` action |
 | `8` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
@@ -54,15 +54,21 @@ The Video page (`3`) works on one file at a time. Paste a path or press Browse: 
 
 Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue.
 
+## Audio page
+
+The Audio page (`4`) works on one song or a folder of music. Pick a song: the FILE OR FOLDER card shows its length, bitrate, sample rate, size and whether it has cover art, then its title, artist, album, year, track and genre. Pick a folder: it counts the tracks, adds up their length and size, lists their formats, and warns you how many have no title or artist.
+
+The actions sit in three groups: **Tags** (set, get, batch, clear), **Sort** (organize) and **Sound** (compress, denoise). **set** opens with the song's current tags filled in, so you change only what's wrong; a field you've already typed in keeps your text. **organize** starts with folders by artist and album, and its **Dry run** box shows the moves before anything happens. Moves can be undone from the Files page (**undo**).
+
 ## Images page
 
-The Images page (`4`) takes one image or a whole folder. Pick an image: the FILE OR FOLDER card shows its size in pixels and megapixels, format, colour mode (colour, greyscale, transparency), frames for an animated GIF, file size, and the date and camera from its EXIF data. It warns you when the image holds a GPS location, which **strip** removes. Pick a folder: the card shows how many images it holds, their total size and formats, and the folder the results go to (`<folder>_optimized`). Max reads the images in that folder, not in its subfolders.
+The Images page (`5`) takes one image or a whole folder. Pick an image: the FILE OR FOLDER card shows its size in pixels and megapixels, format, colour mode (colour, greyscale, transparency), frames for an animated GIF, file size, and the date and camera from its EXIF data. It warns you when the image holds a GPS location, which **strip** removes. Pick a folder: the card shows how many images it holds, their total size and formats, and the folder the results go to (`<folder>_optimized`). Max reads the images in that folder, not in its subfolders.
 
 The actions sit in two groups: **Shrink** (compress, resize) and **Convert & clean** (convert, strip). The picked image or folder fills the action's target.
 
 ## PDF page
 
-The PDF page (`5`) works like the Video page. Pick a PDF: the FILE card shows its pages, paper size (A4, Letter or millimetres), size, title and author, and how many form fields it has. It tells you when the PDF is locked with a password, and when it has no text on its first pages, which means it's a scan that **ocr** can read.
+The PDF page (`6`) works like the Video page. Pick a PDF: the FILE card shows its pages, paper size (A4, Letter or millimetres), size, title and author, and how many form fields it has. It tells you when the PDF is locked with a password, and when it has no text on its first pages, which means it's a scan that **ocr** can read.
 
 The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more.
 
@@ -74,7 +80,7 @@ The actions sit in four groups: **Organize** (order, smart-sort, duplicates), **
 
 ### Open on another page
 
-When you pick a video, an audio file, an image or a PDF on a page that isn't made for it, the card shows a button such as **Open on the PDF page (5)**. It opens that page with the file picked. This works on every page with a FILE card: a PDF picked on the Images page offers the PDF page too.
+When you pick a video, an audio file, an image or a PDF on a page that isn't made for it, the card shows a button such as **Open on the PDF page (6)**. It opens that page with the file picked. This works on every page with a FILE card: a PDF picked on the Images page offers the PDF page too.
 
 ## Browse
 
@@ -110,7 +116,7 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
 
 ## Jobs window
 
-Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on a Tools form.
+Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on an action's form.
 
 While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open the Queue page (`9`).
 

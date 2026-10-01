@@ -10,6 +10,7 @@ from textual.content import Content
 
 from max_cli.common import file_kinds
 from max_cli.common.utils import format_size
+from max_cli.core.presets import TUI_AUDIO_ORGANIZE_PATTERN
 from max_cli.interface.tui.widgets.tool_page import ToolPageSpec, ToolSection
 
 SEPARATOR = "  ·  "
@@ -87,7 +88,7 @@ VIDEO = ToolPageSpec(
         ToolSection("PICTURE", ("brightness", "color", "stabilize")),
     ),
     describe=describe_video,
-    kinds=(file_kinds.VIDEO, file_kinds.AUDIO),
+    kinds=(file_kinds.VIDEO,),
 )
 
 
@@ -138,6 +139,114 @@ PDF = ToolPageSpec(
     ),
     describe=describe_pdf,
     kinds=(file_kinds.PDF,),
+)
+
+KILOBIT = 1000
+KILOHERTZ = 1000
+# Tags shown on the facts line, in order, and what goes before each value.
+SHOWN_TAGS = (("album", ""), ("date", ""), ("tracknumber", "track "), ("genre", ""))
+
+
+def describe_audio(path: Path) -> Content:
+    """song.mp3 · 3:45 · 320 kbps · 44.1 kHz stereo · 8.60 MB · cover art
+    "My Song" by Ana  ·  Album X  ·  2024  ·  track 3  ·  Pop
+
+    A folder: Album · 12 tracks · 48:20 · 120 MB · 12 MP3"""
+    from max_cli.core.operations import audio
+
+    facts = audio.describe(path)
+    lines = []
+    if facts.is_folder:
+        parts = [
+            f"{facts.track_count} track{'s' if facts.track_count != 1 else ''}",
+            _clock(facts.total_duration) if facts.total_duration else "",
+            format_size(facts.size_bytes) if facts.track_count else "",
+            ", ".join(f"{count} {kind}" for kind, count in facts.formats.items()),
+        ]
+    else:
+        sound = " ".join(
+            part
+            for part in (
+                f"{facts.sample_rate / KILOHERTZ:g} kHz" if facts.sample_rate else "",
+                _channels(facts.channels),
+            )
+            if part
+        )
+        parts = [
+            _clock(facts.duration) if facts.duration else "",
+            f"{facts.bitrate // KILOBIT} kbps" if facts.bitrate else "",
+            sound,
+            format_size(facts.size_bytes),
+            "cover art" if facts.cover_art else "",
+        ]
+    lines.append(
+        Content.assemble(
+            (facts.path.name or str(facts.path), "bold $primary"),
+            (SEPARATOR + SEPARATOR.join(part for part in parts if part), ""),
+        )
+    )
+    if not facts.is_folder:
+        tags = facts.tags
+        heading = " by ".join(
+            part
+            for part in (
+                f'"{tags["title"]}"' if tags.get("title") else "",
+                tags.get("artist", ""),
+            )
+            if part
+        )
+        rest = [
+            f"{prefix}{tags[name]}" for name, prefix in SHOWN_TAGS if tags.get(name)
+        ]
+        if heading or rest:
+            lines.append(
+                Content(SEPARATOR.join(part for part in (heading, *rest) if part))
+            )
+        else:
+            lines.append(
+                Content.styled(
+                    "No tags yet: set adds a title, artist and album.", "$text-muted"
+                )
+            )
+    if facts.note:
+        lines.append(Content.styled(facts.note, "$warning"))
+    return Content("\n").join(lines)
+
+
+def prefill_audio(action: str, path: Path) -> dict[str, str]:
+    """The `set` form starts from the file's current tags, so you edit them
+    instead of typing them all again."""
+    from max_cli.common.exceptions import MaxError
+    from max_cli.core.operations import audio
+
+    if action != "set" or not path.is_file():
+        return {}
+    try:
+        tags = audio.get(path).details["tags"]
+    except (MaxError, OSError, ValueError):
+        return {}  # the facts line reports what's wrong with the file
+    from max_cli.core.engines.audio_metadata_engine import TAG_FIELDS
+
+    return {name: str(tags[name]) for name in TAG_FIELDS if tags.get(name)}
+
+
+AUDIO = ToolPageSpec(
+    page_id="audio",
+    group="audio",
+    title="AUDIO",
+    tagline="TAG STUDIO",
+    hint="Edit tags, sort music into folders, shrink and clean recordings",
+    file_prompt="Pick a song or a folder of music, or paste its path",
+    sections=(
+        ToolSection("TAGS", ("set", "get", "batch", "clear")),
+        ToolSection("SORT", ("organize",)),
+        ToolSection("SOUND", ("compress", "denoise")),
+    ),
+    describe=describe_audio,
+    file_title="FILE OR FOLDER",
+    kinds=(file_kinds.AUDIO,),
+    action_defaults={"organize": {"pattern": TUI_AUDIO_ORGANIZE_PATTERN}},
+    prefill=prefill_audio,
 )
 
 MEGAPIXEL = 1_000_000
@@ -305,4 +414,4 @@ FILES = ToolPageSpec(
     no_fill=("backups",),
 )
 
-TOOL_PAGES = (VIDEO, IMAGES, PDF, FILES)
+TOOL_PAGES = (VIDEO, AUDIO, IMAGES, PDF, FILES)

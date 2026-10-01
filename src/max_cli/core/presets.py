@@ -46,6 +46,15 @@ PDF_COMPRESS_QUALITY = 80
 
 # --- images and audio metadata ----------------------------------------------
 STRIP_IMAGE_METADATA = True
+# Folder layouts for `max audio organize`, by tag: artist/, album/, genre/,
+# artist/album/, or the album artist (falling back to the artist).
+AUDIO_ORGANIZE_PATTERNS = (
+    "artist",
+    "album",
+    "genre",
+    "artist-album",
+    "contributing-artists",
+)
 DEFAULT_AUDIO_ORGANIZE_PATTERN = "artist"
 # The dashboard sorts into Artist/Album folders; the maintainer chose this to
 # fix a real problem, so it deliberately differs from the CLI default.

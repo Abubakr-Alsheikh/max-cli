@@ -13,7 +13,7 @@ and a function that describes a picked file (`interface/tui/tool_pages.py`).
   Run and, where the action allows it, Add to queue.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -67,6 +67,12 @@ class ToolPageSpec:
     # Actions whose path fields aren't for the picked file (files.backups
     # takes a backup to restore).
     no_fill: tuple[str, ...] = ()
+    # Values an action's form starts with on this page, where the dashboard
+    # wants another default than the CLI (audio organize: Artist/Album).
+    action_defaults: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Runs in a thread: values for an action's empty fields from the picked
+    # file, e.g. the Audio page's set starts from the file's current tags.
+    prefill: Optional[Callable[[str, Path], dict[str, str]]] = None
 
 
 def file_param(action: Action) -> Optional[str]:
@@ -256,6 +262,7 @@ class ToolPage(Vertical):
         return self._form
 
     def show_action(self, name: str, **values: Any) -> ActionForm:
+        values = {**self.spec.action_defaults.get(name, {}), **values}
         """Show `name`'s form, with the picked file and any `values` filled in."""
         action = get_action(f"{self.spec.group}.{name}")
         self._action = action
@@ -279,6 +286,36 @@ class ToolPage(Vertical):
         self._fill_file()
         for key, value in values.items():
             form.set_value(key, value)
+        self._prefill()
+
+    def _prefill(self) -> None:
+        """Fill the form's empty fields from the picked file, in a thread."""
+        path = self.query_one("#tool-file", Input).value.strip()
+        form, action = self._form, self._action
+        if self.spec.prefill is None or not path or form is None or action is None:
+            return
+        prefill = self.spec.prefill
+        picked = Path(path).expanduser()
+
+        def _read() -> None:
+            values = prefill(action.name, picked)
+            if values:
+                show_from_worker(self, self._apply_prefill, form, path, values)
+
+        self.run_worker(_read, thread=True, exclusive=True, group="prefill")
+
+    def _apply_prefill(
+        self, form: ActionForm, path: str, values: dict[str, str]
+    ) -> None:
+        """Fill only fields still empty: a value typed meanwhile stays."""
+        if form is not self._form or not form.is_mounted:
+            return
+        if path != self.query_one("#tool-file", Input).value.strip():
+            return  # another file was picked meanwhile
+        typed = form.values()
+        for name, value in values.items():
+            if name in typed and typed[name] in ("", None):
+                form.set_value(name, value)
 
     def open_file(self, path: Path) -> None:
         """Pick `path`, as if typed in the FILE box (from another page)."""
@@ -326,6 +363,7 @@ class ToolPage(Vertical):
         self._described = path
         self._set_facts(Content.styled("Reading the file...", "$primary"))
         self._offer_page(None)
+        self._prefill()
         self.run_worker(
             lambda: self._describe_in_thread(path),
             thread=True,

@@ -54,7 +54,7 @@ CATEGORY_LOOK = {
 QUICK_LAUNCH = [
     ("download", "Download"),
     ("video", "Video"),
-    ("tools", "Tools"),
+    ("audio", "Audio"),
     ("chat", "Ask AI"),
 ]
 

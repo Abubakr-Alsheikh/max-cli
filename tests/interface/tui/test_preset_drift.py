@@ -13,17 +13,13 @@ import typer
 from max_cli.interface.tui.command_registry import CommandRegistry
 
 CLI_APPS = {
-    "audio": "max_cli.interface.cli_audio",
     "ai": "max_cli.interface.cli_ai",
 }
 
 
-# Deliberate differences:
-# - pattern: the dashboard sorts music into Artist/Album folders (maintainer's
-#   choice after a real problem with plain "artist").
-INTENDED_DIFFERENCES = {
-    ("audio", "organize", "pattern"),
-}
+# Deliberate differences. (The audio group moved to the catalog; its
+# dashboard default for organize lives in tool_pages.AUDIO.)
+INTENDED_DIFFERENCES: set[tuple[str, str, str]] = set()
 
 
 def _cli_defaults(category: str, command: str) -> dict:
