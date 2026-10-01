@@ -538,10 +538,17 @@ async def test_backups_keeps_its_restore_field_empty(tmp_path):
         app.query_one("#tool-file", Input).value = str(tmp_path)
         app.query_one("#act-backups", Button).press()
         page = app.query_one(ToolPage)
-        shown = await wait_until(pilot, lambda: page.form.action.id == "files.backups")
-        restore = page.form.query_one("#field-restore", Input).value
+        # The form's fields mount after its action is set: wait for the field.
+        empty = await wait_until(
+            pilot,
+            lambda: page.form.action.id == "files.backups"
+            and page.form.query_one("#field-restore", Input).value == "",
+        )
+        # The picked folder would have landed by now; check again.
+        await pilot.pause()
+        still_empty = page.form.query_one("#field-restore", Input).value == ""
 
-    assert shown and restore == ""
+    assert empty and still_empty
 
 
 @pytest.mark.asyncio
