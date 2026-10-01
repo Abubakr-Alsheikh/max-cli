@@ -231,7 +231,7 @@ class FilesPanel(Vertical):
 
     @on(Select.Changed, "#files-sort")
     def _on_sort(self, event: Select.Changed) -> None:
-        if event.value == Select.BLANK:
+        if event.select.is_blank():
             return
         self._sort_by = str(event.value)
         self._load_directory()

@@ -16,8 +16,8 @@ from textual.widgets import (
 )
 
 from max_cli.config import settings
-from max_cli.core.catalog import get_action
-from max_cli.core.catalog.spec import Action, Danger, Param, ParamKind
+from max_cli.core.catalog import actions_for, get_action, group_names
+from max_cli.core.catalog.spec import Action, Danger, Param, ParamKind, Surface
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskType
 from max_cli.core.operations.result import ActionResult
@@ -315,3 +315,27 @@ async def test_files_page_organize_opens_the_form_and_moves_nothing(tmp_path):
         form.query_one("#form-run", Button).press()
         await pilot.pause()
         assert isinstance(app.screen, ConfirmDialog)
+
+
+def _dashboard_actions() -> list[Action]:
+    return [
+        action
+        for group in group_names()
+        for action in actions_for(group, Surface.DASHBOARD)
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", _dashboard_actions(), ids=lambda action: action.id)
+async def test_every_dashboard_form_opens(action):
+    """A choice with no default (images.convert's format) crashed the
+    dashboard: Textual 8 marks an empty Select with Select.NULL, and the form
+    passed Select.BLANK, which is now False."""
+    app = FormApp(action)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        form = app.query_one(ActionForm)
+        names = {param.name for param in form.params}
+        values = form.values()
+
+    assert set(values) == names

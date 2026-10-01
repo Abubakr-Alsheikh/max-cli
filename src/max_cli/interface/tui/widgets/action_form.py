@@ -226,13 +226,12 @@ class ActionForm(Vertical):
         if param.kind == ParamKind.BOOL:
             return Switch(value=default is True, id=widget_id)
         if param.kind == ParamKind.CHOICE:
-            has_default = default in param.choices
-            return Select(
-                [(choice, choice) for choice in param.choices],
-                value=default if has_default else Select.BLANK,
-                allow_blank=not has_default,
-                id=widget_id,
-            )
+            options = [(choice, choice) for choice in param.choices]
+            if default in param.choices:
+                return Select(options, value=default, allow_blank=False, id=widget_id)
+            # No value: Select starts empty. Passing Select.BLANK crashed on
+            # Textual 8, where it is False and Select.NULL marks "empty".
+            return Select(options, allow_blank=True, id=widget_id)
         input_type: Literal["integer", "number", "text"] = "text"
         if param.kind == ParamKind.INT:
             input_type = "integer"

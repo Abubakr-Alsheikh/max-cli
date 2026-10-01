@@ -389,9 +389,10 @@ class SettingsPanel(Vertical):
         if isinstance(widget, Checkbox):
             widget.value = text == "true"
         elif isinstance(widget, Select):
-            widget.value = (
-                text if text in dict(FIELDS[name].choices).values() else Select.BLANK
-            )
+            # A saved value that isn't a choice leaves the control as it is:
+            # these Selects can't be empty, and setting it raised.
+            if text in dict(FIELDS[name].choices).values():
+                widget.value = text
         elif isinstance(widget, Input):
             widget.value = text or ""
 

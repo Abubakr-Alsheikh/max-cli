@@ -64,8 +64,8 @@ class ToolsPanel(Vertical):
             with Vertical(id="tools-picker"):
                 yield Select(
                     [(name, name) for name in groups],
-                    value=groups[0] if groups else Select.BLANK,
-                    allow_blank=not groups,
+                    value=groups[0],
+                    allow_blank=False,
                     id="tools-group",
                 )
                 yield Static("", id="tools-group-help")
@@ -94,7 +94,7 @@ class ToolsPanel(Vertical):
 
     @on(Select.Changed, "#tools-group")
     def _on_group(self, event: Select.Changed) -> None:
-        if event.value != Select.BLANK:
+        if not event.select.is_blank():
             self._show_group(str(event.value))
 
     @on(OptionList.OptionSelected, "#tools-actions")
