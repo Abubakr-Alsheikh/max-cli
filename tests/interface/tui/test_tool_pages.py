@@ -276,7 +276,109 @@ async def test_the_picked_pdf_goes_in_the_first_file_field(dummy_pdf, action, fi
     assert filled
 
 
-def test_pdf_is_key_4():
+def test_images_and_pdf_keys():
     from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
-    assert SECTION_KEYS["pdf"] == "4"
+    assert (SECTION_KEYS["images"], SECTION_KEYS["pdf"]) == ("4", "5")
+
+
+# --- the Images page --------------------------------------------------------------
+
+IMAGES_DESCRIBE = "max_cli.core.operations.images.describe"
+
+
+def test_image_facts_line(tmp_path):
+    from max_cli.core.operations import images
+    from max_cli.interface.tui.tool_pages import describe_images
+
+    facts = images.ImageFacts(
+        path=tmp_path / "photo.jpg",
+        size_bytes=3 * 1024 * 1024,
+        width=4032,
+        height=3024,
+        format="JPEG",
+        mode="RGB",
+        has_gps=True,
+        taken="2024-05-01",
+        camera="Pixel 7",
+        note=images.GPS_NOTE,
+    )
+    with patch(IMAGES_DESCRIBE, return_value=facts):
+        lines = describe_images(facts.path).plain.splitlines()
+
+    assert lines == [
+        "photo.jpg  ·  4032x3024 (12.2 MP)  ·  JPEG  ·  colour  ·  3.00 MB"
+        "  ·  taken 2024-05-01 on Pixel 7",
+        images.GPS_NOTE,
+    ]
+
+
+def test_a_small_animated_image_skips_megapixels(tmp_path):
+    from max_cli.core.operations import images
+    from max_cli.interface.tui.tool_pages import describe_images
+
+    facts = images.ImageFacts(
+        path=tmp_path / "spin.gif",
+        size_bytes=2048,
+        width=20,
+        height=20,
+        format="GIF",
+        mode="P",
+        frames=3,
+    )
+    with patch(IMAGES_DESCRIBE, return_value=facts):
+        line = describe_images(facts.path).plain
+
+    assert (
+        line
+        == "spin.gif  ·  20x20  ·  GIF  ·  palette colours  ·  3 frames  ·  2.00 KB"
+    )
+
+
+def test_folder_facts_say_where_results_go(tmp_path):
+    from max_cli.core.operations import images
+    from max_cli.interface.tui.tool_pages import describe_images
+
+    facts = images.ImageFacts(
+        path=tmp_path / "photos",
+        size_bytes=4096,
+        is_folder=True,
+        image_count=3,
+        formats={"JPG": 2, "PNG": 1},
+        output_dir=tmp_path / "photos_optimized",
+    )
+    with patch(IMAGES_DESCRIBE, return_value=facts):
+        lines = describe_images(facts.path).plain.splitlines()
+
+    assert lines == [
+        "photos  ·  3 images  ·  4.00 KB  ·  2 JPG, 1 PNG",
+        "Actions run on each image here; results go to photos_optimized.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_images_page_takes_a_folder(tmp_path):
+    from max_cli.core.operations import images
+    from max_cli.interface.tui.tool_pages import IMAGES
+
+    class ImagesApp(App):
+        def compose(self) -> ComposeResult:
+            yield ToolPage(IMAGES, id="images-panel")
+
+    facts = images.ImageFacts(path=tmp_path, size_bytes=0, is_folder=True)
+    app = ImagesApp()
+    with patch(IMAGES_DESCRIBE, return_value=facts):
+        async with app.run_test(size=SIZE) as pilot:
+            await pilot.pause()
+            title = app.query_one(".tool-file-card").border_title
+            app.query_one("#tool-file", Input).value = str(tmp_path)
+            app.query_one("#act-strip", Button).press()
+            page = app.query_one(ToolPage)
+            filled = await wait_until(
+                pilot,
+                lambda: page.form.action.id == "images.strip"
+                and page.form.query_one("#field-target", Input).value == str(tmp_path),
+            )
+
+    assert title == "FILE OR FOLDER"
+    assert filled

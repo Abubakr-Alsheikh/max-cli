@@ -12,6 +12,7 @@ from typing import Optional
 
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.events import Click
@@ -26,6 +27,7 @@ SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
     ("video", "\U0001f3ac", "Video"),
+    ("images", "\U0001f4f7", "Images"),
     ("pdf", "\U0001f4c4", "PDF"),
     ("tools", "\U0001f9f0", "Tools"),
     ("files", "\U0001f4c1", "Files"),
@@ -35,15 +37,25 @@ SECTIONS = [
     ("settings", "\U0001f527", "Settings"),
 ]
 SECTION_GROUPS = (
-    ("DO", ("home", "download", "video", "pdf", "tools", "files", "chat")),
+    (
+        "DO",
+        ("home", "download", "video", "images", "pdf", "tools", "files", "chat"),
+    ),
     ("TRACK", ("queue", "history")),
     ("SETUP", ("settings",)),
 )
-# Page id -> its number key: 1 to 9, then 0 for the tenth.
+# Settings sits apart from the numbered pages, on the comma key. Bindings
+# call that key "comma": Textual splits a binding's key string on ",".
+SETTINGS_KEY = ","
+SETTINGS_KEY_NAME = "comma"
+# Page id -> the key that opens it: 1 to 9, then 0 for the tenth.
 SECTION_KEYS = {
     section_id: str((position + 1) % 10)
-    for position, (section_id, _icon, _label) in enumerate(SECTIONS)
+    for position, section_id in enumerate(
+        section_id for section_id, _icon, _label in SECTIONS if section_id != "settings"
+    )
 }
+SECTION_KEYS["settings"] = SETTINGS_KEY
 EXPAND_LABEL = "»"
 COLLAPSE_LABEL = "«"
 
@@ -229,9 +241,11 @@ class Sidebar(Vertical):
     }
     """
 
+    # Priority: when the pages don't fit, the scroll area around them has its
+    # own up and down (scroll a line), which caught the keys first.
     BINDINGS = [
-        ("up", "move(-1)", "Previous page"),
-        ("down", "move(1)", "Next page"),
+        Binding("up", "move(-1)", "Previous page", priority=True),
+        Binding("down", "move(1)", "Next page", priority=True),
     ]
 
     class SectionSelected(Message):

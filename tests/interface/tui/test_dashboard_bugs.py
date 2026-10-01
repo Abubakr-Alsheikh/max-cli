@@ -101,6 +101,9 @@ async def test_chat_calls_the_ai_off_the_ui_thread():
 DASHBOARD_SECTIONS = [
     "home",
     "download",
+    "video",
+    "images",
+    "pdf",
     "queue",
     "history",
     "files",

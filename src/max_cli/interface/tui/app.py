@@ -22,6 +22,8 @@ from max_cli.interface.tui.widgets.settings_panel import SettingsPanel
 from max_cli.interface.tui.widgets.sidebar import (
     SECTION_KEYS,
     SECTIONS,
+    SETTINGS_KEY,
+    SETTINGS_KEY_NAME,
     Badge,
     Sidebar,
 )
@@ -79,10 +81,14 @@ class MaxDashboardApp(App):
         Binding("escape", "focus_sidebar", "Sidebar", show=False),
         Binding("alt+left", "previous_page", "Back", show=False),
         ("j", "toggle_jobs", "Jobs"),
-        # Number keys jump to pages. Typing in an input still types digits:
-        # the focused input handles the key first.
+        # Number keys (and "," for Settings) jump to pages. Typing in an
+        # input still types them: the focused input handles the key first.
         *(
-            Binding(key, f"goto('{section_id}')", show=False)
+            Binding(
+                SETTINGS_KEY_NAME if key == SETTINGS_KEY else key,
+                f"goto('{section_id}')",
+                show=False,
+            )
             for section_id, key in SECTION_KEYS.items()
         ),
     ]

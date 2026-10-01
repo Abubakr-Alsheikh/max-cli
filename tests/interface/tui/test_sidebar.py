@@ -102,6 +102,19 @@ async def test_arrow_keys_and_enter_open_a_page():
 
 
 @pytest.mark.asyncio
+async def test_arrow_keys_move_when_the_pages_dont_fit():
+    """The scroll area around the pages took up and down for itself."""
+    app = MaxDashboardApp()
+    async with app.run_test(size=(120, 20)) as pilot:
+        app.query_one(Sidebar).focus_nav()
+        await pilot.pause()
+        await pilot.press(*["down"] * 9)
+        await pilot.pause()
+
+        assert app.focused.id == "nav-history"
+
+
+@pytest.mark.asyncio
 async def test_clicking_a_page_opens_it():
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:

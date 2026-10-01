@@ -260,6 +260,7 @@ def test_the_sidebar_pages():
         "home",
         "download",
         "video",
+        "images",
         "pdf",
         "tools",
         "files",
@@ -268,7 +269,24 @@ def test_the_sidebar_pages():
         "history",
         "settings",
     ]
-    assert SECTION_KEYS["settings"] == "0"
+    assert SECTION_KEYS["history"] == "0"
+    assert SECTION_KEYS["settings"] == ","
+    assert len(set(SECTION_KEYS.values())) == len(SECTION_KEYS)
+
+
+@pytest.mark.asyncio
+async def test_the_comma_key_opens_settings():
+    from max_cli.interface.tui.app import MaxDashboardApp
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        app.query_one("#sidebar").focus()
+        await pilot.press(",")
+        await pilot.pause()
+        shown = app.query_one("#settings-panel").display
+
+    assert shown
 
 
 @pytest.mark.asyncio

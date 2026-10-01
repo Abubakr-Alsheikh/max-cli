@@ -240,7 +240,7 @@ async def test_files_page_video_compress_opens_the_video_page(dummy_video):
 
 
 @pytest.mark.asyncio
-async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
+async def test_files_page_image_compress_opens_the_images_page(dummy_image):
     from max_cli.interface.tui.app import MaxDashboardApp
     from max_cli.interface.tui.widgets.files_panel import FilesPanel
 
@@ -249,14 +249,15 @@ async def test_files_page_image_compress_opens_the_prefilled_form(dummy_image):
         app.query_one(FilesPanel).post_message(
             FilesPanel.OpenAction("images.compress", {"target": str(dummy_image)})
         )
-        tools = app.query_one(ToolsPanel)
+        page = app.query_one("#images-panel")
         await wait_until(
             pilot,
-            lambda: tools.form.query_one("#field-target", Input).value
+            lambda: page.form.query_one("#field-target", Input).value
             == str(dummy_image),
         )
 
-        form = tools.form
+        assert page.display
+        form = page.form
         assert form.action.id == "images.compress"
         assert form.query_one("#field-target", Input).value == str(dummy_image)
         # A Setting default shows the user's configured value.
