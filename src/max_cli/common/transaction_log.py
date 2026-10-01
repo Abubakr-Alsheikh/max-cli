@@ -29,6 +29,7 @@ class TransactionLog:
     OP_MOVE = "move"
     OP_DELETE = "delete"
     OP_CREATE = "create"
+    OP_MKDIR = "mkdir"  # a folder Max created; undo removes it if empty
 
     MAX_GROUPS = 50
     RETENTION_DAYS = 30
@@ -59,6 +60,22 @@ class TransactionLog:
                 "backup_path": str(backup_path) if backup_path else None,
             }
         )
+
+    def make_dirs(self, folder: Path) -> None:
+        """Create `folder` and any missing parents, recording each new one.
+
+        Undo then removes the folders Max made once the files are back, so
+        `audio organize` no longer leaves empty Artist/Album trees behind.
+        A folder that already existed is never recorded, so never removed.
+        """
+        missing: list[Path] = []
+        current = folder
+        while not current.exists():
+            missing.append(current)
+            current = current.parent
+        for path in reversed(missing):
+            path.mkdir()
+            self.record(op_type=self.OP_MKDIR, original_path=None, new_path=path)
 
     def save(self) -> Path:
         """Persist the transaction group to disk."""
@@ -131,6 +148,13 @@ class TransactionLog:
                         raise TransactionError(
                             f"Cannot undo delete: no backup found for {original}"
                         )
+
+                elif op_type == self.OP_MKDIR:
+                    if new and new.is_dir() and not any(new.iterdir()):
+                        new.rmdir()
+                        results.append(f"Removed empty folder: {new.name}")
+                    elif new and new.exists():
+                        results.append(f"Kept folder with files in it: {new.name}")
 
                 elif op_type == self.OP_CREATE:
                     if new and new.exists():

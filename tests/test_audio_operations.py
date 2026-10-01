@@ -254,3 +254,19 @@ def test_describe_a_folder_counts_untagged_tracks(tmp_path):
     assert facts.untagged == 2
     assert "2 without title or artist" in facts.note
     assert facts.total_duration == pytest.approx(3 * 0.52, abs=0.05)
+
+
+def test_undo_removes_the_folders_organize_made(tmp_path):
+    """Undo put the files back but left empty Artist/Album folders."""
+    from max_cli.core.operations import files
+
+    files_in = _album(tmp_path / "in", 2)
+    audio.batch(files_in, artist="Band", album="LP")
+    (tmp_path / "out").mkdir()  # yours before organize: undo keeps it
+
+    audio.organize([tmp_path / "in"], tmp_path / "out", "artist-album")
+    files.undo()
+
+    assert all(path.exists() for path in files_in)
+    assert (tmp_path / "out").is_dir()
+    assert list((tmp_path / "out").iterdir()) == []

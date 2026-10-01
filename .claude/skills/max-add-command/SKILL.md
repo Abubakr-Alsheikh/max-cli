@@ -41,7 +41,7 @@ Work through these steps in order. Skip a step only when it does not apply, and 
 - Run `max <group> --help` and `max <group> <cmd> --help` and read the output.
 
 ## 5. TUI (only if the command should appear in `max dashboard`)
-- Add a `CommandSchema` in `src/max_cli/interface/tui/command_registry.py`, and add its parameter mapping in `command_executor.py`.
+- Add the command to its group's catalog module (`src/max_cli/core/catalog/groups/<group>.py`) and its operation (`core/operations/<group>.py`); `tests/test_catalog_drift.py` checks the CLI against both. Then list it in a section of the group's page spec (`interface/tui/tool_pages.py`); `tests/interface/tui/test_tool_pages.py` fails when a dashboard action sits in no section.
 - **Import presets from the CLI or engine constants instead of copying them.** CRF and bitrate maps have already drifted between the TUI and the CLI.
 
 ## 6. Tests
