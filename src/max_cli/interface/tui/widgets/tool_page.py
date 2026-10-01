@@ -286,14 +286,13 @@ class ToolPage(Vertical):
 
     @on(Button.Pressed, "#tool-browse")
     def _on_browse(self) -> None:
-        from max_cli.interface.tui.widgets.dialogs import PathPicker
+        from max_cli.interface.tui.widgets.path_picker import PathPicker
 
         box = self.query_one("#tool-file", Input)
-        current = Path(box.value).expanduser() if box.value.strip() else Path.home()
-        start = current if current.is_dir() else current.parent
+        start = Path(box.value.strip()) if box.value.strip() else None
 
         def _picked(path: Optional[Path]) -> None:
             if path is not None:
                 box.value = str(path)
 
-        self.app.push_screen(PathPicker(start), _picked)
+        self.app.push_screen(PathPicker(start, file_types=self.spec.group), _picked)

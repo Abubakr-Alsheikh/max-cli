@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import (
     Button,
     Collapsible,
+    DataTable,
     Input,
     OptionList,
     Select,
@@ -23,7 +24,8 @@ from max_cli.core.engines.task_queue import TaskType
 from max_cli.core.operations.result import ActionResult
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
-from max_cli.interface.tui.widgets.dialogs import ConfirmDialog, PathPicker
+from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
+from max_cli.interface.tui.widgets.path_picker import PathPicker
 from max_cli.interface.tui.widgets.tools_panel import ToolsPanel
 
 from .waiting import wait_until
@@ -38,6 +40,21 @@ class FormApp(App):
 
     def compose(self) -> ComposeResult:
         yield ActionForm(self._action)
+
+
+async def _picker_ready(pilot, app: App) -> bool:
+    """The picker has listed its first folder, so typing into its path box
+    isn't overwritten by that first listing. An empty status isn't enough:
+    it is empty before the picker's on_mount too."""
+
+    def listed() -> bool:
+        if not isinstance(app.screen, PathPicker):
+            return False
+        status = str(app.screen.query_one("#picker-status", Static).content)
+        table = app.screen.query_one("#picker-table", DataTable)
+        return bool(status) and "Reading" not in status and table.row_count > 0
+
+    return await wait_until(pilot, listed)
 
 
 def _status(app: App) -> str:
@@ -202,16 +219,19 @@ async def test_dangerous_actions_ask_first(tmp_path, answer, runs):
 async def test_browse_fills_the_path_field(tmp_path):
     app = FormApp(get_action("video.compress"))
     picked = tmp_path / "movie.mp4"
+    picked.write_bytes(b"")
     async with app.run_test(size=(100, 60)) as pilot:
         app.query_one("#browse-target", Button).press()
-        await pilot.pause()
-        assert isinstance(app.screen, PathPicker)
+        assert await _picker_ready(pilot, app)
 
         app.screen.query_one("#picker-path", Input).value = str(picked)
         app.screen.query_one("#picker-ok", Button).press()
-        await pilot.pause()
+        filled = await wait_until(
+            pilot,
+            lambda: app.query_one("#field-target", Input).value == str(picked),
+        )
 
-        assert app.query_one("#field-target", Input).value == str(picked)
+        assert filled
 
 
 @pytest.mark.asyncio
@@ -275,18 +295,20 @@ async def test_password_fields_are_masked():
 @pytest.mark.asyncio
 async def test_browse_adds_to_a_list_field(tmp_path):
     first, second = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    first.write_bytes(b"")
+    second.write_bytes(b"")
     app = FormApp(get_action("pdf.merge"))
     async with app.run_test(size=(100, 60)) as pilot:
         field = app.query_one("#field-inputs", Input)
         field.value = str(first)
 
         app.query_one("#browse-inputs", Button).press()
-        await pilot.pause()
+        assert await _picker_ready(pilot, app)
         app.screen.query_one("#picker-path", Input).value = str(second)
         app.screen.query_one("#picker-ok", Button).press()
-        await pilot.pause()
+        added = await wait_until(pilot, lambda: field.value == f"{first}; {second}")
 
-        assert field.value == f"{first}; {second}"
+        assert added
 
 
 @pytest.mark.asyncio

@@ -295,8 +295,9 @@ class ActionForm(Vertical):
         event.stop()
         param = self.action.param(button_id[len("browse-") :])
         field = self.query_one(f"#field-{param.name}", Input)
-        current = Path(field.value).expanduser() if field.value else Path.cwd()
-        start = current if current.is_dir() else current.parent
+        # A list field opens at its last path.
+        typed = field.value.split(LIST_SEPARATOR)[-1].strip()
+        start = Path(typed) if typed else None
 
         def _picked(path: Optional[Path]) -> None:
             if path is None:
@@ -307,10 +308,14 @@ class ActionForm(Vertical):
             else:
                 field.value = str(path)
 
-        from max_cli.interface.tui.widgets.dialogs import PathPicker
+        from max_cli.interface.tui.widgets.path_picker import PathPicker, PickMode
 
+        mode = {
+            ParamKind.FOLDER: PickMode.FOLDER,
+            ParamKind.OUTPUT: PickMode.SAVE,
+        }.get(param.kind, PickMode.FILE)
         self.app.push_screen(
-            PathPicker(start, pick_folder=param.kind == ParamKind.FOLDER), _picked
+            PathPicker(start, mode, file_types=self.action.group), _picked
         )
 
     # --- run and queue ------------------------------------------------------

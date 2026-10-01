@@ -112,6 +112,7 @@ Set titles in `on_mount`: `self.query_one("#my-card").border_title = "QUEUE"`.
 | A button inside a list row | one line high: `height: 1; border: none` on a row class | `DownloadRow`; three-line buttons made rows twice as tall |
 | A setting | caption above a control that fits it: `Select` for choices, `Checkbox` for on/off, a password `Input` with Show for secrets, `Input` + Change... for folders | `settings_panel.py` |
 | A link to another page | `self.post_message(messages.OpenPage("queue"))` | The app navigates |
+| A path from the user | an `Input` plus a Browse button that opens `path_picker.PathPicker` | Pass the field's path as `start`, the mode (`FILE`, `FOLDER`, `SAVE`) and the page's group as `file_types` |
 
 Separate facts on one line with `  ·  `. Label cards and headings in UPPERCASE; write sentences in normal case.
 
@@ -150,6 +151,7 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 - Replacing a widget: `remove_children()` finishes later, so a query right after can still find the old widget. Keep a reference to the new one (`ToolPage.form`), and fill a form only after `await mount(...)`.
 - Never use `Select.BLANK`: on Textual 8 it is `False`, and `Select.NULL` marks an empty Select. Passing it as `value` crashed the dashboard (`images.convert`). Leave `value` out for an empty Select, and use `is_blank()` (or `event.select.is_blank()`) and `clear()`.
 - `test_every_dashboard_form_opens` (`tests/interface/tui/test_tools_page.py`) builds the form of every dashboard action; a new action or param kind gets checked there for free.
+- A `DataTable` cell given a `str` is read as markup, and a `Content` cell measured two columns wide. Put file names in as Rich `Text` (`path_picker.py`).
 - User text (titles, paths, URLs, errors) goes in as `Content(text)` or through `text.markup()`'s `$variables`, never as markup: `Song [red]` loses text, and some strings crash the parser.
 
 ## Keyboard
