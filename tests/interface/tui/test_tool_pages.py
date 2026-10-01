@@ -583,10 +583,13 @@ async def test_chips_drop_a_column_when_names_would_be_cut(width, columns):
     app = FilesApp()
     async with app.run_test(size=(width, 50)) as pilot:
         grid = app.query(".section-chips").first(Grid)
-        fitted = await wait_until(
-            pilot, lambda: grid.styles.grid_size_columns == columns
-        )
         chip = app.query_one("#act-backup-cleanup", Button)
-        label_fits = chip.content_region.width >= len("backup-cleanup")
+        # One wait for both: the chips get their new width a layout pass
+        # after the column count changes (it failed on macOS CI).
+        fitted = await wait_until(
+            pilot,
+            lambda: grid.styles.grid_size_columns == columns
+            and chip.content_region.width >= len("backup-cleanup"),
+        )
 
-    assert fitted and label_fits
+    assert fitted
