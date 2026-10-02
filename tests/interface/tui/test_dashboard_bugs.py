@@ -39,8 +39,9 @@ DASHBOARD_SECTIONS = [
     "files",
     "audio",
     "settings",
-    "ai",
 ]
+# The AI page scrolls its conversation instead of the page:
+# test_ai_page.test_a_short_terminal_keeps_the_input_in_view.
 
 
 @pytest.mark.asyncio

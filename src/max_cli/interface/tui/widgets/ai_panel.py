@@ -1,9 +1,12 @@
 """The AI page: tell Max what you want done, and the agent does it.
 
-The agent (`core/agent`) runs in a thread worker. Its steps show as they
-happen: groups it looked up, actions it ran and what they made. Before an
-action moves, overwrites or deletes files, the worker waits while the page
-asks you (ConfirmDialog). The conversation lasts until New chat.
+The agent (`core/agent`) runs in a thread worker. The conversation scrolls
+on its own, so the input below it stays in view. Each answer is an
+`AgentTurn`: a status line with a spinner while it works, one `ToolCard`
+per action (running, then done or failed; expand it for the arguments, the
+result and the files it made), then the reply rendered as Markdown. Before
+an action moves, overwrites or deletes files, the worker waits while the
+page asks you (ConfirmDialog). The conversation lasts until New chat.
 
 It replaced the Chat page, which only suggested a command to copy.
 """
@@ -15,9 +18,11 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.content import Content
-from textual.widgets import Button, Checkbox, Input, Static
+from textual.events import Key
+from textual.timer import Timer
+from textual.widgets import Button, Checkbox, Collapsible, Input, Markdown, Static
 
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.messages import OpenPage
@@ -27,25 +32,37 @@ if TYPE_CHECKING:
     from max_cli.core.agent.agent import ActionCall, Agent, AgentReply, Step
 
 EXAMPLES = (
-    "Shrink every video in this folder",
-    "Merge the PDFs in my Downloads into one",
-    "Sort my Music folder into Artist/Album folders",
+    "Shrink the videos in this folder",
+    "Merge the PDFs in my Downloads",
+    "Sort my Music into Artist/Album",
     "Find duplicate files here",
 )
 # How often a waiting question checks that the dashboard is still open.
 CONFIRM_POLL_SECONDS = 0.5
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+SPINNER_SECONDS = 0.1
+# Quicker actions don't show how long they took.
+MIN_SHOWN_SECONDS = 0.1
+# Below this width the examples stack in one column.
+TWO_COLUMN_MIN_WIDTH = 70
 DANGER_NOTES = {
     "moves": "moves or renames files",
     "overwrites": "overwrites files in place",
     "deletes": "deletes files",
 }
-STEP_STYLES = {
-    "loaded": ("·", "$text-muted"),
-    "ran": ("✓", "$success"),
-    "failed": ("✗", "$error"),
-    "refused": ("!", "$warning"),
-    "declined": ("-", "$text-muted"),
-    "planned": ("→", "$primary"),
+# Step kind -> (mark, ToolCard class) for the action cards.
+CARD_STATES = {
+    "started": ("", "-running"),
+    "ran": ("✓", "-ok"),
+    "failed": ("✗", "-failed"),
+    "refused": ("!", "-refused"),
+    "declined": ("-", "-skipped"),
+    "planned": ("→", "-planned"),
+}
+CARD_NOTES = {
+    "refused": "outside the folders Max may use",
+    "declined": "you said no",
+    "planned": "dry run, not run",
 }
 
 
@@ -53,6 +70,220 @@ def ai_is_set_up() -> bool:
     from max_cli.config import settings
 
     return bool(settings.OPENAI_API_KEY) or settings.OLLAMA_ENABLED
+
+
+class ToolCard(Collapsible):
+    """One action the agent ran: its name and outcome on the title line;
+    expanded, its arguments, its result and the files it made."""
+
+    DEFAULT_CSS = """
+    ToolCard {
+        height: auto;
+        background: $boost;
+        border: none;
+        border-left: wide $primary 50%;
+        padding: 0;
+        margin: 0 0 1 0;
+    }
+    ToolCard > CollapsibleTitle {
+        padding: 0 1;
+        text-style: bold;
+    }
+    ToolCard > Contents {
+        padding: 0 2 1 3;
+    }
+    ToolCard.-running { border-left: wide $accent; }
+    ToolCard.-running > CollapsibleTitle { color: $accent; }
+    ToolCard.-ok { border-left: wide $success; }
+    ToolCard.-ok > CollapsibleTitle { color: $success; }
+    ToolCard.-failed { border-left: wide $error; }
+    ToolCard.-failed > CollapsibleTitle { color: $error; }
+    ToolCard.-refused, ToolCard.-planned { border-left: wide $warning; }
+    ToolCard.-refused > CollapsibleTitle { color: $warning; }
+    ToolCard.-planned > CollapsibleTitle { color: $primary; }
+    ToolCard.-skipped { border-left: wide $text-muted; }
+    ToolCard.-skipped > CollapsibleTitle { color: $text-muted; }
+    """
+
+    def __init__(self, step: "Step") -> None:
+        self._body = Static("", classes="tool-body")
+        super().__init__(self._body, title=step.label, collapsed=True)
+        self.action_id = step.action_id
+        self.label = step.label
+        self.state = ""
+        self.show(step)
+
+    def show(self, step: "Step", spinner: str = "") -> None:
+        kind = step.kind.value
+        mark, state = CARD_STATES.get(kind, ("·", ""))
+        if self.state:
+            self.remove_class(self.state)
+        self.state = state
+        self.add_class(state)
+        self.title = self._title_text(step, spinner or mark)
+        self._body.update(self._details_text(step))
+
+    def spin(self, frame: str) -> None:
+        """The running card's title with the spinner's next frame."""
+        if self.state == "-running":
+            self.title = f"{frame} {self.label}  running…"
+
+    @staticmethod
+    def _title_text(step: "Step", mark: str) -> str:
+        kind = step.kind.value
+        if kind == "started":
+            return f"{mark} {step.label}  running…"
+        if kind in CARD_NOTES:
+            return f"{mark} {step.label}  ·  {CARD_NOTES[kind]}"
+        message = (
+            step.result.message
+            if step.result is not None
+            else step.text.removeprefix(f"{step.label}: ")
+        )
+        took = f"  ·  {step.seconds:.1f}s" if step.seconds >= MIN_SHOWN_SECONDS else ""
+        return f"{mark} {step.label}  ·  {message}{took}"
+
+    @staticmethod
+    def _details_text(step: "Step") -> Content:
+        lines = [
+            Content.assemble((f"{name:<10} ", "$text-muted"), value)
+            for name, value in step.arguments.items()
+        ]
+        # The outcome is on the title line; the body adds what it made.
+        if step.result is not None:
+            lines += [
+                Content.assemble(("→ ", "$text-muted"), str(path))
+                for path in step.result.output_files
+            ]
+        return Content("\n").join(lines) if lines else Content("")
+
+
+class AgentTurn(Vertical):
+    """Max's answer to one request: status, action cards, then the reply."""
+
+    DEFAULT_CSS = """
+    AgentTurn {
+        height: auto;
+        margin: 1 0 0 0;
+        padding: 0 0 0 1;
+        border-left: thick $primary;
+    }
+    AgentTurn .turn-status {
+        height: 1;
+        margin-bottom: 1;
+    }
+    AgentTurn .turn-lookups {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+    AgentTurn .turn-tools {
+        height: auto;
+    }
+    AgentTurn Markdown {
+        margin: 0;
+        padding: 0 1 0 0;
+        background: transparent;
+    }
+    AgentTurn .turn-error {
+        color: $error;
+    }
+    AgentTurn .turn-links {
+        height: auto;
+        margin-top: 1;
+    }
+    AgentTurn .turn-links Button {
+        margin-right: 1;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._frame = 0
+        self._doing = "Thinking"
+        self._timer: Optional[Timer] = None
+        self._cards: dict[str, ToolCard] = {}
+        self._lookups: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        yield Static("", classes="turn-status")
+        yield Static("", classes="turn-lookups")
+        yield Vertical(classes="turn-tools")
+
+    def on_mount(self) -> None:
+        self.query_one(".turn-lookups").display = False
+        self._timer = self.set_interval(SPINNER_SECONDS, self._tick)
+        self._tick()
+
+    def _tick(self) -> None:
+        frame = SPINNER_FRAMES[self._frame % len(SPINNER_FRAMES)]
+        self._frame += 1
+        self.query_one(".turn-status", Static).update(
+            Content.assemble(
+                ("Max  ", "bold $primary"),
+                (f"{frame} {self._doing}…", "$text-muted"),
+            )
+        )
+        for card in self._cards.values():
+            card.spin(frame)
+
+    def waiting(self, doing: str) -> None:
+        self._doing = doing
+
+    def add_step(self, step: "Step") -> None:
+        kind = step.kind.value
+        if kind == "loaded":
+            self._lookups.append(step.action_id)
+            lookups = self.query_one(".turn-lookups", Static)
+            lookups.update(f"· Looked up {', '.join(self._lookups)} actions")
+            lookups.display = True
+            return
+        card = self._cards.get(step.action_id)
+        if kind == "started" or card is None or card.state != "-running":
+            card = ToolCard(step)
+            self._cards[step.action_id] = card
+            self.query_one(".turn-tools").mount(card)
+        else:
+            card.show(step)
+        self._doing = f"Running {step.label}" if kind == "started" else "Thinking"
+
+    def _stop(self, summary: Content) -> None:
+        if self._timer is not None:
+            self._timer.stop()
+        self.query_one(".turn-status", Static).update(summary)
+
+    def finish(self, reply: "AgentReply") -> None:
+        actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
+        facts = []
+        if actions:
+            facts.append(f"{actions} action{'s' if actions != 1 else ''}")
+        if reply.tokens:
+            facts.append(f"{reply.tokens:,} tokens")
+        self._stop(
+            Content.assemble(
+                ("Max  ", "bold $primary"), ("  ·  ".join(facts), "$text-muted")
+            )
+        )
+        self.mount(Markdown(reply.text))
+        self._offer_links(reply)
+
+    def fail(self, message: str) -> None:
+        self._stop(Content.styled("Max", "bold $primary"))
+        self.mount(Static(Content(message), classes="turn-error"))
+
+    def _offer_links(self, reply: "AgentReply") -> None:
+        """Open folder for what the steps made, Undo for what they changed."""
+        results = [step.result for step in reply.steps if step.result is not None]
+        outputs = [path for result in results for path in result.output_files]
+        changed = any(result.undo_group for result in results)
+        buttons = []
+        if outputs:
+            button = Button("Open folder", classes="ai-open-folder")
+            button.tooltip = str(Path(outputs[-1]).parent)
+            buttons.append(button)
+        if changed:
+            buttons.append(Button("Undo...", classes="ai-undo"))
+        if buttons:
+            self.mount(Horizontal(*buttons, classes="turn-links"))
 
 
 class AIPanel(Vertical):
@@ -64,54 +295,63 @@ class AIPanel(Vertical):
         margin-bottom: 1;
     }
     AIPanel .ai-card {
-        height: auto;
         background: $surface;
         border: round $border;
         border-title-color: $primary;
         border-title-style: bold;
         padding: 0 1;
-        margin-bottom: 1;
     }
     AIPanel .ai-card:focus-within {
         border: round $primary;
     }
     #ai-setup {
         display: none;
+        height: auto;
+        margin-bottom: 1;
         border: round $warning;
     }
     #ai-setup.-shown {
         display: block;
     }
-    #ai-setup-row, #ai-input-row, #ai-options, #ai-examples {
+    #ai-setup-row, #ai-input-row, #ai-options {
         height: auto;
     }
     #ai-setup-text {
         width: 1fr;
         padding-top: 1;
     }
+    #ai-chat {
+        height: 1fr;
+    }
     #ai-log {
+        height: 1fr;
+        scrollbar-size-vertical: 1;
+    }
+    #ai-empty {
         height: auto;
-        min-height: 3;
+        padding: 1 0;
     }
-    AIPanel .ai-you {
-        margin-top: 1;
-        color: $text;
+    #ai-empty-text {
+        color: $text-muted;
+        margin-bottom: 1;
     }
-    AIPanel .ai-step {
-        padding-left: 2;
-    }
-    AIPanel .ai-reply {
-        margin-top: 1;
-    }
-    AIPanel .ai-links {
+    #ai-examples {
         height: auto;
-        margin-top: 1;
-    }
-    AIPanel .ai-links Button {
-        margin-right: 1;
+        grid-size: 2;
+        grid-gutter: 0 1;
+        grid-rows: 3;
     }
     #ai-examples Button {
-        margin-right: 1;
+        width: 100%;
+    }
+    AIPanel .ai-you {
+        height: auto;
+        margin-top: 1;
+        padding: 0 1;
+        background: $boost;
+        border-left: thick $secondary;
+    }
+    #ai-input-row {
         margin-top: 1;
     }
     #ai-input {
@@ -120,13 +360,19 @@ class AIPanel(Vertical):
     #ai-dry-run {
         border: none;
         padding: 0;
-        margin-top: 1;
         background: transparent;
     }
     #ai-status {
         width: 1fr;
-        padding: 1 2;
+        padding: 0 2;
         color: $text-muted;
+        content-align: right middle;
+    }
+    #ai-new {
+        height: 1;
+        min-width: 12;
+        border: none;
+        padding: 0 1;
     }
     """
 
@@ -135,8 +381,9 @@ class AIPanel(Vertical):
         self._agent: Optional[Agent] = None
         self._tokens = 0
         self._busy = False
-        # The "Thinking..." line of the request in progress; steps go above it.
-        self._thinking: Optional[Static] = None
+        self._turn: Optional[AgentTurn] = None
+        self._sent: list[str] = []  # requests, for up and down in the input
+        self._recall = -1
 
     def compose(self) -> ComposeResult:
         yield Static(self._brand(), id="ai-header")
@@ -156,12 +403,19 @@ class AIPanel(Vertical):
                 )
         with Vertical(id="ai-chat", classes="ai-card") as chat:
             chat.border_title = "CONVERSATION"
-            yield Vertical(id="ai-log")
-            with Horizontal(id="ai-examples"):
-                for index, example in enumerate(EXAMPLES):
-                    yield Button(
-                        example, id=f"ai-example-{index}", classes="ai-example"
+            with VerticalScroll(id="ai-log"):
+                with Vertical(id="ai-empty"):
+                    yield Static(
+                        "Say what you want done in your own words. Max picks its "
+                        "own actions, shows each one as it runs, and asks before "
+                        "it moves, overwrites or deletes anything. For example:",
+                        id="ai-empty-text",
                     )
+                    with Grid(id="ai-examples"):
+                        for index, example in enumerate(EXAMPLES):
+                            yield Button(
+                                example, id=f"ai-example-{index}", classes="ai-example"
+                            )
             with Horizontal(id="ai-input-row"):
                 yield Input(
                     placeholder="Say what you want done, e.g. compress the videos here",
@@ -169,9 +423,7 @@ class AIPanel(Vertical):
                 )
                 yield Button("Send", id="ai-send", variant="success")
             with Horizontal(id="ai-options"):
-                yield Checkbox(
-                    "Dry run: show the steps, change nothing", id="ai-dry-run"
-                )
+                yield Checkbox("Dry run (change nothing)", id="ai-dry-run")
                 yield Static("", id="ai-status")
                 yield Button("New chat", id="ai-new")
 
@@ -182,8 +434,8 @@ class AIPanel(Vertical):
             ("AI", "bold $primary"),
             (" // ASK MAX TO DO IT\n", "bold"),
             (
-                "It runs Max's own actions  ·  asks before it moves, overwrites or "
-                "deletes  ·  works in this folder and folders you name",
+                "Runs Max's own actions  ·  asks before changing files  ·  "
+                "stays in folders you name",
                 "$text-muted",
             ),
         )
@@ -194,17 +446,21 @@ class AIPanel(Vertical):
     def on_show(self) -> None:
         # Settings may have changed since the page last showed.
         self.query_one("#ai-setup").set_class(not ai_is_set_up(), "-shown")
+        self.query_one("#ai-input", Input).focus()
+
+    def on_resize(self) -> None:
+        columns = 2 if self.size.width >= TWO_COLUMN_MIN_WIDTH else 1
+        grid = self.query_one("#ai-examples", Grid)
+        if grid.styles.grid_size_columns != columns:
+            grid.styles.grid_size_columns = columns
 
     # --- the conversation ---------------------------------------------------
 
-    def _log(self) -> Vertical:
-        return self.query_one("#ai-log", Vertical)
+    def _log(self) -> VerticalScroll:
+        return self.query_one("#ai-log", VerticalScroll)
 
-    def _say(self, content: Content, classes: str) -> Static:
-        line = Static(content, classes=classes)
-        self._log().mount(line)
-        self.call_after_refresh(self.scroll_end, animate=False)
-        return line
+    def _to_bottom(self) -> None:
+        self.call_after_refresh(self._log().scroll_end, animate=False)
 
     def _show_status(self) -> None:
         from max_cli.core.engines.ai_engine import chat_model
@@ -230,6 +486,28 @@ class AIPanel(Vertical):
         box.value = ""
         self.send(request)
 
+    def on_key(self, event: Key) -> None:
+        """Up and down in the input bring back earlier requests."""
+        box = self.query_one("#ai-input", Input)
+        if self.app.focused is not box or not self._sent:
+            return
+        if event.key == "up":
+            self._recall = (
+                len(self._sent) - 1 if self._recall < 0 else max(0, self._recall - 1)
+            )
+        elif event.key == "down" and self._recall >= 0:
+            self._recall += 1
+            if self._recall >= len(self._sent):
+                self._recall = -1
+                box.value = ""
+                event.stop()
+                return
+        else:
+            return
+        event.stop()
+        box.value = self._sent[self._recall]
+        box.cursor_position = len(box.value)
+
     @on(Button.Pressed, ".ai-example")
     def _on_example(self, event: Button.Pressed) -> None:
         event.stop()
@@ -237,20 +515,30 @@ class AIPanel(Vertical):
 
     def send(self, request: str) -> None:
         """Show the request and hand it to the agent in a thread."""
-        self.query_one("#ai-examples").display = False
-        self._say(Content.assemble(("You  ", "bold $secondary"), request), "ai-you")
-        thinking = self._say(Content.styled("Thinking...", "$text-muted"), "ai-step")
-        self._thinking = thinking
+        self._sent.append(request)
+        self._recall = -1
+        self.query_one("#ai-empty").display = False
+        log = self._log()
+        log.mount(
+            Static(
+                Content.assemble(("You\n", "bold $secondary"), request),
+                classes="ai-you",
+            )
+        )
+        turn = AgentTurn()
+        self._turn = turn
+        log.mount(turn)
+        self._to_bottom()
         self._set_busy(True)
         dry_run = self.query_one("#ai-dry-run", Checkbox).value
         self.run_worker(
-            partial(self._ask_in_thread, request, thinking, dry_run),
+            partial(self._ask_in_thread, request, turn, dry_run),
             thread=True,
             exclusive=True,
             group="ai-agent",
         )
 
-    def _ask_in_thread(self, request: str, thinking: Static, dry_run: bool) -> None:
+    def _ask_in_thread(self, request: str, turn: AgentTurn, dry_run: bool) -> None:
         from max_cli.common.exceptions import MaxError
         from max_cli.core.agent.agent import Agent
 
@@ -261,14 +549,13 @@ class AIPanel(Vertical):
         try:
             if self._agent is None:
                 self._agent = Agent.from_settings(
-                    confirm=self._confirm_from_thread,
-                    on_step=self._step_from_thread,
+                    confirm=self._confirm_from_thread, on_step=self._step_from_thread
                 )
             self._agent.dry_run = dry_run
             reply = self._agent.ask(request)
         except MaxError as e:
             activity.complete_entry(entry, "failed", {"error": str(e)})
-            self.app.call_from_thread(self._show_error, thinking, str(e))
+            self.app.call_from_thread(self._show_error, turn, str(e))
             return
         activity.complete_entry(
             entry, "success", {"message": reply.text, "tokens": reply.tokens}
@@ -282,53 +569,29 @@ class AIPanel(Vertical):
                     status="success" if step.result.ok else "failed",
                     details={**step.result.to_dict(), "via": "ai"},
                 )
-        self.app.call_from_thread(self._show_reply, thinking, reply)
+        self.app.call_from_thread(self._show_reply, turn, reply)
 
     def _step_from_thread(self, step: "Step") -> None:
         self.app.call_from_thread(self._show_step, step)
 
     def _show_step(self, step: "Step") -> None:
-        mark, style = STEP_STYLES.get(step.kind.value, ("·", "$text-muted"))
-        line = Static(
-            Content.assemble((f"{mark} ", f"bold {style}"), (step.text, style)),
-            classes="ai-step",
-        )
-        # Steps go above the "Thinking..." line, which stays last until the reply.
-        self._log().mount(line, before=self._thinking)
-        self.call_after_refresh(self.scroll_end, animate=False)
+        if self._turn is not None:
+            self._turn.add_step(step)
+            self._to_bottom()
 
-    def _show_reply(self, thinking: Static, reply: "AgentReply") -> None:
-        thinking.remove()
+    def _show_reply(self, turn: AgentTurn, reply: "AgentReply") -> None:
         self._tokens += reply.tokens
-        self._say(Content.assemble(("Max  ", "bold $primary"), reply.text), "ai-reply")
-        self._offer_links(reply)
+        turn.finish(reply)
+        self._to_bottom()
         self._show_status()
         self._set_busy(False)
         self.query_one("#ai-input", Input).focus()
 
-    def _show_error(self, thinking: Static, message: str) -> None:
-        thinking.remove()
-        self._say(Content.styled(message, "$error"), "ai-reply")
+    def _show_error(self, turn: AgentTurn, message: str) -> None:
+        turn.fail(message)
+        self._to_bottom()
         self.query_one("#ai-setup").set_class(not ai_is_set_up(), "-shown")
         self._set_busy(False)
-
-    def _offer_links(self, reply: "AgentReply") -> None:
-        """Open folder for what the steps made, Undo for what they changed."""
-        results = [step.result for step in reply.steps if step.result is not None]
-        outputs = [path for result in results for path in result.output_files]
-        changed = any(result.undo_group for result in results)
-        if not outputs and not changed:
-            return
-        buttons = []
-        if outputs:
-            folder = Path(outputs[-1]).parent
-            button = Button("Open folder", classes="ai-open-folder")
-            button.tooltip = str(folder)
-            buttons.append(button)
-        if changed:
-            buttons.append(Button("Undo...", classes="ai-undo"))
-        self._log().mount(Horizontal(*buttons, classes="ai-links"))
-        self.call_after_refresh(self.scroll_end, animate=False)
 
     @on(Button.Pressed, ".ai-open-folder")
     def _on_open_folder(self, event: Button.Pressed) -> None:
@@ -347,9 +610,10 @@ class AIPanel(Vertical):
         if self._busy:
             return
         self._agent = None
+        self._turn = None
         self._tokens = 0
-        self._log().remove_children()
-        self.query_one("#ai-examples").display = True
+        self.query(".ai-you, AgentTurn").remove()
+        self.query_one("#ai-empty").display = True
         self._show_status()
 
     @on(Button.Pressed, "#ai-open-settings")
@@ -373,13 +637,16 @@ class AIPanel(Vertical):
             answer.append(bool(yes))
             answered.set()
 
+        def ask() -> None:
+            if self._turn is not None:
+                self._turn.waiting("Waiting for your answer")
+            # Built here on the UI thread: on Python 3.9 a widget made in a
+            # worker thread fails, as that thread has no event loop.
+            self.app.push_screen(ConfirmDialog(question), done)
+
         note = DANGER_NOTES.get(call.action.danger.value, "changes files")
         question = f"Max wants to run: {call.describe()}\nIt {note}. Go ahead?"
-        # Build the dialog on the UI thread: on Python 3.9 a widget made in a
-        # worker thread fails, as that thread has no event loop.
-        self.app.call_from_thread(
-            lambda: self.app.push_screen(ConfirmDialog(question), done)
-        )
+        self.app.call_from_thread(ask)
         while not answered.wait(CONFIRM_POLL_SECONDS):
             if not self.app.is_running:
                 return False

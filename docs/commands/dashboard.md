@@ -116,11 +116,13 @@ The file changes Max recorded (organize, order, smart-sort and duplicates --dele
 
 ## AI page
 
-The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, such as "shrink every video in this folder", or press one of the examples.
+The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, such as "shrink every video in this folder", or press one of the examples. The conversation scrolls on its own, so the input below it stays in view; up and down in the input bring back earlier requests.
 
-- Each step shows as it happens: the groups the agent looked up (`·`), the actions it ran (`✓`), failures (`✗`), paths it refused (`!`) and steps you skipped (`-`).
+- Each answer starts with a status line: a spinner and what Max is doing ("Thinking", "Running files order", "Waiting for your answer"), then how many actions it ran and the tokens it used.
+- Every action gets a card: running, then `✓` with its result and how long it took, `✗` with the error, or a note when a path was refused, you said no, or it was a dry run. Click a card to see the arguments it ran with and the files it made.
+- The reply itself is rendered as Markdown: lists, tables, code and links.
 - Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
-- After a reply, **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
+- **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
 - **Dry run** shows the steps and changes nothing. **New chat** starts over. The line beside them shows the model and the tokens the chat used.
 - With no API key and Ollama off, the page says so and links to Settings.
 

@@ -119,7 +119,16 @@ def test_loads_a_group_then_runs_its_action(tmp_path):
     reply = agent.ask("what's in note.txt?")
 
     assert reply.text == "It says hello world."
-    assert [step.kind for step in reply.steps] == [StepKind.LOADED, StepKind.RAN]
+    assert [step.kind for step in reply.steps] == [
+        StepKind.LOADED,
+        StepKind.STARTED,
+        StepKind.RAN,
+    ]
+    started, ran = reply.steps[1:]
+    assert started.label == "files preview"
+    assert started.arguments["target"] == str(note)
+    assert ran.arguments == started.arguments
+    assert ran.seconds >= 0 and ran.result is not None
     assert seen == reply.steps
     assert reply.tokens == 45
     group_reply = model.requests[1]["messages"][-1]

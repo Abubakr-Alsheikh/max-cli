@@ -6,12 +6,12 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, Markdown, Static
 
 from max_cli.common.exceptions import AIError
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
-from max_cli.interface.tui.widgets.ai_panel import AIPanel
+from max_cli.interface.tui.widgets.ai_panel import AgentTurn, AIPanel, ToolCard
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
@@ -75,8 +75,17 @@ def ai_on(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _texts(app: MaxDashboardApp, selector: str) -> list[str]:
-    return [str(line.content) for line in app.query(selector).results(Static)]
+def _replies(app: MaxDashboardApp) -> list[str]:
+    """Each finished turn's answer: its Markdown source, or its error."""
+    answers = []
+    for turn in app.query(AgentTurn):
+        # A Markdown widget's source is empty until its own mount runs.
+        answers += [
+            markdown.source for markdown in turn.query(Markdown) if markdown.source
+        ]
+        for error in turn.query(".turn-error").results(Static):
+            answers.append(str(error.content))
+    return answers
 
 
 async def _send(app: MaxDashboardApp, pilot, request: str) -> None:
@@ -86,9 +95,19 @@ async def _send(app: MaxDashboardApp, pilot, request: str) -> None:
     app.query_one("#ai-send", Button).press()
 
 
-async def _replied(app: MaxDashboardApp, pilot) -> None:
+async def _replied(app: MaxDashboardApp, pilot, count: int = 1) -> None:
     panel = app.query_one(AIPanel)
-    await wait_until(pilot, lambda: not panel._busy and bool(app.query(".ai-reply")))
+    await wait_until(pilot, lambda: not panel._busy and len(_replies(app)) >= count)
+
+
+async def _dialog_open(app: MaxDashboardApp, pilot) -> None:
+    """The question is on screen with its buttons: the screen switches a
+    moment before they mount."""
+    await wait_until(
+        pilot,
+        lambda: isinstance(app.screen, ConfirmDialog)
+        and bool(app.screen.query("#confirm-yes")),
+    )
 
 
 # --- the page ---------------------------------------------------------------------
@@ -128,21 +147,25 @@ async def test_a_saved_chat_page_opens_ai():
 async def test_a_request_shows_its_steps_and_the_reply(ai_on):
     (ai_on / "note.txt").write_text("hello", encoding="utf-8")
     model = ScriptedModel(
-        *_run("files.preview", {"target": "note.txt"}), _answer("It says hello.")
+        *_run("files.preview", {"target": "note.txt"}),
+        _answer("It says **hello**.\n\n- one\n- two"),
     )
     app = MaxDashboardApp()
     with patch(CLIENT_PATH, return_value=model):
         async with app.run_test(size=SIZE) as pilot:
             await _send(app, pilot, "what's in note.txt?")
             await _replied(app, pilot)
-            steps = _texts(app, ".ai-step")
-            replies = _texts(app, ".ai-reply")
+            [card] = app.query(ToolCard)
+            lookups = str(app.query_one(".turn-lookups", Static).content)
+            turn_status = str(app.query_one(".turn-status", Static).content)
             status = str(app.query_one("#ai-status", Static).content)
+            replies = _replies(app)
 
-    assert any("Looked up the files actions" in step for step in steps)
-    assert any(step.startswith("✓") for step in steps)
-    assert not any("Thinking" in step for step in steps)
-    assert replies == ["Max  It says hello."]
+    assert card.has_class("-ok")
+    assert card.title.startswith("✓ files preview")
+    assert "Looked up files" in lookups
+    assert "1 action" in turn_status and "300 tokens" in turn_status
+    assert replies == ["It says **hello**.\n\n- one\n- two"]
     assert "300 tokens" in status
     categories = {
         (entry.category, entry.action) for entry in ActivityLog().get_entries()
@@ -162,7 +185,7 @@ async def test_a_delete_asks_first(ai_on, answer, kept):
     with patch(CLIENT_PATH, return_value=model):
         async with app.run_test(size=SIZE) as pilot:
             await _send(app, pilot, "shred note.txt")
-            await wait_until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+            await _dialog_open(app, pilot)
             assert "files shred" in str(
                 app.screen.query_one("#confirm-question", Static).content
             )
@@ -182,7 +205,7 @@ async def test_a_file_change_offers_undo(ai_on):
     with patch(CLIENT_PATH, return_value=model):
         async with app.run_test(size=SIZE) as pilot:
             await _send(app, pilot, "number the files here")
-            await wait_until(pilot, lambda: isinstance(app.screen, ConfirmDialog))
+            await _dialog_open(app, pilot)
             app.screen.query_one("#confirm-yes", Button).press()
             await _replied(app, pilot)
             await wait_until(pilot, lambda: bool(app.query(".ai-undo")))
@@ -201,12 +224,12 @@ async def test_an_ai_error_is_shown_and_the_page_recovers(ai_on):
         async with app.run_test(size=SIZE) as pilot:
             await _send(app, pilot, "hello")
             await _replied(app, pilot)
-            assert "timed out" in _texts(app, ".ai-reply")[-1]
+            assert "timed out" in _replies(app)[-1]
 
             app.query_one("#ai-input", Input).value = "again"
             app.query_one("#ai-send", Button).press()
-            await wait_until(pilot, lambda: len(app.query(".ai-reply")) == 2)
-            assert _texts(app, ".ai-reply")[-1] == "Max  Hi."
+            await _replied(app, pilot, count=2)
+            assert _replies(app)[-1] == "Hi."
 
 
 @pytest.mark.asyncio
@@ -220,12 +243,76 @@ async def test_an_example_sends_and_new_chat_starts_over(ai_on):
             app.query_one("#ai-example-0", Button).press()
             await _replied(app, pilot)
             panel = app.query_one(AIPanel)
-            assert not app.query_one("#ai-examples").display
+            assert not app.query_one("#ai-empty").display
             assert panel._agent is not None
 
             app.query_one("#ai-new", Button).press()
-            await pilot.pause()
+            await wait_until(pilot, lambda: not app.query(AgentTurn))
 
             assert panel._agent is None
-            assert not app.query(".ai-reply")
-            assert app.query_one("#ai-examples").display
+            assert app.query_one("#ai-empty").display
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [(140, 44), (90, 30)])
+async def test_every_example_shows_whole(size):
+    app = MaxDashboardApp()
+    async with app.run_test(size=size) as pilot:
+        app.navigate("ai")
+        await pilot.pause()
+        await pilot.pause()
+        for button in app.query(".ai-example").results(Button):
+            label = str(button.label)
+            assert button.content_region.width >= len(label), label
+            assert button.region.bottom <= size[1], label
+
+
+@pytest.mark.asyncio
+async def test_the_input_stays_in_view_as_the_chat_grows(ai_on):
+    model = ScriptedModel(
+        *[_answer(f"Answer {n}.\n\n" + "line\n\n" * 5) for n in range(6)]
+    )
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            for n in range(6):
+                await _send(app, pilot, f"request {n}")
+                await _replied(app, pilot, count=n + 1)
+            await pilot.pause()
+            box = app.query_one("#ai-input", Input)
+            log = app.query_one("#ai-log")
+
+            assert box.region.bottom <= SIZE[1]
+            assert log.max_scroll_y > 0  # the conversation scrolls, not the page
+            assert app.query_one("#ai-panel").scroll_y == 0
+
+
+@pytest.mark.asyncio
+async def test_up_brings_back_the_last_request(ai_on):
+    model = ScriptedModel(_answer("Done."))
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "shrink the videos")
+            await _replied(app, pilot)
+            box = app.query_one("#ai-input", Input)
+            box.focus()
+            await pilot.press("up")
+
+            assert box.value == "shrink the videos"
+
+
+@pytest.mark.asyncio
+async def test_a_short_terminal_keeps_the_input_in_view(ai_on):
+    model = ScriptedModel(_answer("A long answer.\n\n" + "More.\n\n" * 10))
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=(80, 16)) as pilot:
+            await _send(app, pilot, "hello")
+            await _replied(app, pilot)
+            await pilot.pause()
+            box = app.query_one("#ai-input", Input)
+            log = app.query_one("#ai-log")
+
+            assert box.region.height and box.region.bottom <= 16
+            assert log.allow_vertical_scroll and log.max_scroll_y > 0

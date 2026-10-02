@@ -137,6 +137,12 @@ class MaxDashboardApp(App):
         background: $panel;
     }
 
+    /* The AI page scrolls its conversation itself, so the input under it
+       stays in view. */
+    #content > #ai-panel {
+        overflow-y: hidden;
+    }
+
     Footer {
         dock: bottom;
         height: auto;

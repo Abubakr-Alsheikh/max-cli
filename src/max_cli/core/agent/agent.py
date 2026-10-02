@@ -11,6 +11,7 @@ Rules from PLANS/active/dashboard-first-ai-agent.md (D4, step 4):
 
 import json
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
@@ -64,6 +65,7 @@ or two short sentences what you did and where the results are.
 
 class StepKind(str, Enum):
     LOADED = "loaded"  # read a group's actions
+    STARTED = "started"  # an action is running now; RAN or FAILED follows
     RAN = "ran"  # ran an action and it worked
     FAILED = "failed"  # ran an action and it failed, or its arguments were wrong
     REFUSED = "refused"  # a path outside the allowed folders
@@ -78,24 +80,37 @@ class ActionCall:
     action: Action
     arguments: dict[str, Any]
 
+    def shown_arguments(self) -> dict[str, str]:
+        """The arguments worth showing: set, and not off or empty."""
+        return _shown(self.arguments)
+
     def describe(self) -> str:
         """`files shred  target=C:\\notes.txt`, for a confirmation question."""
         shown = "  ".join(
-            f"{name}={value}"
-            for name, value in self.arguments.items()
-            if value not in (None, "", False, [])
+            f"{name}={value}" for name, value in self.shown_arguments().items()
         )
         return f"{self.action.group} {self.action.name}  {shown}".rstrip()
 
 
 @dataclass(frozen=True)
 class Step:
-    """One thing the agent did, for the CLI and the dashboard to show."""
+    """One thing the agent did, for the CLI and the dashboard to show.
+
+    An action reports STARTED with its arguments, then RAN or FAILED with
+    the same action id, its result and how long it took.
+    """
 
     kind: StepKind
     action_id: str
     text: str
     result: Optional[ActionResult] = None
+    arguments: dict[str, str] = field(default_factory=dict)
+    seconds: float = 0.0
+
+    @property
+    def label(self) -> str:
+        """`files preview` for "files.preview"."""
+        return self.action_id.replace(".", " ")
 
 
 @dataclass
@@ -271,41 +286,83 @@ class Agent:
         try:
             arguments = coerce_args(action, given)
         except MaxError as e:
-            self._report(reply, Step(StepKind.FAILED, action_id, f"{label}: {e}"))
+            self._report(
+                reply,
+                Step(
+                    StepKind.FAILED, action_id, f"{label}: {e}", arguments=_shown(given)
+                ),
+            )
             return f"Error: {e}"
 
         call = ActionCall(action, arguments)
+        shown = call.shown_arguments()
         outside = self.scope.outside(_paths(action, arguments))
         if outside:
             allowed = "; ".join(str(root) for root in self.scope.roots)
             text = f"{', '.join(outside)} is outside the folders I may use"
-            self._report(reply, Step(StepKind.REFUSED, action_id, text))
+            self._report(
+                reply, Step(StepKind.REFUSED, action_id, text, arguments=shown)
+            )
             return (
                 f"Error: {text} ({allowed}). Ask the user to name that folder "
                 "in their request."
             )
         if self.dry_run:
             self._report(
-                reply, Step(StepKind.PLANNED, action_id, f"Would run {call.describe()}")
+                reply,
+                Step(
+                    StepKind.PLANNED,
+                    action_id,
+                    f"Would run {call.describe()}",
+                    arguments=shown,
+                ),
             )
             return "Dry run: checked, not run. Carry on as if it worked."
         if action.danger in CONFIRM_DANGERS and not self.confirm(call):
             self._report(
-                reply, Step(StepKind.DECLINED, action_id, f"Skipped {call.describe()}")
+                reply,
+                Step(
+                    StepKind.DECLINED,
+                    action_id,
+                    f"Skipped {call.describe()}",
+                    arguments=shown,
+                ),
             )
             return DECLINED_NOTE
 
+        self._report(
+            reply,
+            Step(StepKind.STARTED, action_id, f"Running {label}", arguments=shown),
+        )
+        started = time.monotonic()
         try:
             result = run_action(action, given)
-        except MaxError as e:
-            self._report(reply, Step(StepKind.FAILED, action_id, f"{label}: {e}"))
-            return f"Error: {e}"
         except Exception as e:  # noqa: BLE001 - the model hears about any failure
-            logger.warning("Agent action %s failed", action_id, exc_info=True)
-            self._report(reply, Step(StepKind.FAILED, action_id, f"{label}: {e}"))
+            if not isinstance(e, MaxError):
+                logger.warning("Agent action %s failed", action_id, exc_info=True)
+            self._report(
+                reply,
+                Step(
+                    StepKind.FAILED,
+                    action_id,
+                    f"{label}: {e}",
+                    arguments=shown,
+                    seconds=time.monotonic() - started,
+                ),
+            )
             return f"Error: {e}"
         kind = StepKind.RAN if result.ok else StepKind.FAILED
-        self._report(reply, Step(kind, action_id, f"{label}: {result.message}", result))
+        self._report(
+            reply,
+            Step(
+                kind,
+                action_id,
+                f"{label}: {result.message}",
+                result,
+                arguments=shown,
+                seconds=time.monotonic() - started,
+            ),
+        )
         return json.dumps(result.to_dict(), ensure_ascii=False, default=str)[
             :MAX_RESULT_CHARS
         ]
@@ -331,6 +388,17 @@ def _assistant_message(content: Optional[str], tool_calls: list[Any]) -> dict[st
             }
             for call in tool_calls
         ],
+    }
+
+
+def _shown(arguments: Mapping[str, Any]) -> dict[str, str]:
+    """Arguments as text, without the unset, off and empty ones."""
+    return {
+        name: ", ".join(str(item) for item in value)
+        if isinstance(value, (list, tuple))
+        else str(value)
+        for name, value in arguments.items()
+        if value not in (None, "", False, [])
     }
 
 

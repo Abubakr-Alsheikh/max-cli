@@ -25,12 +25,18 @@ DANGER_NOTES = {
 }
 STEP_STYLES = {
     "loaded": ("·", "dim"),
+    "started": ("⚙", "bold cyan"),
     "ran": ("✓", "green"),
     "failed": ("✗", "red"),
     "refused": ("!", "yellow"),
     "declined": ("-", "dim"),
     "planned": ("→", "cyan"),
 }
+# Quicker actions don't show how long they took.
+MIN_SHOWN_SECONDS = 0.1
+# A finished action's lines sit under its "⚙ name" line.
+RESULT_INDENT = "      "
+ARGUMENT_INDENT = "      "
 EXAMPLES = (
     "shrink every video in this folder",
     "merge the PDFs in Downloads into one file",
@@ -53,8 +59,39 @@ def _confirm(call: "ActionCall") -> bool:
     )
 
 
+def _show_arguments(step: "Step") -> None:
+    width = max((len(name) for name in step.arguments), default=0)
+    for name, value in step.arguments.items():
+        console.print(
+            f"{ARGUMENT_INDENT}[dim]{escape(name.ljust(width))}[/dim]  {escape(value)}"
+        )
+
+
 def _show_step(step: "Step") -> None:
-    mark, style = STEP_STYLES.get(step.kind.value, ("·", "dim"))
+    """One step as it happens: an action's name and arguments when it starts,
+    its result (and the files it made) indented under it when it ends."""
+    kind = step.kind.value
+    mark, style = STEP_STYLES.get(kind, ("·", "dim"))
+    if kind in ("started", "planned", "refused", "declined"):
+        title = {"started": step.label, "planned": f"Would run {step.label}"}.get(
+            kind, step.text
+        )
+        console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
+        _show_arguments(step)
+        return
+    if kind in ("ran", "failed") and (step.result is not None or step.seconds):
+        message = step.result.message if step.result is not None else step.text
+        took = (
+            f"  [dim]{step.seconds:.1f}s[/dim]"
+            if step.seconds >= MIN_SHOWN_SECONDS
+            else ""
+        )
+        console.print(
+            f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
+        )
+        for path in step.result.output_files if step.result is not None else []:
+            console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
+        return
     console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
 
 
@@ -65,9 +102,27 @@ def _make_agent(dry_run: bool = False) -> "Agent":
 
 
 def _show_reply(reply: "AgentReply") -> None:
-    console.print(Panel(escape(reply.text), title="[cyan]Max[/cyan]", border_style="cyan"))
+    """The answer as Markdown in a panel; the footer counts actions and tokens."""
+    from rich.markdown import Markdown
+
+    actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
+    facts = []
+    if actions:
+        facts.append(f"{actions} action{'s' if actions != 1 else ''}")
     if reply.tokens:
-        console.print(f"[dim]{reply.tokens:,} tokens[/dim]")
+        facts.append(f"{reply.tokens:,} tokens")
+    console.print()
+    console.print(
+        Panel(
+            Markdown(reply.text),
+            title="[bold cyan]Max[/bold cyan]",
+            title_align="left",
+            subtitle=f"[dim]{' · '.join(facts)}[/dim]" if facts else None,
+            subtitle_align="right",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
 
 
 @app.command("ask")
@@ -334,7 +389,9 @@ def semantic_search_cmd(
     )
 
     requested = [ext.strip().lower().lstrip(".") for ext in extensions.split(",")]
-    unreadable = [ext for ext in requested if ext and f".{ext}" not in SEARCHABLE_SUFFIXES]
+    unreadable = [
+        ext for ext in requested if ext and f".{ext}" not in SEARCHABLE_SUFFIXES
+    ]
     if unreadable:
         readable = ", ".join(sorted(s.lstrip(".") for s in SEARCHABLE_SUFFIXES))
         console.print(

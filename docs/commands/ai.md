@@ -13,6 +13,19 @@ max PROMPT
 
 You can leave out `ai ask`: when the first word after `max` isn't a command, Max hands the whole line to the agent.
 
+While it works, Max prints each action as it starts (`⚙ files order`) with its arguments under it, then the result (`✓ File ordering complete!`, with the time it took and the files it made). The answer comes last, rendered as Markdown in a panel that counts the actions and tokens:
+
+```text
+  ⚙ files preview
+      target  notes.txt
+      lines   20
+      ✓ notes.txt
+┌─ Max ──────────────────────────────────────────────┐
+│  • Buy milk.                                        │
+│  • Call Sam.                                        │
+└────────────────────────────── 1 action · 5,194 tokens ┘
+```
+
 **Options:**
 
 - `--dry-run` - Show the steps the agent would run, and change nothing
