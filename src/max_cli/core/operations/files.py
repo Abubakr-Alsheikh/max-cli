@@ -379,28 +379,25 @@ def backup_cleanup(
 
 
 def undo() -> ActionResult:
-    """Reverse the latest recorded file operation.
+    """Reverse the newest recorded change that isn't undone yet. Run it
+    again to step further back, one command at a time.
 
     Raises TransactionError when a step fails; some files may be restored.
     """
     from max_cli.common.transaction_log import TransactionLog
 
-    latest = TransactionLog.get_latest_group()
-    if not latest:
+    if not TransactionLog.list_groups():
         return ActionResult(True, "No transaction history found. Nothing to undo.")
-    summary = {"command": latest["command"], "timestamp": latest["timestamp"]}
-    if latest["undo_status"] == "undone":
-        return ActionResult(
-            True,
-            f"Last transaction ({latest['group_id']}) is already undone.",
-            details=summary,
-        )
-    steps = TransactionLog.load(latest["group_id"]).undo()
+    group = TransactionLog.next_to_undo()
+    if group is None:
+        return ActionResult(True, "Everything Max recorded is already undone.")
+    summary = {"command": group["command"], "timestamp": group["timestamp"]}
+    steps = TransactionLog.load(group["group_id"]).undo()
     return ActionResult(
         True,
         "Undo complete! Files have been restored.",
         details={**summary, "steps": steps},
-        undo_group=latest["group_id"],
+        undo_group=group["group_id"],
     )
 
 

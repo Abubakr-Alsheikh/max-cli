@@ -198,15 +198,17 @@ class TransactionLog:
 
     @classmethod
     def list_groups(cls, storage_dir: Optional[Path] = None) -> list[dict]:
-        """List all transaction groups, newest first."""
+        """List all transaction groups, newest first by when they ran.
+
+        Not by file time: undo rewrites a group's file, which moved an undone
+        group to the top and hid the next one to undo.
+        """
         store = storage_dir or Path.home() / ".max_cli" / "transactions"
         if not store.exists():
             return []
 
         groups = []
-        for f in sorted(
-            store.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True
-        ):
+        for f in store.glob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 groups.append(
@@ -215,14 +217,38 @@ class TransactionLog:
                         "command": data["command"],
                         "timestamp": data["timestamp"],
                         "operation_count": len(data["operations"]),
+                        # Where the change happened: the first moved, renamed
+                        # or deleted file's folder (two "files order" rows
+                        # looked the same in the dashboard's Undo list).
+                        "folder": next(
+                            (
+                                str(Path(op["original_path"]).parent)
+                                for op in data["operations"]
+                                if op.get("original_path")
+                            ),
+                            None,
+                        ),
                         "status": data["status"],
                         "undo_status": data.get("undo_status"),
                     }
                 )
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError, KeyError):
                 continue
 
+        groups.sort(key=lambda group: group["timestamp"], reverse=True)
         return groups
+
+    @classmethod
+    def next_to_undo(cls, storage_dir: Optional[Path] = None) -> Optional[dict]:
+        """The newest group not undone yet: undo steps back one group a time."""
+        return next(
+            (
+                group
+                for group in cls.list_groups(storage_dir)
+                if group["undo_status"] != "undone"
+            ),
+            None,
+        )
 
     @classmethod
     def get_latest_group(cls, storage_dir: Optional[Path] = None) -> Optional[dict]:

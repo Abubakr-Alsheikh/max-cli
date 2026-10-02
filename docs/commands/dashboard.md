@@ -15,7 +15,7 @@ The dashboard comes with the base install. Older instructions say `pip install m
 
 ## Sections
 
-The sidebar on the left lists eleven sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's key to jump to it (a number, or `,` for Settings), click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
+The sidebar on the left lists ten sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's key to jump to it (a number, or `,` for Settings), click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
 
 | Key | Section | What it does |
 |-----|---------|--------------|
@@ -29,16 +29,15 @@ The sidebar on the left lists eleven sections in three groups. It starts as a st
 | `7` | **Files** | Pick a folder or a file, see what it holds, and sort, clean, back up or undo with any `max files` action |
 | `8` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
-| `9` | **Queue** | What's running, waiting and finished, with buttons to pause, cancel and retry |
-| `0` | **History** | Finished tasks, with filters |
+| `9` | **Activity** | Three tabs: Queue (running, waiting and finished tasks), History (every action, with filters) and Undo (put back what Max moved, renamed or deleted) |
 | | **Setup** | |
 | `,` | **Settings** | Your defaults (AI, downloads, images) and upkeep: FFmpeg status, data size, cache and undo cleanup |
 
-Badges next to a section show what needs a look: a green `2` on Download means two downloads are running, a yellow `3` on Queue means three tasks are waiting or running, and a red `!1` on History means one action failed since you last opened History.
+Badges next to a section show what needs a look: a green `2` on Download means two downloads are running. On Activity, a red `!1` means one action failed since you last opened Activity; otherwise a yellow `3` means three tasks are waiting or running.
 
 The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
 
-The Queue and History sections read the same task store as `max queue` and `max grab`. See [Queue](queue.md).
+The Activity page's Queue tab reads the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
 ## Download page
 
@@ -46,7 +45,7 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 
 - **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
 - **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
-- **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Queue page and the settings.
+- **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Activity page's Queue and the settings.
 
 ## Video page
 
@@ -94,13 +93,25 @@ Every Browse button opens the same window. It starts in the folder of the path a
 
 Fields that take a folder list folders only and pick the open one. Fields for a file Max writes (an output) ask for a file name and save it in the open folder. Fields that take a file also have **Use this folder**, for actions that work on a whole folder.
 
-## Queue page
+## Activity page
 
-The Queue page (`9`) shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
+The Activity page (`9`) has three tabs. Queue opens first; the Download page's Queue button opens it too.
+
+### Queue
+
+The Queue tab shows the work the dashboard runs, one task at a time. At the top, four counters show what's running and waiting, and how many tasks finished or failed today. The light in the corner says whether the queue is running.
 
 - **Now running** shows the running task with its progress, speed and time left. Cancel stops it.
 - **Up next** lists the waiting tasks in the order they'll run. Each one has Pause (or Resume) and Cancel. "Pause all", "Resume all" and "Clear waiting" act on the whole list; "Clear waiting" asks first and leaves the running task alone.
-- **Finished** shows the last 8 tasks. Retry puts a failed or cancelled task back in line, "Run again" repeats a finished one, and "Open folder" opens where its files went. The History page (`0`) has everything else.
+- **Finished** shows the last 8 tasks. Retry puts a failed or cancelled task back in line, "Run again" repeats a finished one, and "Open folder" opens where its files went. "All activity (History)" opens the History tab.
+
+### History
+
+Every action you ran from the dashboard, newest first, 10 at a time with Prev and Next. Pick a kind (Video, Audio, PDF, Downloads ...), tick **Failed only**, or search by name, file or message. The line under the list shows the highlighted action in full: its message or error, its output files and the options it ran with. **Clear history** asks first and leaves your files alone.
+
+### Undo
+
+The file changes Max recorded (organize, order, smart-sort and duplicates --delete), newest first, with the folder each one changed. **Undo** puts back the newest change that isn't undone yet, after one confirmation; press it again to step further back. Folders that a change created, such as organize's Artist/Album folders, go too when they're empty again.
 
 ## Settings page
 
@@ -118,7 +129,7 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
 
 Press `J` to open or close the Jobs window above the footer. It shows the task running now, with its progress, speed and time left, then the tasks waiting their turn, then the last few that finished, failed or were cancelled. It opens by itself when you press "Queue for later" on the Download page or "Add to queue" on an action's form.
 
-While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open the Queue page (`9`).
+While the dashboard is open it runs queued tasks one after another, including any left from earlier runs. To cancel or retry a task, open Activity (`9`).
 
 ## Theme
 
@@ -128,7 +139,7 @@ The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "t
 
 | Key | Action |
 |-----|--------|
-| `1` to `9`, `0` | Jump to a section |
+| `1` to `9` | Jump to a section |
 | `,` | Settings |
 | `Alt+Left` | Back to the previous section |
 | `Esc` | Move to the sidebar |

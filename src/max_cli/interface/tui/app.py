@@ -11,12 +11,11 @@ from max_cli.interface.tui.messages import OpenFile, OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.tool_pages import TOOL_PAGES
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
+from max_cli.interface.tui.widgets.activity_panel import ActivityPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
-from max_cli.interface.tui.widgets.history_panel import HistoryPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
-from max_cli.interface.tui.widgets.queue_panel import QueuePanel
 from max_cli.interface.tui.widgets.settings_panel import SettingsPanel
 from max_cli.interface.tui.widgets.sidebar import (
     SECTION_KEYS,
@@ -30,8 +29,7 @@ from max_cli.interface.tui.widgets.tool_page import ToolPage
 
 # Panels whose data changes on its own (queue, history, disk use ...).
 REFRESHABLE_PANEL_IDS = (
-    "#queue-panel",
-    "#history-panel",
+    "#activity-panel",
     "#home-panel",
 )
 # Below this width the sidebar shows icons only.
@@ -47,6 +45,9 @@ RENAMED_PAGES = {
     "analytics": "home",
     # Every action has its group's page now (PLANS/active/dashboard-tool-pages.md).
     "tools": "home",
+    # Queue and History became the Activity page's tabs.
+    "queue": "activity",
+    "history": "activity",
 }
 # Named "collapsed", not the earlier "sidebar_compact": that older choice
 # predates the icons-first default and must not override it.
@@ -140,7 +141,7 @@ class MaxDashboardApp(App):
     }
     /* The Download page pages its history instead of scrolling it; the rule
        above would make it a tall inner scroll area. */
-    #download-history-table {
+    #download-history-table, #history-table, #undo-table {
         height: auto;
         min-height: 0;
         border: none;
@@ -164,13 +165,6 @@ class MaxDashboardApp(App):
         min-width: 0;
     }
 
-    /* ── Shared bottom action bars ──────────────────────── */
-    #history-controls,
-    #files-actions, #history-actions {
-        height: auto;
-        margin-top: 1;
-        dock: bottom;
-    }
 
     /* Inner scroll areas keep a usable height; the page scrolls around them. */
     #chat-scroll {
@@ -270,8 +264,7 @@ class MaxDashboardApp(App):
                 yield DownloadPanel(id="download-panel")
                 for spec in TOOL_PAGES:
                     yield ToolPage(spec, id=f"{spec.page_id}-panel")
-                yield QueuePanel(id="queue-panel")
-                yield HistoryPanel(id="history-panel")
+                yield ActivityPanel(id="activity-panel")
                 yield SettingsPanel(id="settings-panel")
                 yield ChatPanel(id="chat-panel")
         yield JobsDrawer(id="jobs")
@@ -328,9 +321,8 @@ class MaxDashboardApp(App):
         self.query_one(Sidebar).set_active(section_id)
         self._show_panel(section_id)
         save_pref(PREF_LAST_PAGE, section_id)
-        if section_id == "history":
+        if section_id == "activity":
             self._history_seen = datetime.now().isoformat()
-            self.query_one(Sidebar).set_badge("history", None)
 
     def action_goto(self, section_id: str) -> None:
         self.navigate(section_id)
@@ -382,9 +374,12 @@ class MaxDashboardApp(App):
         if not sidebars:
             return  # shutting down
         sidebar = sidebars.first()
-        sidebar.set_badge("queue", Badge("waiting", self._waiting_tasks()))
-        if self._current != "history":
-            sidebar.set_badge("history", Badge("failed", self._new_failures()))
+        # One badge for Activity: new failures matter more than a queue.
+        failures = 0 if self._current == "activity" else self._new_failures()
+        if failures:
+            sidebar.set_badge("activity", Badge("failed", failures))
+        else:
+            sidebar.set_badge("activity", Badge("waiting", self._waiting_tasks()))
 
     @staticmethod
     def _waiting_tasks() -> int:
@@ -458,3 +453,5 @@ class MaxDashboardApp(App):
 
     def on_open_page(self, message: OpenPage) -> None:
         self.navigate(message.section_id)
+        if message.tab and message.section_id == "activity":
+            self.query_one(ActivityPanel).show_tab(message.tab)

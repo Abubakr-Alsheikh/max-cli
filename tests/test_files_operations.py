@@ -43,6 +43,19 @@ class TestOrderAndUndo:
         assert _names(work_dir) == ["alpha.txt", "beta.txt"]
         assert "already undone" in files.undo().message
 
+    def test_undo_again_steps_back_to_the_change_before(self, work_dir):
+        """A second undo said "already undone" and stopped there."""
+        (work_dir / "alpha.txt").write_text("a", encoding="utf-8")
+        first = files.order(work_dir)
+        (work_dir / "beta.txt").write_text("b", encoding="utf-8")
+        second = files.order(work_dir)
+
+        assert files.undo().undo_group == second.undo_group
+        assert _names(work_dir) == ["1_alpha.txt", "beta.txt"]
+        assert files.undo().undo_group == first.undo_group
+        assert _names(work_dir) == ["alpha.txt", "beta.txt"]
+        assert "already undone" in files.undo().message
+
     def test_dry_run_changes_nothing_and_records_nothing(self, work_dir):
         (work_dir / "alpha.txt").write_text("a", encoding="utf-8")
 

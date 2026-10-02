@@ -117,7 +117,7 @@ class JobsDrawer(Vertical):
         yield Static("", id="jobs-list")
         yield Static(
             Content(
-                f"J closes this  ·  {SECTION_KEYS['queue']} opens the Queue page "
+                f"J closes this  ·  {SECTION_KEYS['activity']} opens Activity "
                 "to cancel or retry"
             ),
             id="jobs-hint",

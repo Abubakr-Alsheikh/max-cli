@@ -32,8 +32,7 @@ SECTIONS = [
     ("pdf", "\U0001f4c4", "PDF"),
     ("files", "\U0001f4c1", "Files"),
     ("chat", "\U0001f4ac", "Chat"),
-    ("queue", "\U0001f4cb", "Queue"),
-    ("history", "\U0001f558", "History"),
+    ("activity", "\U0001f4cb", "Activity"),
     ("settings", "\U0001f527", "Settings"),
 ]
 SECTION_GROUPS = (
@@ -41,7 +40,7 @@ SECTION_GROUPS = (
         "DO",
         ("home", "download", "video", "audio", "images", "pdf", "files", "chat"),
     ),
-    ("TRACK", ("queue", "history")),
+    ("TRACK", ("activity",)),
     ("SETUP", ("settings",)),
 )
 # Settings sits apart from the numbered pages, on the comma key. Bindings

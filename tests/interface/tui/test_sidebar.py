@@ -67,14 +67,14 @@ async def test_alt_left_goes_back():
 async def test_the_dashboard_reopens_on_the_last_page():
     first = MaxDashboardApp()
     async with first.run_test(size=WIDE) as pilot:
-        first.navigate("queue")
+        first.navigate("audio")
         await pilot.pause()
 
-    assert load_prefs()["last_page"] == "queue"
+    assert load_prefs()["last_page"] == "audio"
     second = MaxDashboardApp()
     async with second.run_test(size=WIDE) as pilot:
         await pilot.pause()
-        assert _shown(second) == "queue"
+        assert _shown(second) == "audio"
 
 
 @pytest.mark.asyncio
@@ -111,7 +111,7 @@ async def test_arrow_keys_move_when_the_pages_dont_fit():
         await pilot.press(*["down"] * 9)
         await pilot.pause()
 
-        assert app.focused.id == "nav-history"
+        assert app.focused.id == "nav-settings"
 
 
 @pytest.mark.asyncio
@@ -181,17 +181,30 @@ async def test_running_downloads_show_as_a_badge():
 
 
 @pytest.mark.asyncio
-async def test_new_failures_badge_history_until_you_open_it():
+async def test_new_failures_badge_activity_until_you_open_it():
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
         ActivityLog().add_entry("download", "grab", status="failed")
         app._refresh_badges()
-        assert app.query_one(Sidebar).badge("history") == Badge("failed", 1)
+        assert app.query_one(Sidebar).badge("activity") == Badge("failed", 1)
 
-        app.navigate("history")
+        app.navigate("activity")
         await pilot.pause()
         app._refresh_badges()
-        assert app.query_one(Sidebar).badge("history") is None
+        # Seen: the badge goes back to counting the queue (empty here).
+        assert app.query_one(Sidebar).badge("activity") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("old_page", ["queue", "history"])
+async def test_a_saved_queue_or_history_page_opens_activity(old_page):
+    from max_cli.interface.tui.ui_prefs import save_pref
+
+    save_pref("last_page", old_page)
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        await pilot.pause()
+        assert _shown(app) == "activity"
 
 
 @pytest.mark.asyncio

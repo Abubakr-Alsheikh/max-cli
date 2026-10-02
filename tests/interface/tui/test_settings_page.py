@@ -265,11 +265,10 @@ def test_the_sidebar_pages():
         "pdf",
         "files",
         "chat",
-        "queue",
-        "history",
+        "activity",
         "settings",
     ]
-    assert SECTION_KEYS["history"] == "0"
+    assert SECTION_KEYS["activity"] == "9"
     assert SECTION_KEYS["settings"] == ","
     assert len(set(SECTION_KEYS.values())) == len(SECTION_KEYS)
 

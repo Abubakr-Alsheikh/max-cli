@@ -334,21 +334,21 @@ async def test_open_folder_opens_the_first_output_folder(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_history_button_opens_the_history_page():
+async def test_history_button_opens_the_history_tab():
     from max_cli.interface.tui.messages import OpenPage
 
-    opened: list[str] = []
+    opened: list[tuple[str, str]] = []
 
     class RecordingApp(QueueApp):
         def on_open_page(self, message: OpenPage) -> None:
-            opened.append(message.section_id)
+            opened.append((message.section_id, message.tab))
 
     app = RecordingApp()
     async with app.run_test(size=SIZE) as pilot:
         app.query_one("#btn-goto-history", Button).press()
         await pilot.pause()
 
-    assert opened == ["history"]
+    assert opened == [("activity", "history")]
 
 
 @pytest.mark.asyncio
@@ -357,7 +357,7 @@ async def test_in_the_dashboard_the_queue_light_shows_the_worker():
 
     app = MaxDashboardApp()
     async with app.run_test(size=(140, 44)) as pilot:
-        app.navigate("queue")
+        app.navigate("activity")
         await pilot.pause()
         light = str(app.query_one("#queue-worker", Static).content)
 
