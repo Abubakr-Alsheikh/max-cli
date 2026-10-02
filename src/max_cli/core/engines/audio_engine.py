@@ -222,7 +222,11 @@ class AudioEngine(FFmpegEngine):
 
         import requests
 
-        response = requests.get(RNNOISE_MODEL_URL, stream=True, timeout=30)
+        from max_cli.config import settings
+
+        response = requests.get(
+            RNNOISE_MODEL_URL, stream=True, timeout=settings.DOWNLOAD_TIMEOUT
+        )
         response.raise_for_status()
 
         with open(model_path, "wb") as f:

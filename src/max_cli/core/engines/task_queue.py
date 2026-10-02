@@ -51,8 +51,7 @@ class TaskItem(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
-    retry_count: int = 0
-    max_retries: int = 3
+    retry_count: int = 0  # runs so far; settings.MAX_RETRIES caps the reruns
     output_path: Optional[str] = None
     output_files: list[str] = []
 

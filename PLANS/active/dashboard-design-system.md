@@ -69,8 +69,8 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] Maintainer feedback (2026-09-29): items were too small and the collapsed icons hard to see.
   - Each page is now a 3-row target.
   - Colour emoji replace the thin symbols.
-  - The sidebar starts as icons, with a `»`/`«` button to expand it and a tooltip with the name on each icon.
-  - The choice is saved as `sidebar_collapsed`; the older `sidebar_compact` key is ignored.
+  - The sidebar started as icons, with a `»`/`«` button to expand it and a tooltip with the name on each icon. Since 2026-10-02 it starts open (the maintainer's choice).
+  - The choice is saved as `sidebar_open`; the older `sidebar_compact` and `sidebar_collapsed` keys are ignored.
 
 ### R2: Theme and navigation
 - [x] One registered Max theme, `max-cyber` (`interface/tui/theme.py`), replaces the `$var` overrides in `app.py`. The Ctrl+P theme choice is remembered in `ui_prefs` (2026-09-29).
@@ -114,7 +114,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] Queue (2026-09-30): tiles for running, waiting, done today and failed today; NOW RUNNING, UP NEXT and FINISHED lists with pause, resume, cancel, retry, run again and open folder; Pause all, Resume all, Clear waiting (asks first). Replaces a bare table whose buttons acted on the table cursor.
 - [x] Pages review (maintainer, 2026-09-30): 10 pages became 8. Analytics went (Home shows the same numbers); Config and System became one Settings page (2026-09-30).
   - Settings shows only settings some code reads, with fitting controls, saves only changed keys, applies them at once, and flags a local `.env` that overrides them. Maintenance: versions, FFmpeg, data size, cache and 30-day undo cleanup, reset; each asks first.
-  - Nine settings nothing reads (`APP_NAME`, `BATCH_SIZE`, `CONFIRM_DESTRUCTIVE`, `DOWNLOAD_TIMEOUT`, `GRAB_AUDIO_FORMAT`, `GRAB_QUEUE_ENABLED`, `MAX_RETRIES`, `PROGRESS_BAR`, `VERBOSE`) are left off the page. Decide later whether to delete them from `config.py` or make them work.
+  - Nine settings nothing read. Decided 2026-10-02: `CONFIRM_DESTRUCTIVE`, `MAX_RETRIES` and `DOWNLOAD_TIMEOUT` now work and sit in a SAFETY AND NETWORK card; the other six are deleted and listed in `config.REMOVED_SETTINGS`, which Maintenance, the dashboard's start and `max config validate` point out.
 - [ ] History becomes Activity: readable times, where the output went, Run again, and Undo for file changes.
 - [ ] Superseded by `dashboard-tool-pages.md` (maintainer, 2026-09-30): a page per command group instead of one Tools page and a "start from a file" Files page.
 - [ ] Move System's and Analytics' folder-size walks into a thread worker.

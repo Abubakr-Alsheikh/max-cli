@@ -15,7 +15,7 @@ The dashboard comes with the base install. Older instructions say `pip install m
 
 ## Sections
 
-The sidebar on the left lists ten sections in three groups. It starts as a strip of icons; hover an icon to see its name, or press the `»` button at the top (or `Ctrl+B`) to show the names. Press a section's key to jump to it (a number, or `,` for Settings), click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
+The sidebar on the left lists eleven sections in three groups, each with its name. Press the `«` button at the top (or `Ctrl+B`) to fold it to a strip of icons; hover an icon to see its name, and press `»` to open it again. Press a section's key to jump to it (a number, or `,` for Settings), click it, or move with the arrow keys and press `Enter`. The dashboard opens on the section you used last.
 
 | Key | Section | What it does |
 |-----|---------|--------------|
@@ -30,12 +30,13 @@ The sidebar on the left lists ten sections in three groups. It starts as a strip
 | `8` | **Chat** | AI chat with command suggestions |
 | | **Track** | |
 | `9` | **Activity** | Three tabs: Queue (running, waiting and finished tasks), History (every action, with filters) and Undo (put back what Max moved, renamed or deleted) |
-| | **Setup** | |
-| `,` | **Settings** | Your defaults (AI, downloads, images) and upkeep: FFmpeg status, data size, cache and undo cleanup |
+| | **More** | |
+| `0` | **Extras** | Show a QR code for a link, save a screenshot from the clipboard, copy a text file to the clipboard |
+| `,` | **Settings** | Your defaults (AI, downloads, images, safety) and upkeep: FFmpeg status, data size, cache and undo cleanup |
 
 Badges next to a section show what needs a look: a green `2` on Download means two downloads are running. On Activity, a red `!1` means one action failed since you last opened Activity; otherwise a yellow `3` means three tasks are waiting or running.
 
-The dashboard remembers whether you expanded the sidebar. In a window narrower than 100 columns it always shows icons only.
+The dashboard remembers whether you left the sidebar open or folded. In a window narrower than 100 columns it always shows icons only.
 
 The Activity page's Queue tab reads the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
@@ -113,6 +114,18 @@ Every action you ran from the dashboard, newest first, 10 at a time with Prev an
 
 The file changes Max recorded (organize, order, smart-sort and duplicates --delete), newest first, with the folder each one changed. **Undo** puts back the newest change that isn't undone yet, after one confirmation; press it again to step further back. Folders that a change created, such as organize's Artist/Album folders, go too when they're empty again.
 
+## Extras page
+
+The Extras page (`0`) holds the `max tools` actions, one card each:
+
+- **Share as QR code:** type a link or any text and press Run. The code appears on the page; point your phone's camera at it. Use it to open a local dev server on your phone.
+- **Save clipboard image:** saves the image on your clipboard, such as a screenshot. The file name starts as a new dated name in your Pictures folder (`clipboard-20261002-153012.png`), so pastes never replace each other. Tick **Overwrite** to replace a file that has the name you typed. After a save, "Open on the Images page" opens the picture there.
+- **Copy text file:** puts a text file's contents on the clipboard.
+
+## Find any action (Ctrl+P)
+
+Press `Ctrl+P` and type part of an action's or a page's name, such as `merge` or `pdf compress`. Each result shows the page it's on and what it does. Press `Enter` to open that page with the action's form shown and the cursor in its first field. With nothing typed, the list shows every page and action. Theme commands are there too.
+
 ## Settings page
 
 The Settings page (`,`) edits the same settings as `max config`, saved in `~/.max_config.env`. It shows only settings that change something:
@@ -120,10 +133,11 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
 - **AI:** the API key (hidden; press Show to see it), the base URL, the chat and image models, and Ollama.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
+- **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.
 
 "Save changes" checks the values first, writes only the settings you changed and applies them at once; "Downloads at once" applies the next time `max` starts. An empty API key removes it from the file. If a `.env` file in the folder you started `max` from sets the same settings, it wins; Maintenance says so.
 
-**Maintenance** shows the Max, Python and system versions, whether FFmpeg is found, and how much `~/.max_cli` holds. Its buttons clear the cache, remove undo backups and undo records older than 30 days, and reset every setting. Each one asks first.
+**Maintenance** shows the Max, Python and system versions, whether FFmpeg is found, and how much `~/.max_cli` holds. Its buttons clear the cache, remove undo backups and undo records older than 30 days, and reset every setting. Each one asks first. If your settings file still sets something Max no longer has, such as `VERBOSE`, Maintenance names it and **Remove them** deletes those lines. The dashboard points them out when it starts, too.
 
 ## Jobs window
 
@@ -139,13 +153,13 @@ The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "t
 
 | Key | Action |
 |-----|--------|
-| `1` to `9` | Jump to a section |
+| `1` to `9`, `0` | Jump to a section |
 | `,` | Settings |
 | `Alt+Left` | Back to the previous section |
 | `Esc` | Move to the sidebar |
 | `?` | Show every shortcut |
 | `J` | Show or hide the Jobs window |
-| `Ctrl+P` | Command palette (themes and more) |
+| `Ctrl+P` | Find any action or page by name; themes |
 | `q` | Quit |
 | `r` | Refresh the sections |
 | `Ctrl+B` | Collapse or expand the sidebar |

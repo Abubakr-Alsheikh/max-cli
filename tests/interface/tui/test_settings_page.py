@@ -9,10 +9,10 @@ from textual.app import App, ComposeResult
 from textual.widgets import Button, Checkbox, Input, Select, Static
 
 from max_cli.common.settings_file import read_settings_file, settings_file_path
-from max_cli.config import Settings, settings
+from max_cli.config import REMOVED_SETTINGS, Settings, settings
 from max_cli.interface.tui.widgets import settings_panel
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
-from max_cli.interface.tui.widgets.settings_panel import FIELDS, UNUSED, SettingsPanel
+from max_cli.interface.tui.widgets.settings_panel import FIELDS, SettingsPanel
 from max_cli.interface.tui.workers import _show_if_open
 
 SIZE = (130, 80)
@@ -62,16 +62,20 @@ def _used_settings() -> set[str]:
 # --- which settings show ------------------------------------------------------
 
 
-def test_every_setting_is_shown_or_known_to_be_unused():
-    assert set(FIELDS) | UNUSED == set(Settings.model_fields)
-    assert not set(FIELDS) & UNUSED
+def test_the_page_shows_every_setting():
+    assert set(FIELDS) == set(Settings.model_fields)
 
 
-def test_the_page_shows_every_setting_the_code_reads():
-    used = _used_settings()
+def test_code_reads_every_setting():
+    """A setting nothing reads only confuses: delete it from config.py and
+    add it to REMOVED_SETTINGS."""
+    unread = set(Settings.model_fields) - _used_settings()
 
-    assert used <= set(FIELDS), f"read but not on the page: {used - set(FIELDS)}"
-    assert not used & UNUSED, f"marked unused but read: {used & UNUSED}"
+    assert not unread, f"no code reads {sorted(unread)}"
+
+
+def test_removed_settings_are_gone_from_the_model():
+    assert not set(REMOVED_SETTINGS) & set(Settings.model_fields)
 
 
 def test_format_size():
@@ -250,6 +254,26 @@ async def test_a_local_env_file_is_pointed_out(tmp_path, monkeypatch):
     assert ".env" in line and "GRAB_QUALITY" in line
 
 
+@pytest.mark.asyncio
+async def test_removed_settings_are_pointed_out_and_removed():
+    path = settings_file_path()
+    path.write_text("VERBOSE=true\nGRAB_QUALITY=m\nAPP_NAME=Max\n", encoding="utf-8")
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        row = app.query_one("#upkeep-removed", Static)
+        line = str(row.content)
+        assert "APP_NAME" in line and "VERBOSE" in line
+        assert row.parent is not None and row.parent.display
+
+        app.query_one("#btn-remove-old-settings", Button).press()
+        await _settle(app, pilot)
+        shown = row.parent.display
+
+    assert read_settings_file() == {"GRAB_QUALITY": "m"}
+    assert shown is False
+
+
 # --- the dashboard ------------------------------------------------------------
 
 
@@ -266,9 +290,11 @@ def test_the_sidebar_pages():
         "files",
         "chat",
         "activity",
+        "extras",
         "settings",
     ]
     assert SECTION_KEYS["activity"] == "9"
+    assert SECTION_KEYS["extras"] == "0"
     assert SECTION_KEYS["settings"] == ","
     assert len(set(SECTION_KEYS.values())) == len(SECTION_KEYS)
 

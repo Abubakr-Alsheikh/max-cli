@@ -127,9 +127,12 @@ def validate_config():
 
     issues = []
 
-    table.add_row("BATCH_SIZE", str(settings.BATCH_SIZE), "[green]OK[/green]")
     table.add_row(
         "DOWNLOAD_TIMEOUT", str(settings.DOWNLOAD_TIMEOUT), "[green]OK[/green]"
+    )
+    table.add_row("MAX_RETRIES", str(settings.MAX_RETRIES), "[green]OK[/green]")
+    table.add_row(
+        "CONFIRM_DESTRUCTIVE", str(settings.CONFIRM_DESTRUCTIVE), "[green]OK[/green]"
     )
     table.add_row("DEFAULT_QUALITY", str(settings.DEFAULT_QUALITY), "[green]OK[/green]")
 
@@ -142,8 +145,12 @@ def validate_config():
     if settings.DEFAULT_QUALITY < 1 or settings.DEFAULT_QUALITY > 100:
         issues.append("DEFAULT_QUALITY must be between 1 and 100")
 
-    if settings.DOWNLOAD_TIMEOUT < 30:
-        issues.append("DOWNLOAD_TIMEOUT must be at least 30 seconds")
+    from max_cli.common.settings_file import removed_settings_in_file
+
+    for name in removed_settings_in_file(GLOBAL_CONFIG_PATH):
+        issues.append(
+            f"{name} is no longer a setting; remove it from {GLOBAL_CONFIG_PATH}"
+        )
 
     if settings.OPENAI_API_KEY:
         table.add_row("OPENAI_API_KEY", "***configured***", "[green]OK[/green]")
@@ -177,24 +184,9 @@ def export_config(
 
     if include_defaults:
         config_dict = {
-            "APP_NAME": settings.APP_NAME,
-            "DEFAULT_QUALITY": settings.DEFAULT_QUALITY,
-            "MAX_WORKERS": settings.MAX_WORKERS,
-            "BATCH_SIZE": settings.BATCH_SIZE,
-            "DOWNLOAD_TIMEOUT": settings.DOWNLOAD_TIMEOUT,
-            "MAX_RETRIES": settings.MAX_RETRIES,
-            "PROGRESS_BAR": settings.PROGRESS_BAR,
-            "VERBOSE": settings.VERBOSE,
-            "CONFIRM_DESTRUCTIVE": settings.CONFIRM_DESTRUCTIVE,
-            "AI_MODEL": settings.AI_MODEL,
-            "AI_IMAGE_MODEL": settings.AI_IMAGE_MODEL,
-            "GRAB_QUALITY": settings.GRAB_QUALITY,
-            "GRAB_AUDIO_FORMAT": settings.GRAB_AUDIO_FORMAT,
-            "GRAB_STRIP_PLAYLIST": settings.GRAB_STRIP_PLAYLIST,
-            "GRAB_INCLUDE_METADATA": settings.GRAB_INCLUDE_METADATA,
-            "GRAB_DEFAULT_TYPE": settings.GRAB_DEFAULT_TYPE,
-            "GRAB_DEFAULT_PATH": str(settings.GRAB_DEFAULT_PATH),
-            "GRAB_QUEUE_ENABLED": settings.GRAB_QUEUE_ENABLED,
+            name: str(value) if isinstance(value, Path) else value
+            for name, value in settings.model_dump().items()
+            if name != "OPENAI_API_KEY"
         }
     else:
         non_defaults = {
@@ -202,12 +194,10 @@ def export_config(
             "AI_MODEL": settings.AI_MODEL,
             "AI_IMAGE_MODEL": settings.AI_IMAGE_MODEL,
             "GRAB_QUALITY": settings.GRAB_QUALITY,
-            "GRAB_AUDIO_FORMAT": settings.GRAB_AUDIO_FORMAT,
             "GRAB_STRIP_PLAYLIST": settings.GRAB_STRIP_PLAYLIST,
             "GRAB_INCLUDE_METADATA": settings.GRAB_INCLUDE_METADATA,
             "GRAB_DEFAULT_TYPE": settings.GRAB_DEFAULT_TYPE,
             "GRAB_DEFAULT_PATH": str(settings.GRAB_DEFAULT_PATH),
-            "GRAB_QUEUE_ENABLED": settings.GRAB_QUEUE_ENABLED,
         }
         for k, v in non_defaults.items():
             if v is not None and v != "":

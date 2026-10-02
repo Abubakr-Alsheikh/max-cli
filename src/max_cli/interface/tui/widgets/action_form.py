@@ -13,6 +13,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import (
     Button,
@@ -34,6 +35,7 @@ from max_cli.core.catalog.spec import (
     Param,
     ParamKind,
 )
+from max_cli.core.operations.result import ActionResult
 from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.text import markup
 
@@ -43,11 +45,23 @@ DANGER_NOTES = {
     Danger.OVERWRITES: "overwrites files in place",
     Danger.DELETES: "deletes files",
 }
+# Asked even with CONFIRM_DESTRUCTIVE off: nothing can bring the file back.
+ALWAYS_CONFIRM = frozenset({"files.shred"})
 
 
 def _field_label(param: Param) -> str:
     label = param.name.replace("_", " ").capitalize()
     return f"{label} [red]*[/red]" if param.required else label
+
+
+def asks_first(action: Action) -> bool:
+    """Whether Run asks before it starts: the action changes files, and
+    CONFIRM_DESTRUCTIVE is on (or the action can't be undone)."""
+    from max_cli.config import settings
+
+    if action.danger not in CONFIRM_DANGERS:
+        return False
+    return settings.CONFIRM_DESTRUCTIVE or action.id in ALWAYS_CONFIRM
 
 
 def _initial_text(param: Param) -> str:
@@ -63,6 +77,14 @@ def _initial_text(param: Param) -> str:
 
 class ActionForm(Vertical):
     """One catalog action as a form with Run (and Add to queue) buttons."""
+
+    class Finished(Message):
+        """Run finished: the page can show what it made (a QR code, a file)."""
+
+        def __init__(self, action: Action, result: ActionResult) -> None:
+            super().__init__()
+            self.action = action
+            self.result = result
 
     DEFAULT_CSS = """
     ActionForm {
@@ -170,8 +192,9 @@ class ActionForm(Vertical):
             f"max {action.group} {action.name}: {action.summary}", classes="form-title"
         )
         if action.danger in CONFIRM_DANGERS:
+            ask = " You'll be asked first." if asks_first(action) else ""
             yield Static(
-                f"Careful: this {DANGER_NOTES[action.danger]}. You'll be asked first.",
+                f"Careful: this {DANGER_NOTES[action.danger]}.{ask}",
                 classes="form-danger",
             )
         basic = [param for param in self.params if not param.advanced]
@@ -340,7 +363,7 @@ class ActionForm(Vertical):
             self._set_status(markup("[red]$error[/red]", error=e))
             return
 
-        if self.action.danger not in CONFIRM_DANGERS:
+        if not asks_first(self.action):
             self._start(values, queue)
             return
 
@@ -403,10 +426,14 @@ class ActionForm(Vertical):
         activity.complete_entry(
             entry, "success" if result.ok else "failed", result.to_dict()
         )
-        self.app.call_from_thread(self._finish, result.ok, result.message)
+        self.app.call_from_thread(self._finish, result.ok, result.message, result)
 
-    def _finish(self, ok: bool, message: str) -> None:
+    def _finish(
+        self, ok: bool, message: str, result: Optional[ActionResult] = None
+    ) -> None:
         self._set_busy(False)
+        if result is not None:
+            self.post_message(self.Finished(self.action, result))
         if ok:
             self._set_status(markup("[green]Done.[/green] $message", message=message))
             self.notify(message)

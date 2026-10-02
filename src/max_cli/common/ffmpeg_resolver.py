@@ -21,7 +21,6 @@ ConfirmDownload = Callable[[str], bool]
 DownloadProgress = Callable[[int, Optional[int]], None]
 
 DOWNLOAD_CHUNK_SIZE = 8192
-DOWNLOAD_TIMEOUT_SECONDS = 120
 
 MAX_CLI_BIN_DIR = Path.home() / ".max_cli" / "bin"
 RESOLUTION_CACHE_FILE = Path.home() / ".max_cli" / ".ffmpeg_resolved_path"
@@ -165,10 +164,12 @@ class FFmpegResolver:
         import zipfile
         from urllib.request import Request, urlopen
 
+        from max_cli.config import settings
+
         headers = {"User-Agent": "MaxCLI/1.0 (FFmpeg Auto-Resolver)"}
         request = Request(url, headers=headers)
 
-        with urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=settings.DOWNLOAD_TIMEOUT) as response:
             content_length = response.getheader("Content-Length")
             total_size = int(content_length) if content_length else None
 

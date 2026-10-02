@@ -60,6 +60,14 @@ def read_settings_file(path: Optional[Path] = None) -> dict[str, str]:
     return values
 
 
+def removed_settings_in_file(path: Optional[Path] = None) -> list[str]:
+    """Settings the file still sets that Max no longer has (config.REMOVED_SETTINGS)."""
+    from max_cli.config import REMOVED_SETTINGS
+
+    saved = read_settings_file(path)
+    return [name for name in REMOVED_SETTINGS if name in saved]
+
+
 def update_settings_file(
     changes: dict[str, Optional[str]], path: Optional[Path] = None
 ) -> Path:

@@ -261,9 +261,14 @@ class ToolPage(Vertical):
     def form(self) -> Optional[ActionForm]:
         return self._form
 
-    def show_action(self, name: str, **values: Any) -> ActionForm:
+    def show_action(
+        self, name: str, *, focus: bool = False, **values: Any
+    ) -> ActionForm:
+        """Show `name`'s form, with the picked file and any `values` filled in.
+
+        `focus` puts the cursor in the form's first field (Ctrl+P).
+        """
         values = {**self.spec.action_defaults.get(name, {}), **values}
-        """Show `name`'s form, with the picked file and any `values` filled in."""
         action = get_action(f"{self.spec.group}.{name}")
         self._action = action
         for chip in self.query(".chip"):
@@ -272,11 +277,15 @@ class ToolPage(Vertical):
         card.border_title = name.upper()  # the form's first line gives the summary
         form = ActionForm(action)
         self._form = form
-        self.call_later(self._swap_form, card, form, values)
+        self.call_later(self._swap_form, card, form, values, focus)
         return form
 
     async def _swap_form(
-        self, card: Vertical, form: ActionForm, values: dict[str, Any]
+        self,
+        card: Vertical,
+        form: ActionForm,
+        values: dict[str, Any],
+        focus: bool = False,
     ) -> None:
         """Replace the form, then fill it: set_value needs its fields mounted."""
         await card.remove_children()
@@ -287,6 +296,11 @@ class ToolPage(Vertical):
         for key, value in values.items():
             form.set_value(key, value)
         self._prefill()
+        if focus:
+            card.scroll_visible(animate=False)
+            fields = form.query("Input, Select, Switch, Checkbox")
+            if fields:
+                fields.first().focus()
 
     def _prefill(self) -> None:
         """Fill the form's empty fields from the picked file, in a thread."""

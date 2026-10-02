@@ -17,6 +17,7 @@ from rich.text import Text
 from max_cli.common.exceptions import MaxError, ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.core.operations import files as files_ops
+from max_cli.interface.confirm import skip_confirmation
 
 app = typer.Typer()
 
@@ -94,7 +95,7 @@ def order_files(
         console.print("[yellow]Folder is empty. Nothing to do.[/yellow]")
         return
 
-    if not dry_run and not force:
+    if not dry_run and not skip_confirmation(force):
         console.print(
             Panel(
                 Text(f"Target: {folder}\nFiles found: {len(found)}", justify="center"),
@@ -220,7 +221,7 @@ def find_duplicates(
         console.print("[dim]Run with --delete to remove duplicates[/dim]")
         return
     count = found.details["duplicate_count"]
-    if not force and not Confirm.ask(
+    if not skip_confirmation(force) and not Confirm.ask(
         f"Delete {count} duplicate(s)? A backup is kept for undo."
     ):
         console.print("[dim]Cancelled. Nothing was deleted.[/dim]")
@@ -390,7 +391,7 @@ def cleanup_backups(
     """
     Clean up old backups to save space.
     """
-    if not force:
+    if not skip_confirmation(force):
         console.print(
             f"[yellow]This will remove backups older than {days} days.[/yellow]"
         )

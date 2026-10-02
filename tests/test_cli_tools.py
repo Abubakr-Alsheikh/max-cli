@@ -124,7 +124,7 @@ class TestCopy:
 
         assert result.exit_code == 0, result.output
         engine.copy_file_to_clipboard.assert_called_once_with(target)
-        assert "Copied notes.txt to clipboard." in _plain(result)
+        assert "Copied notes.txt to the clipboard." in _plain(result)
 
     def test_engine_error_is_reported(self, tmp_path) -> None:
         engine = _engine()

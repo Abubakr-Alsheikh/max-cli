@@ -29,6 +29,7 @@ KINDS = (
     ("PDF", "pdf"),
     ("Files", "files"),
     ("AI", "ai"),
+    ("Extras", "tools"),
 )
 KIND_LABELS = {category: label for label, category in KINDS}
 WHAT_WIDTH = 22

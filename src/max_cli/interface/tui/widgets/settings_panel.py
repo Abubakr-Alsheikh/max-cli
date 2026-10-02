@@ -153,23 +153,35 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
             ),
         ),
     ),
+    (
+        "SAFETY AND NETWORK",
+        "settings-general",
+        (
+            SettingField(
+                "CONFIRM_DESTRUCTIVE",
+                "Ask before moving, overwriting or deleting files",
+                "bool",
+                "Off works like --force on every command. Shred always asks.",
+                wide=True,
+            ),
+            SettingField(
+                "MAX_RETRIES",
+                "Retries for a failed task",
+                "int",
+                "How many more times the queue runs a task that failed.",
+            ),
+            SettingField(
+                "DOWNLOAD_TIMEOUT",
+                "Download timeout (seconds)",
+                "int",
+                "How long a download waits for data before it retries or stops.",
+            ),
+        ),
+    ),
 )
+# Every setting appears here; a test fails when one isn't, or when no code
+# reads one (delete it then, and add it to config.REMOVED_SETTINGS).
 FIELDS = {field.name: field for _title, _id, fields in CARDS for field in fields}
-# Settings no code reads, so the page leaves them out. A test fails when code
-# starts reading one of them, or when a new setting is neither shown nor here.
-UNUSED = frozenset(
-    {
-        "APP_NAME",
-        "BATCH_SIZE",
-        "CONFIRM_DESTRUCTIVE",
-        "DOWNLOAD_TIMEOUT",
-        "GRAB_AUDIO_FORMAT",
-        "GRAB_QUEUE_ENABLED",
-        "MAX_RETRIES",
-        "PROGRESS_BAR",
-        "VERBOSE",
-    }
-)
 # Settings read once at start-up; a change applies the next time max starts.
 APPLY_ON_RESTART = frozenset({"GRAB_MAX_CONCURRENT"})
 # Optional settings: an empty box removes them from the file.
@@ -319,6 +331,9 @@ class SettingsPanel(Vertical):
             )
             yield from self._upkeep_row(
                 "upkeep-file", ("Reset settings", "btn-reset-settings")
+            )
+            yield from self._upkeep_row(
+                "upkeep-removed", ("Remove them", "btn-remove-old-settings")
             )
 
     @staticmethod
@@ -493,6 +508,7 @@ class SettingsPanel(Vertical):
         from max_cli.common.cache import get_default_cache
         from max_cli.common.exceptions import ResourceNotFoundError
         from max_cli.common.ffmpeg_resolver import FFmpegResolver
+        from max_cli.common.settings_file import removed_settings_in_file
         from max_cli.common.transaction_log import TransactionLog
 
         try:
@@ -511,6 +527,7 @@ class SettingsPanel(Vertical):
                 _folder_size(backups),
             ),
             "undo": len(TransactionLog.list_groups()),
+            "removed": removed_settings_in_file(),
         }
         show_from_worker(self, self._show_upkeep, facts)
 
@@ -568,6 +585,21 @@ class SettingsPanel(Vertical):
                 )
             )
             self.query_one("#upkeep-file", Static).update(self._settings_line(line))
+            removed = facts["removed"]
+            removed_text = self.query_one("#upkeep-removed", Static)
+            removed_text.update(
+                line(
+                    "OLD SETTINGS",
+                    ("! ", "bold $warning"),
+                    (
+                        f"~/.max_config.env sets {', '.join(removed)}, which Max "
+                        "no longer uses",
+                        "$warning",
+                    ),
+                )
+            )
+            if removed_text.parent is not None:
+                removed_text.parent.display = bool(removed)
 
     @staticmethod
     def _settings_line(line: Callable[..., Content]) -> Content:
@@ -652,6 +684,19 @@ class SettingsPanel(Vertical):
             "can't reverse those changes any more.",
             clean,
         )
+
+    @on(Button.Pressed, "#btn-remove-old-settings")
+    def _on_remove_old_settings(self) -> None:
+        from max_cli.common.settings_file import (
+            removed_settings_in_file,
+            update_settings_file,
+        )
+
+        removed = removed_settings_in_file()
+        if removed:
+            update_settings_file(dict.fromkeys(removed))
+            self.notify(f"Removed {', '.join(removed)} from ~/.max_config.env.")
+        self.run_worker(self._measure, thread=True, group="settings-upkeep")
 
     @on(Button.Pressed, "#btn-reset-settings")
     def _on_reset(self) -> None:

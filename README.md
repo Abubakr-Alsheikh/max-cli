@@ -591,10 +591,11 @@ In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing
 | **PDF** | Pick a PDF, see its pages and whether it's locked or scanned, run any `max pdf` action |
 | **Activity** | Queue (pause, cancel, retry), History of every action, and Undo for file changes |
 | **Files** | Pick a folder, see its files by kind and size, sort, clean, back up or undo |
-| **Settings** | Your defaults (AI, downloads, images), plus FFmpeg status and cleanup |
+| **Settings** | Your defaults (AI, downloads, images, safety), plus FFmpeg status and cleanup |
 | **Chat** | AI chat |
+| **Extras** | QR code for a link, save a clipboard screenshot, copy a text file |
 
-Press `q` to quit, `r` to refresh and `Ctrl+B` to collapse the sidebar.
+Press `Ctrl+P` to find any action by name, `q` to quit, `r` to refresh and `Ctrl+B` to fold the sidebar to icons.
 
 ---
 
@@ -672,10 +673,13 @@ AI_MODEL=gpt-4o-mini
 # Default settings
 DEFAULT_QUALITY=80
 GRAB_QUALITY=h
-GRAB_AUDIO_FORMAT=mp3
 GRAB_DEFAULT_PATH=~/Max Downloads
 GRAB_DEFAULT_TYPE=video
-GRAB_QUEUE_ENABLED=true
+
+# Safety and network
+CONFIRM_DESTRUCTIVE=true   # false skips "Are you sure?" (shred still asks)
+MAX_RETRIES=2              # reruns of a failed queued task
+DOWNLOAD_TIMEOUT=60        # seconds a download waits for data
 ```
 
 ### Configuration Locations

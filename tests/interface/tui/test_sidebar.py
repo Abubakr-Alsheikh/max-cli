@@ -108,7 +108,7 @@ async def test_arrow_keys_move_when_the_pages_dont_fit():
     async with app.run_test(size=(120, 20)) as pilot:
         app.query_one(Sidebar).focus_nav()
         await pilot.pause()
-        await pilot.press(*["down"] * 9)
+        await pilot.press(*["down"] * 10)
         await pilot.pause()
 
         assert app.focused.id == "nav-settings"
@@ -125,33 +125,40 @@ async def test_clicking_a_page_opens_it():
 
 
 @pytest.mark.asyncio
-async def test_the_sidebar_starts_as_icons_and_the_button_expands_it():
-    """Maintainer's choice (2026-09-29): icons first, a button for names."""
+async def test_the_sidebar_starts_open_and_the_button_folds_it():
+    """Maintainer's choice (2026-10-02): names first, a button for icons."""
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
         sidebar = app.query_one(Sidebar)
+        assert not sidebar.compact
+
+        await pilot.click("#sidebar-toggle")
+        await pilot.pause()
         assert sidebar.compact
+        assert load_prefs()["sidebar_open"] is False
 
         await pilot.click("#sidebar-toggle")
         await pilot.pause()
         assert not sidebar.compact
-        assert load_prefs()["sidebar_collapsed"] is False
-
-        await pilot.click("#sidebar-toggle")
-        await pilot.pause()
-        assert sidebar.compact
+        assert load_prefs()["sidebar_open"] is True
 
 
 @pytest.mark.asyncio
-async def test_an_old_expanded_choice_does_not_override_the_new_default(isolated_home):
-    """`sidebar_compact` belonged to the first sidebar; only `sidebar_collapsed` counts."""
+@pytest.mark.parametrize(
+    "old_prefs", ['{"sidebar_compact": true}', '{"sidebar_collapsed": true}']
+)
+async def test_an_old_folded_choice_does_not_override_the_new_default(
+    isolated_home, old_prefs
+):
+    """Both older keys were saved while icons were the default; only
+    `sidebar_open` counts."""
     prefs = isolated_home / ".max_cli" / "dashboard_prefs.json"
     prefs.parent.mkdir(parents=True, exist_ok=True)
-    prefs.write_text('{"sidebar_compact": false}', encoding="utf-8")
+    prefs.write_text(old_prefs, encoding="utf-8")
 
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE):
-        assert app.query_one(Sidebar).compact
+        assert not app.query_one(Sidebar).compact
 
 
 @pytest.mark.asyncio
@@ -220,11 +227,17 @@ async def test_ctrl_b_choice_is_remembered():
     async with first.run_test(size=WIDE) as pilot:
         await pilot.press("ctrl+b")
         await pilot.pause()
-        assert not first.query_one(Sidebar).compact
+        assert first.query_one(Sidebar).compact
 
     second = MaxDashboardApp()
-    async with second.run_test(size=WIDE):
-        assert not second.query_one(Sidebar).compact
+    async with second.run_test(size=WIDE) as pilot:
+        assert second.query_one(Sidebar).compact
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+    third = MaxDashboardApp()
+    async with third.run_test(size=WIDE):
+        assert not third.query_one(Sidebar).compact
 
 
 @pytest.mark.asyncio
@@ -234,7 +247,6 @@ async def test_expanded_items_have_equal_left_and_right_margins():
 
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
-        await pilot.press("ctrl+b")
         app.navigate("download")
         await pilot.pause()
 
@@ -252,6 +264,7 @@ async def test_collapsed_icons_are_centred_in_a_narrow_strip():
 
     app = MaxDashboardApp()
     async with app.run_test(size=WIDE) as pilot:
+        await pilot.press("ctrl+b")
         await pilot.pause()
         sidebar = app.query_one(Sidebar)
         assert sidebar.compact and sidebar.size.width <= 7

@@ -57,7 +57,6 @@ The wizard asks for:
 - Embed metadata
 - Default type (video/audio)
 - Default download folder
-- Queue system enabled/disabled
 
 ## reset
 
@@ -76,7 +75,7 @@ With neither flag, Max offers to delete both.
 
 ## validate
 
-Check your settings and list any value outside its allowed range.
+Check your settings and list any value outside its allowed range. It also names settings your `~/.max_config.env` still sets that Max no longer has (`APP_NAME`, `BATCH_SIZE`, `GRAB_AUDIO_FORMAT`, `GRAB_QUEUE_ENABLED`, `PROGRESS_BAR`, `VERBOSE`). Max ignores them; delete those lines, or press **Remove them** on the dashboard's Settings page.
 
 ```bash
 max config validate

@@ -10,7 +10,6 @@ from max_cli.common.utils import encode_image_to_base64
 from max_cli.config import settings
 
 LOCAL_CONTEXT_FILE_LIMIT = 30  # file names shared with the model per request
-IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 60
 # Text formats semantic_search can read; other files are skipped.
 SEARCHABLE_SUFFIXES = {".txt", ".md", ".py", ".json", ".yaml", ".yml"}
 DOWNLOAD_CHUNK_SIZE = 8192
@@ -40,7 +39,7 @@ def download_image(url: str, destination: Path) -> Path:
     temp_path = destination.with_name(f".{destination.name}.part")
     try:
         with requests.get(
-            url, stream=True, timeout=IMAGE_DOWNLOAD_TIMEOUT_SECONDS
+            url, stream=True, timeout=settings.DOWNLOAD_TIMEOUT
         ) as response:
             response.raise_for_status()
             with open(temp_path, "wb") as image_file:

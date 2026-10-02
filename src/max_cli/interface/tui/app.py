@@ -7,6 +7,7 @@ from textual.containers import Container, Horizontal
 from textual.widget import Widget
 from textual.widgets import Footer
 
+from max_cli.interface.tui.commands import GROUP_PAGES, ActionCommands
 from max_cli.interface.tui.messages import OpenFile, OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.tool_pages import TOOL_PAGES
@@ -14,6 +15,7 @@ from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.activity_panel import ActivityPanel
 from max_cli.interface.tui.widgets.chat_panel import ChatPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
+from max_cli.interface.tui.widgets.extras_panel import ExtrasPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 from max_cli.interface.tui.widgets.settings_panel import SettingsPanel
@@ -36,6 +38,7 @@ REFRESHABLE_PANEL_IDS = (
 AUTO_COMPACT_COLUMNS = 100
 BACK_HISTORY_LIMIT = 20
 BADGE_REFRESH_SECONDS = 2.0
+REMOVED_SETTINGS_NOTICE_SECONDS = 12
 PREF_LAST_PAGE = "last_page"
 PREF_THEME = "theme"
 # Pages that were merged away, and where a saved last page now goes.
@@ -49,16 +52,17 @@ RENAMED_PAGES = {
     "queue": "activity",
     "history": "activity",
 }
-# Named "collapsed", not the earlier "sidebar_compact": that older choice
-# predates the icons-first default and must not override it.
-PREF_SIDEBAR_COMPACT = "sidebar_collapsed"
+# True when you left the sidebar showing names. A new name, not the earlier
+# "sidebar_collapsed": that one was saved while icons were the default, and
+# must not keep the sidebar folded now that it starts open (2026-10-02).
+PREF_SIDEBAR_OPEN = "sidebar_open"
 # Shown on the help screen after the page list.
 GLOBAL_KEYS = [
     ("Esc", "Back to the sidebar"),
     ("Alt+Left", "Previous page"),
     ("J", "Show or hide running and queued jobs"),
     ("Ctrl+B", "Collapse or expand the sidebar"),
-    ("Ctrl+P", "Command palette: themes and more"),
+    ("Ctrl+P", "Find any action or page by name; themes"),
     ("r", "Refresh this page"),
     ("?", "This help"),
     ("q", "Quit"),
@@ -76,6 +80,8 @@ def _app_version() -> str:
 
 class MaxDashboardApp(App):
     """Interactive dashboard for Max CLI."""
+
+    COMMANDS = App.COMMANDS | {ActionCommands}
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -265,6 +271,7 @@ class MaxDashboardApp(App):
                 for spec in TOOL_PAGES:
                     yield ToolPage(spec, id=f"{spec.page_id}-panel")
                 yield ActivityPanel(id="activity-panel")
+                yield ExtrasPanel(id="extras-panel")
                 yield SettingsPanel(id="settings-panel")
                 yield ChatPanel(id="chat-panel")
         yield JobsDrawer(id="jobs")
@@ -284,8 +291,8 @@ class MaxDashboardApp(App):
         )
         self._back: list[str] = []
         self._current = ""
-        # The sidebar starts as icons; the maintainer's choice (2026-09-29).
-        self._user_compact = bool(prefs.get(PREF_SIDEBAR_COMPACT, True))
+        # The sidebar starts open, then stays as you last left it.
+        self._user_compact = not prefs.get(PREF_SIDEBAR_OPEN, True)
         # Failures that happen from now on get a badge on History.
         self._history_seen = datetime.now().isoformat()
         self._apply_compact()
@@ -294,6 +301,7 @@ class MaxDashboardApp(App):
         known = {section_id for section_id, _icon, _label in SECTIONS}
         self.navigate(start_page if start_page in known else "home", remember=False)
         self.query_one(Sidebar).focus_nav()
+        self._point_out_removed_settings()
         self.set_interval(2.0, self._refresh_active_panel)
         self.set_interval(BADGE_REFRESH_SECONDS, self._refresh_badges)
         # Run queued work while the dashboard is open: "Queue for later" and
@@ -303,6 +311,18 @@ class MaxDashboardApp(App):
 
         self._task_manager = get_task_manager()
         self._task_manager.start_worker()
+
+    def _point_out_removed_settings(self) -> None:
+        from max_cli.common.settings_file import removed_settings_in_file
+
+        removed = removed_settings_in_file()
+        if removed:
+            self.notify(
+                f"~/.max_config.env sets {', '.join(removed)}, which Max no longer "
+                f"uses. Settings ({SETTINGS_KEY}) > Maintenance removes them.",
+                severity="warning",
+                timeout=REMOVED_SETTINGS_NOTICE_SECONDS,
+            )
 
     def on_unmount(self) -> None:
         if hasattr(self, "_task_manager"):
@@ -326,6 +346,17 @@ class MaxDashboardApp(App):
 
     def action_goto(self, section_id: str) -> None:
         self.navigate(section_id)
+
+    def open_action(self, action_id: str) -> None:
+        """Show an action on its page, its form ready to fill (Ctrl+P)."""
+        group, _, name = action_id.partition(".")
+        page_id = GROUP_PAGES[group]
+        self.navigate(page_id)
+        page = self.query_one(f"#{page_id}-panel")
+        if isinstance(page, ToolPage):
+            page.show_action(name, focus=True)
+        elif isinstance(page, ExtrasPanel):
+            page.show_action(name)
 
     def action_previous_page(self) -> None:
         if self._back:
@@ -431,7 +462,7 @@ class MaxDashboardApp(App):
         if self._narrow():
             return  # names don't fit; the button says so
         self._user_compact = not self._user_compact
-        save_pref(PREF_SIDEBAR_COMPACT, self._user_compact)
+        save_pref(PREF_SIDEBAR_OPEN, not self._user_compact)
         self._apply_compact()
 
     def on_sidebar_toggle_requested(self, message: Sidebar.ToggleRequested) -> None:

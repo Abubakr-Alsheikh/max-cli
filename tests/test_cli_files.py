@@ -397,3 +397,40 @@ class TestUndoAndHistory:
         result = runner.invoke(files_app, ["history"])
         assert result.exit_code == 0, result.output
         assert "No transaction history found." in result.output
+
+
+class TestConfirmDestructiveOff:
+    """CONFIRM_DESTRUCTIVE off works like --force, except for shred."""
+
+    @pytest.fixture(autouse=True)
+    def no_confirmations(self, monkeypatch):
+        from max_cli.config import settings
+
+        monkeypatch.setattr(settings, "CONFIRM_DESTRUCTIVE", False)
+
+    def test_duplicates_delete_without_asking(self, work_dir):
+        _make_duplicates(work_dir)
+
+        result = runner.invoke(files_app, ["duplicates", str(work_dir), "--delete"])
+
+        assert result.exit_code == 0, result.output
+        assert "Delete 1 duplicate" not in result.output
+        assert len(list(work_dir.glob("*.txt"))) == 2
+
+    def test_order_renames_without_asking(self, work_dir):
+        (work_dir / "a.txt").write_text("a", encoding="utf-8")
+
+        result = runner.invoke(files_app, ["order", str(work_dir)])
+
+        assert result.exit_code == 0, result.output
+        assert "Are you sure" not in result.output
+        assert (work_dir / "1_a.txt").exists()
+
+    def test_shred_still_asks(self, work_dir):
+        secret = work_dir / "secret.txt"
+        secret.write_text("top secret", encoding="utf-8")
+
+        result = runner.invoke(files_app, ["shred", str(secret)], input="n\n")
+
+        assert "Aborted." in result.output
+        assert secret.exists()

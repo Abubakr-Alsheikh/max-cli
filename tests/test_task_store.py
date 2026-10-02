@@ -310,3 +310,27 @@ def test_archiving_removes_a_refreshed_copy_by_id():
 
     assert manager.get_all() == []
     assert manager.get_history()[0].id == worker_copy.id
+
+
+@pytest.mark.parametrize("retries", [0, 2])
+def test_a_failed_task_runs_again_max_retries_times(monkeypatch, retries):
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "MAX_RETRIES", retries)
+    runs = []
+
+    def failing(task: TaskItem) -> dict:
+        runs.append(task.id)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(task_manager_module, "get_executor", lambda _type: failing)
+    manager = TaskManager()
+    manager.add(TaskItem(type=TaskType.CUSTOM))
+
+    while manager.process_now():
+        pass
+
+    assert len(runs) == 1 + retries
+    failed = manager.get_history()[0]
+    assert failed.status == TaskStatus.FAILED
+    assert failed.error == "boom"

@@ -4,19 +4,33 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+# Settings Max read once and no longer has. Settings ignores them in a
+# settings file (extra = "ignore"); the dashboard and `max config validate`
+# point them out so you can remove them.
+REMOVED_SETTINGS = (
+    "APP_NAME",
+    "BATCH_SIZE",
+    "GRAB_AUDIO_FORMAT",
+    "GRAB_QUEUE_ENABLED",
+    "PROGRESS_BAR",
+    "VERBOSE",
+)
+
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Max CLI"
     DEFAULT_QUALITY: int = 85
 
     MAX_WORKERS: int = Field(default=4, ge=1, le=16)
-    BATCH_SIZE: int = Field(default=10, ge=1)
 
-    DOWNLOAD_TIMEOUT: int = Field(default=300, ge=30)
-    MAX_RETRIES: int = Field(default=3, ge=0)
-
-    PROGRESS_BAR: bool = True
-    VERBOSE: bool = False
+    # Seconds a download may wait for data before it gives up or retries:
+    # videos, FFmpeg, the noise model, AI images.
+    # No upper limits: these existed, unread, without one, and a settings
+    # file that set a big value must still load.
+    DOWNLOAD_TIMEOUT: int = Field(default=60, ge=10)
+    # How many more times the queue runs a task that failed.
+    MAX_RETRIES: int = Field(default=2, ge=0)
+    # Ask before moving, overwriting or deleting files. Off works like
+    # --force everywhere, except `files shred`, which can't be undone.
     CONFIRM_DESTRUCTIVE: bool = True
 
     # AI Configuration
@@ -37,14 +51,12 @@ class Settings(BaseSettings):
     # --- GRAB (DOWNLOADER) DEFAULTS ---
     # These save your preferences
     GRAB_QUALITY: str = "h"  # s, m, h, x
-    GRAB_AUDIO_FORMAT: str = "mp3"  # mp3, m4a, wav
     GRAB_STRIP_PLAYLIST: bool = True  # If True, removes '&list=...' from video URLs
     GRAB_INCLUDE_METADATA: bool = True  # If True, embeds tags/thumbnails
 
     # New: Default path and type for downloads
     GRAB_DEFAULT_PATH: Path = Path.home() / "Max Downloads"
     GRAB_DEFAULT_TYPE: str = "video"  # "video" or "audio"
-    GRAB_QUEUE_ENABLED: bool = False
     GRAB_MAX_CONCURRENT: int = Field(default=3, ge=1, le=8)  # dashboard downloads at once
 
     class Config:
@@ -53,4 +65,27 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-settings = Settings()
+def load_settings() -> Settings:
+    """Settings from the environment and the settings files.
+
+    A bad value (MAX_WORKERS=99) raises ConfigurationError, which `main()`
+    prints as one line naming the setting, instead of a crash report.
+    """
+    from pydantic import ValidationError
+
+    from max_cli.common.exceptions import ConfigurationError
+
+    try:
+        return Settings()
+    except ValidationError as e:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in e.errors()
+        )
+        raise ConfigurationError(
+            f"A setting has a bad value ({problems}). Fix or delete that line "
+            "in ~/.max_config.env, or in a .env file in this folder."
+        ) from None
+
+
+settings = load_settings()

@@ -166,6 +166,15 @@ class TestValidate:
         assert "Configuration Validation" in output
         assert output.count("MAX_WORKERS") == 1  # the row used to appear twice
 
+    def test_points_out_removed_settings(self, isolated_config: Path) -> None:
+        isolated_config.write_text("VERBOSE=true\nAI_MODEL=x\n", encoding="utf-8")
+
+        result = runner.invoke(config_app, ["validate"])
+
+        output = _plain(result)
+        assert "VERBOSE is no longer a setting" in output
+        assert "AI_MODEL is no longer" not in output
+
 
 class TestExportImport:
     def test_export_leaves_out_api_key_by_default(self, tmp_path: Path) -> None:
@@ -200,7 +209,8 @@ class TestExportImport:
         assert result.exit_code == 0, result.output
         exported = json.loads(output.read_text(encoding="utf-8"))
         assert "MAX_WORKERS" in exported
-        assert "APP_NAME" in exported
+        assert "CONFIRM_DESTRUCTIVE" in exported
+        assert "OPENAI_API_KEY" not in exported
         assert "Config exported to" in _plain(result)
 
     def test_import_to_local_env(self, tmp_path: Path) -> None:
@@ -260,7 +270,9 @@ class TestWizards:
     def test_grab_replaces_existing_grab_keys(
         self, isolated_config: Path, tmp_path: Path
     ) -> None:
-        isolated_config.write_text("AI_MODEL=keep\nGRAB_QUALITY=s\n", encoding="utf-8")
+        isolated_config.write_text(
+            "AI_MODEL=keep\nGRAB_QUALITY=s\nGRAB_QUEUE_ENABLED=True\n", encoding="utf-8"
+        )
         with (
             patch.object(
                 grab_wizard_module.Prompt,
@@ -268,7 +280,7 @@ class TestWizards:
                 side_effect=["x", "audio", str(tmp_path)],
             ),
             patch.object(
-                grab_wizard_module.Confirm, "ask", side_effect=[True, False, True]
+                grab_wizard_module.Confirm, "ask", side_effect=[True, False]
             ),
         ):
             result = runner.invoke(config_app, ["grab"])
@@ -280,6 +292,7 @@ class TestWizards:
         assert "GRAB_QUALITY=x" in lines
         assert "GRAB_DEFAULT_TYPE=audio" in lines
         assert "GRAB_INCLUDE_METADATA=False" in lines
+        assert not any(line.startswith("GRAB_QUEUE_ENABLED") for line in lines)
         assert "Downloader settings saved!" in _plain(result)
 
 
