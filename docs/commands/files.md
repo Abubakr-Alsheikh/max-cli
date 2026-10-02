@@ -2,7 +2,7 @@
 
 Max records every rename, move and delete these commands make, so `max files undo` can reverse them, newest first. `shred` is the exception: it keeps no copy on purpose.
 
-In the dashboard, the Tools page has a form for each command, and the Files page's Organize, Duplicates and Backup buttons open those forms filled in. A form asks before it moves or deletes anything.
+In the dashboard, the Files page (`7`) has a form for each command. A form asks before it moves or deletes anything. To skip those questions here and in the CLI, turn off **Ask before moving, overwriting or deleting files** in Settings (`CONFIRM_DESTRUCTIVE=false`): it works like `--force` on every command. `shred` asks either way.
 
 ## order
 

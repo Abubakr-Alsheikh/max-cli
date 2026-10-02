@@ -2,6 +2,8 @@
 
 The `max queue` group manages background tasks. You add a task with the `--queue` flag on a heavy command, then process it when you're ready.
 
+A task that fails goes back in line and runs again, up to `MAX_RETRIES` more times (2 unless you change it in `max config` or on the dashboard's Settings page). After that it moves to history as failed.
+
 These commands can queue work:
 
 | Command | Flag |

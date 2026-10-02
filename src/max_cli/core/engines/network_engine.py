@@ -230,6 +230,7 @@ class NetworkEngine:
             get_emitter,
         )
         from max_cli.common.exceptions import OperationCancelled
+        from max_cli.config import settings
 
         q = quality.lower()[0]
 
@@ -295,7 +296,7 @@ class NetworkEngine:
             "noplaylist": no_playlist,
             "playlist_items": playlist_items,
             "writethumbnail": include_metadata,
-            "socket_timeout": 60,
+            "socket_timeout": settings.DOWNLOAD_TIMEOUT,
             "retries": 10,
             "fragment_retries": 10,
             "file_access_retries": 5,

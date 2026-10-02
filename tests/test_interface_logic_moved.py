@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from max_cli.config import settings
 from max_cli.core.engines.ai_engine import (
-    IMAGE_DOWNLOAD_TIMEOUT_SECONDS,
     download_image,
     find_searchable_files,
 )
@@ -51,7 +51,7 @@ class TestDownloadImage:
         with patch("requests.get", return_value=response) as get:
             saved = download_image("https://img/x.png", tmp_path / "x.png")
 
-        assert get.call_args.kwargs["timeout"] == IMAGE_DOWNLOAD_TIMEOUT_SECONDS
+        assert get.call_args.kwargs["timeout"] == settings.DOWNLOAD_TIMEOUT
         assert saved.read_bytes() == b"abcdef"
 
     def test_failure_leaves_no_partial_file(self, tmp_path):

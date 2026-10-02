@@ -1,6 +1,7 @@
 """The page list on the left: grouped, numbered, with live badges.
 
-Starts as a strip of icons; the button at the top expands it to show names.
+Starts open, with names; the button at the top (or Ctrl+B) folds it to a
+strip of icons, and the app remembers which one you left it as.
 Each page is a large target (3 rows) that you can click, reach with the
 arrow keys and open with Enter, or jump to with its number key (the app
 binds those). Badges show what needs attention: running downloads, waiting
@@ -33,6 +34,7 @@ SECTIONS = [
     ("files", "\U0001f4c1", "Files"),
     ("chat", "\U0001f4ac", "Chat"),
     ("activity", "\U0001f4cb", "Activity"),
+    ("extras", "\U0001f9f0", "Extras"),
     ("settings", "\U0001f527", "Settings"),
 ]
 SECTION_GROUPS = (
@@ -41,7 +43,9 @@ SECTION_GROUPS = (
         ("home", "download", "video", "audio", "images", "pdf", "files", "chat"),
     ),
     ("TRACK", ("activity",)),
-    ("SETUP", ("settings",)),
+    # Extras and Settings share a group: one more group header pushed
+    # Settings out of sight in a 44-row window.
+    ("MORE", ("extras", "settings")),
 )
 # Settings sits apart from the numbered pages, on the comma key. Bindings
 # call that key "comma": Textual splits a binding's key string on ",".
@@ -229,13 +233,14 @@ class Sidebar(Vertical):
         color: $border;
         content-align: center middle;
     }
+    /* No margin: with one, every page didn't fit in a 44-row window. */
     #sidebar-help {
         height: 1;
-        margin: 1 0 1 2;
+        margin: 0 0 0 2;
         color: $text-muted;
     }
     Sidebar.-compact #sidebar-help {
-        margin: 1 0;
+        margin: 0;
         content-align: center middle;
     }
     """

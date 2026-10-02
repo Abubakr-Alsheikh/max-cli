@@ -53,14 +53,6 @@ def configure_grab():
     )
     current_data["GRAB_DEFAULT_PATH"] = default_path
 
-    queue_enabled = Confirm.ask(
-        "Enable queue system?", default=settings.GRAB_QUEUE_ENABLED
-    )
-    console.print(
-        "[dim]  (Queue allows adding multiple URLs and processing in background)[/dim]"
-    )
-    current_data["GRAB_QUEUE_ENABLED"] = str(queue_enabled)
-
     try:
         lines = []
         if GLOBAL_CONFIG_PATH.exists():
@@ -72,6 +64,7 @@ def configure_grab():
             "GRAB_INCLUDE_METADATA",
             "GRAB_DEFAULT_TYPE",
             "GRAB_DEFAULT_PATH",
+            # Removed setting: saving drops a line left from older versions.
             "GRAB_QUEUE_ENABLED",
         ]
         lines = [line for line in lines if not any(line.startswith(k) for k in keys)]

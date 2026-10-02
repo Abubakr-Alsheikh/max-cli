@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
+from max_cli.config import settings
 from max_cli.core.engines import task_migration
 from max_cli.core.engines.task_queue import (
     TaskItem,
@@ -449,9 +450,9 @@ class TaskManager:
                 if task.status == TaskStatus.CANCELLED:
                     task.completed_at = datetime.now().isoformat()
                     self._archive(task)
-                elif task.retry_count < task.max_retries:
+                elif task.retry_count <= settings.MAX_RETRIES:
                     task.status = TaskStatus.PENDING
-                    task.error = f"Retry {task.retry_count}/{task.max_retries}: {e}"
+                    task.error = f"Retry {task.retry_count}/{settings.MAX_RETRIES}: {e}"
                 else:
                     task.status = TaskStatus.FAILED
                     task.error = str(e)

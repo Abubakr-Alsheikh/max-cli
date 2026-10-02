@@ -196,6 +196,38 @@ async def test_dangerous_actions_ask_first(tmp_path, answer, runs):
 
 
 @pytest.mark.asyncio
+async def test_confirmations_off_runs_without_asking(tmp_path, monkeypatch):
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "CONFIRM_DESTRUCTIVE", False)
+    app = FormApp(DANGEROUS)
+    with patch(RUN_ACTION, return_value=ActionResult(True, "Deleted")) as run_action:
+        async with app.run_test(size=(100, 40)) as pilot:
+            app.query_one("#field-target", Input).value = str(tmp_path / "x.txt")
+            app.query_one("#form-run", Button).press()
+            await _settle(app, pilot)
+            assert not isinstance(app.screen, ConfirmDialog)
+
+    assert run_action.called
+
+
+@pytest.mark.asyncio
+async def test_shred_asks_even_with_confirmations_off(tmp_path, monkeypatch):
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "CONFIRM_DESTRUCTIVE", False)
+    app = FormApp(get_action("files.shred"))
+    with patch(RUN_ACTION, return_value=ActionResult(True, "Shredded")) as run_action:
+        async with app.run_test(size=(100, 40)) as pilot:
+            app.query_one("#field-target", Input).value = str(tmp_path / "x.txt")
+            app.query_one("#form-run", Button).press()
+            await pilot.pause()
+            assert isinstance(app.screen, ConfirmDialog)
+
+    assert not run_action.called
+
+
+@pytest.mark.asyncio
 async def test_browse_fills_the_path_field(tmp_path):
     app = FormApp(get_action("video.compress"))
     picked = tmp_path / "movie.mp4"

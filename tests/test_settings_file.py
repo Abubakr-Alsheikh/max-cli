@@ -1,5 +1,7 @@
 """common/settings_file.py: read and update ~/.max_config.env."""
 
+import pytest
+
 from max_cli.common.settings_file import (
     read_settings_file,
     settings_file_path,
@@ -69,3 +71,25 @@ def test_quoted_values_load_into_settings(tmp_path, monkeypatch):
     loaded = Settings(_env_file=str(path))  # type: ignore[call-arg]  # pydantic-settings option
 
     assert str(loaded.GRAB_DEFAULT_PATH) == "D:\\My Videos # 2026"
+
+
+def test_a_bad_setting_value_names_the_setting(monkeypatch):
+    from max_cli.common.exceptions import ConfigurationError
+    from max_cli.config import load_settings
+
+    monkeypatch.setenv("DOWNLOAD_TIMEOUT", "5")
+
+    with pytest.raises(ConfigurationError, match="DOWNLOAD_TIMEOUT"):
+        load_settings()
+
+
+def test_a_big_timeout_or_retry_count_still_loads(monkeypatch):
+    """Both settings existed without an upper limit before Max read them."""
+    from max_cli.config import load_settings
+
+    monkeypatch.setenv("DOWNLOAD_TIMEOUT", "900")
+    monkeypatch.setenv("MAX_RETRIES", "30")
+
+    loaded = load_settings()
+
+    assert (loaded.DOWNLOAD_TIMEOUT, loaded.MAX_RETRIES) == (900, 30)

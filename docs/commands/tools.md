@@ -1,6 +1,6 @@
 # Tools Commands
 
-The `max tools` group holds small system utilities for QR codes and the clipboard.
+The `max tools` group holds small system utilities for QR codes and the clipboard. The dashboard's Extras page (`0`) runs the same three actions; see [Dashboard](dashboard.md#extras-page).
 
 ## share
 
@@ -42,7 +42,7 @@ Save the image on your clipboard to a file. Use it right after you take a screen
 max tools paste [OUTPUT] [--force]
 ```
 
-`OUTPUT` defaults to `clipboard.png`. If you leave off the extension, Max adds `.png`. If a file with that name exists, Max asks before replacing it. `--force`, `-f` replaces it without asking.
+`OUTPUT` defaults to `clipboard.png`. If you leave off the extension, Max adds `.png`. If a file with that name exists, Max asks before replacing it. `--force`, `-f` replaces it without asking, and so does `CONFIRM_DESTRUCTIVE=false` in your settings.
 
 **Examples:**
 

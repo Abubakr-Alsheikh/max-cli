@@ -156,7 +156,7 @@ On Windows, Textual can't make the terminal draw a frame all at once, so every r
 
 ## Keyboard
 
-- Pages are `1`-`9` (`0` is free), and `,` for Settings (`sidebar.SECTION_KEYS`; write keys in text from it, never as digits); `J` Jobs; `?` help; `Esc` back to the sidebar.
+- Pages are `1`-`9`, `0` for Extras, and `,` for Settings (`sidebar.SECTION_KEYS`; write keys in text from it, never as digits); `J` Jobs; `?` help; `Esc` back to the sidebar.
 - The field a page is for gets focus when it shows (`on_show`).
 - Every action has a key or a button; the footer shows a page's keys.
 - New global keys go in the app's `BINDINGS` and in `GLOBAL_KEYS` (the help screen).
