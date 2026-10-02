@@ -5,7 +5,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
 import openai
 import pytest
 
@@ -318,10 +317,10 @@ def test_the_conversation_carries_on(tmp_path):
 
 
 def test_a_model_without_tool_support_gets_a_clear_message(tmp_path):
-    response = httpx.Response(400, request=httpx.Request("POST", "http://ai.test"))
-    error = openai.BadRequestError(
-        "This model does not support tools", response=response, body=None
-    )
+    # openai 1-2 build this error from an httpx response, openai 3 from an
+    # httpx2 one; skip __init__ so the test runs on either.
+    error = openai.BadRequestError.__new__(openai.BadRequestError)
+    Exception.__init__(error, "This model does not support tools")
 
     class NoTools(ScriptedModel):
         def _create(self, **request: Any) -> Any:

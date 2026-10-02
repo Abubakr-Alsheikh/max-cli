@@ -375,7 +375,11 @@ class AIPanel(Vertical):
 
         note = DANGER_NOTES.get(call.action.danger.value, "changes files")
         question = f"Max wants to run: {call.describe()}\nIt {note}. Go ahead?"
-        self.app.call_from_thread(self.app.push_screen, ConfirmDialog(question), done)
+        # Build the dialog on the UI thread: on Python 3.9 a widget made in a
+        # worker thread fails, as that thread has no event loop.
+        self.app.call_from_thread(
+            lambda: self.app.push_screen(ConfirmDialog(question), done)
+        )
         while not answered.wait(CONFIRM_POLL_SECONDS):
             if not self.app.is_running:
                 return False

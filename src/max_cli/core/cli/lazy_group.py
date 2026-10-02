@@ -71,18 +71,24 @@ class LazyTyperGroup(TyperGroup):
     agent_command = ("ai", "ask")
 
     def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
-        if not args and is_interactive():
-            args = [self.interactive_default]
-        elif args and self._is_request(args[0]):
-            # Words up to the first option are the request; options such as
-            # --dry-run stay options of `ai ask`.
-            words = next(
-                (index for index, arg in enumerate(args) if arg.startswith("-")),
-                len(args),
-            )
-            args = [*self.agent_command, " ".join(args[:words]), *args[words:]]
-        result: list[str] = super().parse_args(ctx, args)
+        result: list[str] = super().parse_args(ctx, self.route(args))
         return result
+
+    def route(self, args: list[str]) -> list[str]:
+        """The command line to run: the dashboard for a bare `max` at a
+        terminal (D2), `ai ask "<words>"` for words that aren't a command
+        (D1), else the arguments as given."""
+        if not args:
+            return [self.interactive_default] if is_interactive() else args
+        if not self._is_request(args[0]):
+            return args
+        # Words up to the first option are the request; options such as
+        # --dry-run stay options of `ai ask`.
+        words = next(
+            (index for index, arg in enumerate(args) if arg.startswith("-")),
+            len(args),
+        )
+        return [*self.agent_command, " ".join(args[:words]), *args[words:]]
 
     def _is_request(self, word: str) -> bool:
         """Words for the agent: not an option, not a command or group."""

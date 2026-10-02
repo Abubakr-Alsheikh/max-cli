@@ -85,23 +85,12 @@ def test_running_a_group_loads_it_on_demand():
         (["shrink", "it", "--dry-run"], ["shrink it", "--dry-run"]),
     ],
 )
-def test_text_that_isnt_a_command_goes_to_the_agent(monkeypatch, args, expected):
+def test_text_that_isnt_a_command_goes_to_the_agent(args, expected):
     """D1: `max "<request>"` and `max <words>` run `max ai ask`."""
-    # No AI set up: `ai ask` stops at once, after the routing under test.
-    monkeypatch.setattr("max_cli.core.engines.ai_engine.make_client", lambda: None)
-    seen = {}
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
 
-    class Spy(LazyTyperGroup):
-        def parse_args(self, ctx, given):
-            result = super().parse_args(ctx, given)
-            seen["args"] = list(ctx.protected_args) + list(ctx.args)
-            return result
-
-    app = typer.Typer(name="max", cls=Spy)
-    registry.register(app)
-    runner.invoke(app, args)
-
-    assert seen["args"] == ["ai", "ask", *expected]
+    assert group.route(args) == ["ai", "ask", *expected]
 
 
 @pytest.mark.parametrize(
