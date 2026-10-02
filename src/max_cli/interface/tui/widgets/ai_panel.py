@@ -24,7 +24,6 @@ from textual.events import Key
 from textual.timer import Timer
 from textual.widgets import Button, Checkbox, Collapsible, Input, Markdown, Static
 
-from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
@@ -58,11 +57,13 @@ CARD_STATES = {
     "refused": ("!", "-refused"),
     "declined": ("-", "-skipped"),
     "planned": ("→", "-planned"),
+    "queued": ("⧗", "-queued"),
 }
 CARD_NOTES = {
     "refused": "outside the folders Max may use",
     "declined": "you said no",
     "planned": "dry run, not run",
+    "queued": "queued, J shows its progress",
 }
 
 
@@ -101,6 +102,8 @@ class ToolCard(Collapsible):
     ToolCard.-refused, ToolCard.-planned { border-left: wide $warning; }
     ToolCard.-refused > CollapsibleTitle { color: $warning; }
     ToolCard.-planned > CollapsibleTitle { color: $primary; }
+    ToolCard.-queued { border-left: wide $primary; }
+    ToolCard.-queued > CollapsibleTitle { color: $primary; }
     ToolCard.-skipped { border-left: wide $text-muted; }
     ToolCard.-skipped > CollapsibleTitle { color: $text-muted; }
     """
@@ -545,33 +548,20 @@ class AIPanel(Vertical):
         from max_cli.common.exceptions import MaxError
         from max_cli.core.agent.agent import Agent
 
-        activity = ActivityLog()
-        entry = activity.start_entry(
-            category="ai", action="agent", details={"prompt": request}
-        )
         try:
             if self._agent is None:
+                # The dashboard runs the queue, so long jobs may wait there.
                 self._agent = Agent.from_settings(
-                    confirm=self._confirm_from_thread, on_step=self._step_from_thread
+                    confirm=self._confirm_from_thread,
+                    on_step=self._step_from_thread,
+                    can_queue=True,
                 )
             self._agent.dry_run = dry_run
             reply = self._agent.ask(request)
         except MaxError as e:
-            activity.complete_entry(entry, "failed", {"error": str(e)})
             self.app.call_from_thread(self._show_error, turn, str(e))
             return
-        activity.complete_entry(
-            entry, "success", {"message": reply.text, "tokens": reply.tokens}
-        )
-        for step in reply.steps:
-            if step.result is not None:
-                group, _, name = step.action_id.partition(".")
-                activity.add_entry(
-                    category=group,
-                    action=name,
-                    status="success" if step.result.ok else "failed",
-                    details={**step.result.to_dict(), "via": "ai"},
-                )
+        # The agent logs the request and each action to Activity itself.
         self.app.call_from_thread(self._show_reply, turn, reply)
 
     def _step_from_thread(self, step: "Step") -> None:

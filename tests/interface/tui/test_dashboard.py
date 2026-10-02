@@ -47,7 +47,7 @@ class TestMaxDashboardApp:
 
     @pytest.mark.asyncio
     async def test_history_filter(self, mock_manager, mock_activity_log):
-        from max_cli.interface.tui.activity_log import ActivityEntry
+        from max_cli.common.activity_log import ActivityEntry
         from max_cli.interface.tui.app import MaxDashboardApp
 
         entries = [

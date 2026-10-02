@@ -32,6 +32,7 @@ STEP_STYLES = {
     "refused": ("!", "yellow"),
     "declined": ("-", "dim"),
     "planned": ("→", "cyan"),
+    "queued": ("⧗", "cyan"),
 }
 # Quicker actions don't show how long they took.
 MIN_SHOWN_SECONDS = 0.1
@@ -73,11 +74,12 @@ def _show_step(step: "Step") -> None:
     its result (and the files it made) indented under it when it ends."""
     kind = step.kind.value
     mark, style = STEP_STYLES.get(kind, ("·", "dim"))
-    if kind in ("started", "planned", "refused", "declined"):
+    if kind in ("started", "planned", "refused", "declined", "queued"):
         title = {
             "started": step.label,
             "planned": f"Would run {step.label}",
             "declined": f"Skipped {step.label}",
+            "queued": f"Queued {step.label}",
         }.get(kind, step.text)
         console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
         _show_arguments(step)

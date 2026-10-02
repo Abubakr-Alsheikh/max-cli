@@ -16,8 +16,8 @@ from max_cli.core.catalog import actions_for
 from max_cli.core.catalog.spec import Surface
 
 # The first prompt (system message plus the two tool definitions) must stay
-# small: about 4 characters per token, so this is roughly 1,100 tokens.
-FIRST_PROMPT_CHAR_BUDGET = 4_400
+# small: about 4 characters per token, so this is roughly 1,500 tokens.
+FIRST_PROMPT_CHAR_BUDGET = 6_000
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -91,7 +91,28 @@ def test_the_first_prompt_holds_only_the_group_list(tmp_path):
 
 def test_the_tools_look_load_and_run():
     names = [tool["function"]["name"] for tool in tool_definitions()]
-    assert names == ["list_folder", "inspect", "load_group", "run_action"]
+    assert names == [
+        "list_folder",
+        "inspect",
+        "find_files",
+        "probe_link",
+        "recent_activity",
+        "load_group",
+        "run_action",
+    ]
+
+
+def test_only_a_queueing_agent_offers_the_queue_option():
+    def run_options(can_queue: bool) -> set:
+        [run] = [
+            tool
+            for tool in tool_definitions(can_queue)
+            if tool["function"]["name"] == "run_action"
+        ]
+        return set(run["function"]["parameters"]["properties"])
+
+    assert "queue" not in run_options(False)
+    assert "queue" in run_options(True)
 
 
 # --- running actions ----------------------------------------------------------
@@ -286,6 +307,164 @@ def test_a_dry_run_action_runs_without_asking(tmp_path):
     assert agent.asked == []
     assert reply.steps[-1].kind == StepKind.RAN
     assert (tmp_path / "a.txt").exists()
+
+
+def _look_answer(model: "ScriptedModel") -> Any:
+    return json.loads(model.requests[1]["messages"][-1]["content"])
+
+
+def test_find_files_searches_subfolders_with_filters(tmp_path):
+    old = tmp_path / "a" / "old.mp4"
+    old.parent.mkdir()
+    old.write_bytes(b"x" * 2_000_000)
+    (tmp_path / "a" / "b").mkdir()
+    (tmp_path / "a" / "b" / "small.mp4").write_bytes(b"x")
+    (tmp_path / "song.mp3").write_bytes(b"x" * 3_000_000)
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "big.mp4").write_bytes(b"x" * 5_000_000)
+    model = ScriptedModel(
+        _answer(
+            calls=(
+                _call(
+                    "find_files",
+                    {"path": ".", "kind": "video", "min_size_mb": 1, "sort": "size"},
+                ),
+            )
+        ),
+        _answer("One big video."),
+    )
+
+    reply = _agent(model, tmp_path).ask("videos over 1 MB?")
+
+    found = _look_answer(model)
+    assert found["matches"] == 1
+    assert found["files"][0]["path"] == str(Path("a") / "old.mp4")
+    assert reply.steps[-1].text == f"Searched {tmp_path.name}"
+
+
+def test_probe_link_reports_what_a_link_holds(tmp_path, monkeypatch):
+    from max_cli.core.operations import grab
+
+    info = grab.MediaInfo(
+        url="https://youtu.be/x",
+        title="A talk",
+        duration=600.0,
+        qualities=[grab.QualityOption(height=1080, size_bytes=50_000_000)],
+    )
+    monkeypatch.setattr(grab, "probe", lambda url: info)
+    model = ScriptedModel(
+        _answer(calls=(_call("probe_link", {"url": "https://youtu.be/x"}),)),
+        _answer("A 10 minute talk."),
+    )
+
+    _agent(model, tmp_path).ask("what's this link?")
+
+    found = _look_answer(model)
+    assert found["title"] == "A talk" and found["duration_seconds"] == 600.0
+    assert found["qualities"][0]["quality"] == "1080p"
+
+
+def test_recent_activity_lists_actions_and_undoable_changes(tmp_path):
+    from max_cli.common.activity_log import ActivityLog
+
+    ActivityLog().add_entry(
+        "video", "compress", "success", details={"message": "Saved small.mp4"}
+    )
+    model = ScriptedModel(
+        _answer(calls=(_call("recent_activity", {}),)), _answer("You compressed.")
+    )
+
+    _agent(model, tmp_path).ask("what did I do?")
+
+    found = _look_answer(model)
+    assert found["actions"][0]["what"] == "video compress"
+    assert found["actions"][0]["message"] == "Saved small.mp4"
+    assert "file_changes_undo_can_reverse" in found
+
+
+def test_a_queueing_agent_queues_a_long_job(tmp_path, monkeypatch, dummy_video):
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "video"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "video.compress",
+                        "arguments": {"target": str(dummy_video)},
+                        "queue": True,
+                    },
+                ),
+            )
+        ),
+        _answer("Queued; see Jobs (J)."),
+    )
+    agent = _agent(model, dummy_video.parent, can_queue=True)
+
+    reply = agent.ask("compress it in the background")
+
+    assert reply.steps[-1].kind == StepKind.QUEUED
+    queued = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert queued["queued"] is True
+    pending = get_task_manager().get_pending()
+    assert [task.payload["action"] for task in pending] == ["video.compress"]
+
+
+def test_without_queueing_a_queue_request_just_runs(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "files.preview",
+                        "arguments": {"target": str(_note(tmp_path))},
+                        "queue": True,
+                    },
+                ),
+            )
+        ),
+        _answer("Read it."),
+    )
+
+    reply = _agent(model, tmp_path).ask("read it")
+
+    assert reply.steps[-1].kind == StepKind.RAN
+
+
+def test_requests_and_actions_go_into_the_activity_log(tmp_path):
+    from max_cli.common.activity_log import ActivityLog
+
+    note = _note(tmp_path)
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.preview", "arguments": {"target": str(note)}},
+                ),
+            )
+        ),
+        _answer("It says hello."),
+    )
+
+    _agent(model, tmp_path).ask("read note.txt")
+
+    request, action = ActivityLog().get_entries(limit=2)
+    assert (request.category, request.action) == ("ai", "agent")
+    assert request.details["prompt"] == "read note.txt"
+    assert request.details["message"] == "It says hello."
+    assert (action.category, action.action, action.status) == (
+        "files",
+        "preview",
+        "success",
+    )
+    assert action.details["args"]["target"] == str(note)
+    assert action.details["via"] == "ai"
 
 
 # --- guardrails ---------------------------------------------------------------

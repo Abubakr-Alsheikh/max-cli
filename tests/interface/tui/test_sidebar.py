@@ -4,7 +4,7 @@
 import pytest
 from textual.widgets import Button, Input
 
-from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.common.activity_log import ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
 from max_cli.interface.tui.ui_prefs import load_prefs
 from max_cli.interface.tui.widgets.dialogs import HelpScreen

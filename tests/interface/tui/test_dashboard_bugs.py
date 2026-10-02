@@ -6,7 +6,7 @@ import pytest
 
 def test_grab_activity_counts_as_download():
     """Downloads log as "grab", but the Home card and History filter read "download"."""
-    from max_cli.interface.tui.activity_log import ActivityLog
+    from max_cli.common.activity_log import ActivityLog
 
     log = ActivityLog()
     log.add_entry(category="grab", action="download", status="success")
@@ -18,7 +18,7 @@ def test_grab_activity_counts_as_download():
 def test_old_grab_entries_on_disk_count_as_download():
     import json
 
-    from max_cli.interface.tui.activity_log import ActivityLog
+    from max_cli.common.activity_log import ActivityLog
 
     ActivityLog.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     ActivityLog.LOG_FILE.write_text(

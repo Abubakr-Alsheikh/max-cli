@@ -7,7 +7,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Digits
 
-from max_cli.interface.tui.activity_log import ActivityEntry, ActivityLog
+from max_cli.common.activity_log import ActivityEntry, ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
 from max_cli.interface.tui.theme import THEME_NAME
 from max_cli.interface.tui.widgets.charts import (

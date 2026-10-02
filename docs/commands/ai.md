@@ -38,7 +38,15 @@ max "shrink every video in this folder"
 max "merge the PDFs in Downloads into one file" --dry-run
 ```
 
-**How it decides:** before it acts or advises, the agent can look at your files without changing them. It lists a folder (subfolders, each file's kind and size, counts by kind) and inspects a file or folder: a song's artist, album and length, a video's length and codecs, a photo's size, date and camera, a PDF's pages, or a summary of a music or photo folder (its artists and albums, its formats). Ask "how would you organize this folder?" and it answers from what's there.
+**How it decides:** before it acts or advises, the agent can look without changing anything:
+
+- **List a folder:** its subfolders, each file's kind and size, counts by kind.
+- **Inspect a file or folder:** a song's artist, album and length, a video's length and codecs, a photo's size, date and camera, a PDF's pages, or a summary of a music or photo folder (its artists and albums, its formats).
+- **Find files** in a folder and its subfolders by kind, name, size and age: "videos over 1 GB in Downloads", "photos from this year", "what's taking space here".
+- **Check a link** before downloading it: title, length, qualities with their sizes, a playlist's items.
+- **Read the recent activity:** what Max did lately and which file changes undo can reverse, so "undo that" and "what did I compress yesterday?" work.
+
+Ask "how would you organize this folder?" and it answers from what's there. Every request and every action the agent runs, here or in the dashboard, goes into the activity log (`max` dashboard, Activity > History).
 
 **What the agent may do:**
 

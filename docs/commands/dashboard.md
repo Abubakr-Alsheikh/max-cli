@@ -120,6 +120,8 @@ The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, 
 
 - Each answer starts with a status line: a spinner and what Max is doing ("Thinking", "Running files order", "Waiting for your answer"), then how many actions it ran and the tokens it used.
 - Every action gets a card: running, then `✓` with its result and how long it took, `✗` with the error, or a note when a path was refused, you said no, or it was a dry run. Click a card to see the arguments it ran with and the files it made.
+- Long jobs (compressing or cleaning up a video, downloads) can go to the queue: the card says `⧗ queued`, you keep talking, and the Jobs window (`J`) shows their progress. Only the dashboard queues; `max "<request>"` in a terminal waits for each action.
+- The line under the status names what it looked at first: folders it listed or searched, files it inspected, links it checked.
 - The reply itself is rendered as Markdown: lists, tables, code and links.
 - Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
 - **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.

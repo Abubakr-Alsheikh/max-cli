@@ -22,10 +22,14 @@ from max_cli.common.exceptions import AIError, ConfigurationError, MaxError
 from max_cli.core.agent import looks
 from max_cli.core.agent.scope import PathScope
 from max_cli.core.agent.tools import (
+    INSPECT,
     LIST_FOLDER,
     LOAD_GROUP,
     LOOK_TOOLS,
+    PROBE_LINK,
+    RECENT_ACTIVITY,
     RUN_ACTION,
+    TOOL_NAMES,
     agent_groups,
     group_actions,
     group_lines,
@@ -53,9 +57,7 @@ Command groups, with their actions:
 {groups}
 
 How to work:
-- Look before you act or advise: list_folder shows what a folder holds, \
-inspect gives a file's facts (a song's artist and album, a video's length, a \
-photo's date). Base suggestions on what you saw.
+- Look before you act or advise, with the read-only tools (list_folder, inspect, find_files, probe_link, recent_activity). Base suggestions on what you saw.{queue_rule}
 - The user is in {cwd}. "Here", "this folder" and relative paths mean that \
 folder; don't ask which folder unless the request names another one.
 - Call load_group(name) to see a group's actions and their arguments, then \
@@ -69,6 +71,22 @@ or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead."""
 
 
+QUEUE_RULE = """
+- Long jobs (video compress or denoise, downloads) can run in the \
+background: run_action with queue true. Say they're queued and that the Jobs \
+window (J) shows them."""
+# The find_files arguments besides `path`.
+FIND_FILTERS = (
+    "kind",
+    "name",
+    "min_size_mb",
+    "max_size_mb",
+    "newer_than_days",
+    "older_than_days",
+    "sort",
+)
+
+
 class StepKind(str, Enum):
     LOADED = "loaded"  # read a group's actions
     LOOKED = "looked"  # listed a folder or inspected a file
@@ -78,6 +96,7 @@ class StepKind(str, Enum):
     REFUSED = "refused"  # a path outside the allowed folders
     DECLINED = "declined"  # the user said no
     PLANNED = "planned"  # dry run: checked, not run
+    QUEUED = "queued"  # added to the queue; the dashboard runs it in the background
 
 
 @dataclass(frozen=True)
@@ -150,8 +169,12 @@ class Agent:
         dry_run: bool = False,
         max_steps: int = MAX_STEPS,
         token_limit: int = TOKEN_LIMIT,
+        can_queue: bool = False,
     ) -> None:
+        """`can_queue` lets the model queue long jobs: only where something
+        runs the queue (the dashboard); the CLI waits for each action."""
         self.client = client
+        self.can_queue = can_queue
         self.model = model
         self.confirm = confirm
         self.on_step = on_step or _ignore_step
@@ -180,12 +203,44 @@ class Agent:
 
     def system_prompt(self) -> str:
         """The first prompt: the group list only, never the actions."""
-        return SYSTEM_PROMPT.format(groups=group_lines(), cwd=self.scope.cwd)
+        return SYSTEM_PROMPT.format(
+            groups=group_lines(),
+            cwd=self.scope.cwd,
+            queue_rule=QUEUE_RULE if self.can_queue else "",
+        )
 
     # --- the loop -----------------------------------------------------------
 
     def ask(self, request: str) -> AgentReply:
-        """Work on one request until the model answers in words."""
+        """Work on one request until the model answers in words.
+
+        The request goes into the activity log (with each action it runs),
+        whether it came from the CLI or the dashboard, so recent_activity
+        and Activity's History show it.
+        """
+        from max_cli.common.activity_log import ActivityLog
+
+        # One entry when it ends: an entry opened at the start and saved at
+        # the end would write its stale copy of the log over the actions
+        # logged in between.
+        started = time.monotonic()
+        try:
+            reply = self._ask(request)
+        except MaxError as e:
+            ActivityLog().add_entry(
+                "ai", "agent", "failed", {"prompt": request, "error": str(e)}
+            )
+            raise
+        ActivityLog().add_entry(
+            "ai",
+            "agent",
+            "success",
+            {"prompt": request, "message": reply.text, "tokens": reply.tokens},
+            duration_ms=int((time.monotonic() - started) * 1000),
+        )
+        return reply
+
+    def _ask(self, request: str) -> AgentReply:
         self.scope.add_from(request)
         self.messages.append({"role": "user", "content": request})
         reply = AgentReply("")
@@ -236,7 +291,9 @@ class Agent:
 
         try:
             return self.client.chat.completions.create(
-                model=self.model, messages=self.messages, tools=tool_definitions()
+                model=self.model,
+                messages=self.messages,
+                tools=tool_definitions(self.can_queue),
             )
         except BadRequestError as e:
             if "tool" in str(e).lower():
@@ -261,37 +318,54 @@ class Agent:
         if name == LOAD_GROUP:
             return self._load_group(str(arguments.get("name", "")), reply)
         if name in LOOK_TOOLS:
-            return self._look(name, str(arguments.get("path", "")), reply)
+            return self._look(name, arguments, reply)
         if name == RUN_ACTION:
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
                 return "Error: 'arguments' must be an object."
-            return self._run(str(arguments.get("action", "")), dict(given), reply)
-        return (
-            f"Error: there is no tool '{name}'. Use list_folder, inspect, "
-            "load_group or run_action."
-        )
+            queue = arguments.get("queue") is True
+            return self._run(
+                str(arguments.get("action", "")), dict(given), reply, queue=queue
+            )
+        return f"Error: there is no tool '{name}'. Tools: {', '.join(TOOL_NAMES)}."
 
-    def _look(self, tool: str, raw_path: str, reply: AgentReply) -> str:
-        """list_folder or inspect: read-only, inside the allowed folders."""
-        if not raw_path.strip():
-            return "Error: give a path."
-        path = self.scope.resolve(raw_path)
-        if not self.scope.allows(path):
-            allowed = "; ".join(str(root) for root in self.scope.roots)
-            text = f"{path} is outside the folders I may use"
-            self._report(reply, Step(StepKind.REFUSED, tool, text))
-            return f"Error: {text} ({allowed}). Ask the user to name it."
-        look = looks.list_folder if tool == LIST_FOLDER else looks.inspect
+    def _look(self, tool: str, arguments: dict[str, Any], reply: AgentReply) -> str:
+        """A read-only tool. Paths stay inside the allowed folders."""
         try:
-            found = look(path)
+            if tool == PROBE_LINK:
+                url = str(arguments.get("url", "")).strip()
+                found, what = looks.probe_link(url), f"Checked {url}"
+            elif tool == RECENT_ACTIVITY:
+                found = looks.recent_activity(int(arguments.get("limit") or 10))
+                what = "Read the recent activity"
+            else:
+                path = self.scope.resolve(str(arguments.get("path") or "."))
+                if not self.scope.allows(path):
+                    allowed = "; ".join(str(root) for root in self.scope.roots)
+                    text = f"{path} is outside the folders I may use"
+                    self._report(reply, Step(StepKind.REFUSED, tool, text))
+                    return f"Error: {text} ({allowed}). Ask the user to name it."
+                found, what = self._look_at(tool, path, arguments)
         except MaxError as e:
             return f"Error: {e}"
-        except OSError as e:
-            return f"Error: couldn't read {path}: {e}"
-        verb = "Listed" if tool == LIST_FOLDER else "Inspected"
-        self._report(reply, Step(StepKind.LOOKED, tool, f"{verb} {path.name or path}"))
+        except (OSError, ValueError, TypeError) as e:
+            return f"Error: {e}"
+        self._report(reply, Step(StepKind.LOOKED, tool, what))
         return found
+
+    @staticmethod
+    def _look_at(tool: str, path: Path, arguments: dict[str, Any]) -> tuple[str, str]:
+        name = path.name or str(path)
+        if tool == LIST_FOLDER:
+            return looks.list_folder(path), f"Listed {name}"
+        if tool == INSPECT:
+            return looks.inspect(path), f"Inspected {name}"
+        filters = {
+            key: arguments[key]
+            for key in FIND_FILTERS
+            if arguments.get(key) not in (None, "")
+        }
+        return looks.find_files(path, **filters), f"Searched {name}"
 
     def _load_group(self, name: str, reply: AgentReply) -> str:
         if name not in agent_groups():
@@ -302,8 +376,14 @@ class Agent:
         )
         return group_actions(name)
 
-    def _run(self, action_id: str, given: dict[str, Any], reply: AgentReply) -> str:
-        from max_cli.core.catalog.runner import coerce_args, run_action
+    def _run(
+        self,
+        action_id: str,
+        given: dict[str, Any],
+        reply: AgentReply,
+        queue: bool = False,
+    ) -> str:
+        from max_cli.core.catalog.runner import coerce_args, enqueue_action, run_action
 
         try:
             action = get_action(action_id)
@@ -368,6 +448,21 @@ class Agent:
             )
             return DECLINED_NOTE
 
+        if queue and self.can_queue and action.queueable:
+            task = enqueue_action(action, given)
+            self._report(
+                reply,
+                Step(StepKind.QUEUED, action_id, f"Queued {label}", arguments=shown),
+            )
+            return json.dumps(
+                {
+                    "queued": True,
+                    "task_id": task.id,
+                    "note": "It runs in the background; the user follows it in "
+                    "the Jobs window (J). Don't wait for it.",
+                }
+            )
+
         self._report(
             reply,
             Step(StepKind.STARTED, action_id, f"Running {label}", arguments=shown),
@@ -407,6 +502,8 @@ class Agent:
 
     def _report(self, reply: AgentReply, step: Step) -> None:
         reply.steps.append(step)
+        if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED):
+            _log_action(step)
         self.on_step(step)
 
 
@@ -427,6 +524,26 @@ def _assistant_message(content: Optional[str], tool_calls: list[Any]) -> dict[st
             for call in tool_calls
         ],
     }
+
+
+def _log_action(step: Step) -> None:
+    """An action the agent ran, queued or failed, in the activity log."""
+    from max_cli.common.activity_log import ActivityLog
+
+    group, _, name = step.action_id.partition(".")
+    if not name:
+        return  # a look or lookup, not an action
+    details: dict[str, Any] = {"args": step.arguments, "via": "ai"}
+    if step.result is not None:
+        details.update(step.result.to_dict())
+    elif step.kind == StepKind.FAILED:
+        details["error"] = step.text
+    status = {StepKind.RAN: "success", StepKind.QUEUED: "queued"}.get(
+        step.kind, "failed"
+    )
+    ActivityLog().add_entry(
+        group, name, status, details, duration_ms=int(step.seconds * 1000)
+    )
 
 
 def _shown(arguments: Mapping[str, Any]) -> dict[str, str]:

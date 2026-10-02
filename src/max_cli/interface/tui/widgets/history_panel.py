@@ -13,7 +13,7 @@ from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.widgets import Button, Checkbox, DataTable, Input, Select, Static
 
-from max_cli.interface.tui.activity_log import ActivityEntry, ActivityLog
+from max_cli.common.activity_log import ActivityEntry, ActivityLog
 from max_cli.interface.tui.tables import Row, show_rows
 from max_cli.interface.tui.text import relative_time
 

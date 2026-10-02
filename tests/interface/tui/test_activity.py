@@ -6,7 +6,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Checkbox, DataTable, Input, Static
 
-from max_cli.interface.tui.activity_log import ActivityLog
+from max_cli.common.activity_log import ActivityLog
 from max_cli.interface.tui.widgets import history_panel
 from max_cli.interface.tui.widgets.activity_panel import ActivityPanel
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog

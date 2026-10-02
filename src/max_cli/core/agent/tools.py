@@ -18,7 +18,11 @@ LOAD_GROUP = "load_group"
 RUN_ACTION = "run_action"
 LIST_FOLDER = "list_folder"
 INSPECT = "inspect"
-LOOK_TOOLS = (LIST_FOLDER, INSPECT)
+FIND_FILES = "find_files"
+PROBE_LINK = "probe_link"
+RECENT_ACTIVITY = "recent_activity"
+LOOK_TOOLS = (LIST_FOLDER, INSPECT, FIND_FILES, PROBE_LINK, RECENT_ACTIVITY)
+TOOL_NAMES = (*LOOK_TOOLS, LOAD_GROUP, RUN_ACTION)
 
 
 def agent_groups() -> list[str]:
@@ -64,8 +68,90 @@ def _path_tool(name: str, description: str) -> dict[str, Any]:
     }
 
 
-def tool_definitions() -> list[dict[str, Any]]:
-    """The tools, in the OpenAI chat-completions format."""
+def _tool(
+    name: str, description: str, properties: dict[str, Any], required: list[str]
+) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def _look_definitions() -> list[dict[str, Any]]:
+    """find_files, probe_link and recent_activity."""
+    from max_cli.common.file_kinds import KIND_SUFFIXES
+
+    number = {"type": "number"}
+    return [
+        _tool(
+            FIND_FILES,
+            "Search a folder and its subfolders. Every filter is optional; "
+            "use it for 'videos over 1 GB', 'photos from this year', 'what's "
+            "taking space'. Changes nothing.",
+            {
+                "path": {"type": "string", "description": "Folder to search."},
+                "kind": {"type": "string", "enum": sorted(KIND_SUFFIXES)},
+                "name": {
+                    "type": "string",
+                    "description": "A name pattern, e.g. *.mp4 or invoice.",
+                },
+                "min_size_mb": number,
+                "max_size_mb": number,
+                "newer_than_days": number,
+                "older_than_days": number,
+                "sort": {
+                    "type": "string",
+                    "enum": ["size", "newest", "oldest", "name"],
+                },
+            },
+            ["path"],
+        ),
+        _tool(
+            PROBE_LINK,
+            "See what a video or playlist link holds before downloading it: "
+            "title, length, qualities with sizes, playlist items. Changes nothing.",
+            {"url": {"type": "string"}},
+            ["url"],
+        ),
+        _tool(
+            RECENT_ACTIVITY,
+            "What Max did lately (actions, requests, results, files made) and "
+            "the file changes undo can still reverse. Use it for 'undo that' or "
+            "'what did I do yesterday'.",
+            {"limit": {"type": "integer", "description": "How many, at most 15."}},
+            [],
+        ),
+    ]
+
+
+def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
+    """The tools, in the OpenAI chat-completions format. `can_queue` adds the
+    run_action option that queues a long job (the dashboard runs the queue)."""
+    run_properties: dict[str, Any] = {
+        "action": {
+            "type": "string",
+            "description": "The action id, e.g. pdf.merge.",
+        },
+        "arguments": {
+            "type": "object",
+            "description": "Argument names and values.",
+        },
+    }
+    if can_queue:
+        run_properties["queue"] = {
+            "type": "boolean",
+            "description": "Run it in the background instead of waiting: for "
+            "long video jobs and downloads. Only queueable actions.",
+        }
     return [
         _path_tool(
             LIST_FOLDER,
@@ -78,6 +164,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "a video's length and codecs, an image's size and camera, a PDF's "
             "pages; for a music or photo folder, a summary. Changes nothing.",
         ),
+        *_look_definitions(),
         {
             "type": "function",
             "function": {
@@ -106,16 +193,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 ),
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "action": {
-                            "type": "string",
-                            "description": "The action id, e.g. pdf.merge.",
-                        },
-                        "arguments": {
-                            "type": "object",
-                            "description": "Argument names and values.",
-                        },
-                    },
+                    "properties": run_properties,
                     "required": ["action", "arguments"],
                     "additionalProperties": False,
                 },

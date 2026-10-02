@@ -18,12 +18,12 @@ from textual.containers import Grid, Horizontal, Vertical
 from textual.content import Content
 from textual.widgets import Button, Digits, Static
 
-from max_cli.common.utils import format_size
-from max_cli.interface.tui.activity_log import (
+from max_cli.common.activity_log import (
     CATEGORY_ALIASES,
     ActivityEntry,
     ActivityLog,
 )
+from max_cli.common.utils import format_size
 from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.widgets.charts import (
     Bar,

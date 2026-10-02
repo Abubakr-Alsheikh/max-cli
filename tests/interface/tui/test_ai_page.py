@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pytest
 from textual.widgets import Button, Input, Markdown, Static
 
+from max_cli.common.activity_log import ActivityLog
 from max_cli.common.exceptions import AIError
-from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
 from max_cli.interface.tui.widgets.ai_panel import AgentTurn, AIPanel, ToolCard
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
@@ -316,3 +316,39 @@ async def test_a_short_terminal_keeps_the_input_in_view(ai_on):
 
             assert box.region.height and box.region.bottom <= 16
             assert log.allow_vertical_scroll and log.max_scroll_y > 0
+
+
+@pytest.mark.asyncio
+async def test_a_long_job_is_queued_and_shown_as_queued(ai_on, dummy_video):
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "video"}, "call-1"),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "video.compress",
+                        "arguments": {"target": str(dummy_video)},
+                        "queue": True,
+                    },
+                    "call-2",
+                ),
+            )
+        ),
+        _answer("Queued it; J shows progress."),
+    )
+    app = MaxDashboardApp()
+    manager = get_task_manager()
+    with patch(CLIENT_PATH, return_value=model), patch.object(manager, "start_worker"):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "compress the video in the background")
+            await _replied(app, pilot)
+            [card] = app.query(ToolCard)
+
+            assert card.has_class("-queued")
+            assert "queued" in card.title
+    assert [task.payload["action"] for task in manager.get_pending()] == [
+        "video.compress"
+    ]
