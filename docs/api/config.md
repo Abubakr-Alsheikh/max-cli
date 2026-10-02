@@ -10,11 +10,17 @@ from max_cli.config import settings
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| OPENAI_API_KEY | str | None | OpenAI (or OpenRouter, Gemini) API key |
+| AI_PROVIDER | str | "" | Main AI: openai, openrouter, gemini or ollama. Empty: Ollama when OLLAMA_ENABLED, else openai |
+| AI_FALLBACK_PROVIDER | str | "" | Takes over when the main AI fails; empty for none |
+| OPENAI_API_KEY | str | None | OpenAI's key, or the key for OPENAI_BASE_URL |
+| OPENROUTER_API_KEY | str | None | OpenRouter's key |
+| OPENROUTER_MODEL | str | openrouter/free | OpenRouter's model |
+| GEMINI_API_KEY | str | None | Google Gemini's key (free at aistudio.google.com/apikey) |
+| GEMINI_MODEL | str | gemini-2.5-flash | Gemini's model |
 | OPENAI_BASE_URL | str | None | API base URL; empty for OpenAI |
-| AI_MODEL | str | gpt-5-nano | Model for ask, chat and analyze |
+| AI_MODEL | str | gpt-5-nano | OpenAI's (or the custom URL's) model |
 | AI_IMAGE_MODEL | str | gpt-image-1 | Model for creating and editing images |
-| OLLAMA_ENABLED | bool | False | Use a local Ollama model instead |
+| OLLAMA_ENABLED | bool | False | Older setting: with AI_PROVIDER empty, true means Ollama |
 | OLLAMA_BASE_URL | str | http://localhost:11434 | Where Ollama listens |
 | OLLAMA_MODEL | str | llama3 | Ollama model |
 | DEFAULT_QUALITY | int | 85 | Image quality for compress and convert |

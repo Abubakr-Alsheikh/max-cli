@@ -45,45 +45,87 @@ class SettingField:
     wide: bool = False  # takes both columns of its card
 
 
+AI_PROVIDER_CHOICES = (
+    ("OpenAI or a custom URL", "openai"),
+    ("OpenRouter", "openrouter"),
+    ("Google Gemini", "gemini"),
+    ("Ollama (this computer)", "ollama"),
+)
 CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
     (
         "AI",
         "settings-ai",
         (
             SettingField(
-                "OPENAI_API_KEY",
-                "API key",
-                "secret",
-                "Your OpenAI key, or an OpenRouter or Gemini key with its base URL.",
-                wide=True,
+                "AI_PROVIDER",
+                "Main AI",
+                "choice",
+                "Who answers the AI page, max ai and smart-sort.",
+                AI_PROVIDER_CHOICES,
             ),
             SettingField(
-                "OPENAI_BASE_URL",
-                "Base URL",
-                "text",
-                "Empty for OpenAI. OpenRouter: https://openrouter.ai/api/v1",
-                wide=True,
-            ),
-            SettingField(
-                "AI_MODEL", "Chat model", "text", "For ask, chat and analyze."
+                "AI_FALLBACK_PROVIDER",
+                "Fallback",
+                "choice",
+                "Takes over when the main AI fails: no credit, a rate limit, "
+                "a wrong key, the service down.",
+                (("No fallback", ""), *AI_PROVIDER_CHOICES),
             ),
             SettingField(
                 "AI_IMAGE_MODEL",
                 "Image model",
                 "text",
                 "For creating and editing images.",
+                wide=True,
+            ),
+        ),
+    ),
+    (
+        "AI PROVIDERS",
+        "settings-ai-providers",
+        (
+            # One row per provider: its key, then its model.
+            SettingField(
+                "GEMINI_API_KEY",
+                "Gemini API key",
+                "secret",
+                "aistudio.google.com/apikey (free)",
             ),
             SettingField(
-                "OLLAMA_ENABLED",
-                "Use Ollama on this computer instead",
-                "bool",
-                "Runs a local model; no API key needed.",
+                "GEMINI_MODEL", "Gemini model", "text", "For example gemini-2.5-flash."
+            ),
+            SettingField(
+                "OPENROUTER_API_KEY",
+                "OpenRouter API key",
+                "secret",
+                "openrouter.ai/keys",
+            ),
+            SettingField(
+                "OPENROUTER_MODEL",
+                "OpenRouter model",
+                "text",
+                "openrouter/free picks a free model.",
+            ),
+            SettingField(
+                "OPENAI_API_KEY",
+                "OpenAI API key",
+                "secret",
+                "From platform.openai.com, or your custom URL's key.",
+            ),
+            SettingField("AI_MODEL", "OpenAI model", "text", "For example gpt-5-nano."),
+            SettingField(
+                "OPENAI_BASE_URL",
+                "Custom URL (OpenAI)",
+                "text",
+                "Empty for OpenAI; any URL that speaks OpenAI's API.",
                 wide=True,
             ),
             SettingField(
                 "OLLAMA_BASE_URL", "Ollama URL", "text", "Where Ollama listens."
             ),
-            SettingField("OLLAMA_MODEL", "Ollama model", "text", "For example llama3."),
+            SettingField(
+                "OLLAMA_MODEL", "Ollama model", "text", "For example llama3.1."
+            ),
         ),
     ),
     (
@@ -182,14 +224,27 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
 # Every setting appears here; a test fails when one isn't, or when no code
 # reads one (delete it then, and add it to config.REMOVED_SETTINGS).
 FIELDS = {field.name: field for _title, _id, fields in CARDS for field in fields}
+# Read, but not on the page: Main AI replaced it. A settings file from before
+# AI_PROVIDER that turns it on still means Ollama (ai_providers.main_provider).
+LEGACY = frozenset({"OLLAMA_ENABLED"})
 # Settings read once at start-up; a change applies the next time max starts.
 APPLY_ON_RESTART = frozenset({"GRAB_MAX_CONCURRENT"})
 # Optional settings: an empty box removes them from the file.
-OPTIONAL = frozenset({"OPENAI_API_KEY", "OPENAI_BASE_URL"})
+OPTIONAL = frozenset(
+    {"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENROUTER_API_KEY", "GEMINI_API_KEY"}
+)
 
 
 def saved_text(name: str) -> Optional[str]:
-    """A setting's current value as the text the file holds; None when unset."""
+    """A setting's current value as the text the file holds; None when unset.
+
+    An unset AI_PROVIDER reads as the provider older settings mean, so the
+    page shows what's in use and doesn't count it as a change.
+    """
+    if name == "AI_PROVIDER" and not settings.AI_PROVIDER:
+        from max_cli.core.engines.ai_providers import main_provider
+
+        return main_provider().name
     value = getattr(settings, name)
     if value is None:
         return None
@@ -291,6 +346,14 @@ class SettingsPanel(Vertical):
     SettingsPanel .upkeep-row Button {
         min-width: 16;
     }
+    #ai-check-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+    #ai-check-status {
+        width: 1fr;
+        padding: 1 2;
+    }
     #upkeep-about {
         margin: 1 0;
     }
@@ -311,6 +374,16 @@ class SettingsPanel(Vertical):
                 with Grid(classes="settings-grid"):
                     for field in fields:
                         yield self._field(field)
+                if card_id == "settings-ai":
+                    with Horizontal(id="ai-check-row"):
+                        yield Button("Check AI", id="btn-check-ai")
+                        yield Static(
+                            Content.styled(
+                                "Sends a tiny request to each one. Save first.",
+                                "$text-muted",
+                            ),
+                            id="ai-check-status",
+                        )
         with Horizontal(id="settings-bar"):
             yield Button("Save changes", id="btn-save-settings", variant="success")
             yield Button("Discard", id="btn-discard-settings")
@@ -363,7 +436,7 @@ class SettingsPanel(Vertical):
                 id=widget_id, password=field.kind == "secret", placeholder=field.help
             )
             button = (
-                Button(SECRET_HIDDEN_LABEL, id=f"reveal-{field.name}")
+                Button(SECRET_HIDDEN_LABEL, id=f"reveal-{field.name}", classes="reveal")
                 if field.kind == "secret"
                 else Button("Change...", id=f"browse-{field.name}")
             )
@@ -480,9 +553,10 @@ class SettingsPanel(Vertical):
     def _on_discard(self) -> None:
         self._load()
 
-    @on(Button.Pressed, "#reveal-OPENAI_API_KEY")
+    @on(Button.Pressed, ".reveal")
     def _on_reveal(self, event: Button.Pressed) -> None:
-        key_input = self.query_one("#set-OPENAI_API_KEY", Input)
+        name = (event.button.id or "").removeprefix("reveal-")
+        key_input = self.query_one(f"#set-{name}", Input)
         key_input.password = not key_input.password
         event.button.label = (
             SECRET_HIDDEN_LABEL if key_input.password else SECRET_SHOWN_LABEL
@@ -500,6 +574,45 @@ class SettingsPanel(Vertical):
                 folder_input.value = str(path)
 
         self.app.push_screen(PathPicker(start, PickMode.FOLDER), _picked)
+
+    # --- checking the AI -------------------------------------------------------
+
+    @on(Button.Pressed, "#btn-check-ai")
+    def _on_check_ai(self, event: Button.Pressed) -> None:
+        event.button.disabled = True
+        self.query_one("#ai-check-status", Static).update(
+            Content.styled("Checking...", "$primary")
+        )
+        self.run_worker(self._check_ai, thread=True, group="settings-ai-check")
+
+    def _check_ai(self) -> None:
+        """Runs in a thread: one tiny request to the main AI and the fallback."""
+        from max_cli.core.engines.ai_providers import (
+            check,
+            fallback_provider,
+            main_provider,
+        )
+
+        roles = [("Main", main_provider())]
+        fallback = fallback_provider()
+        if fallback is not None:
+            roles.append(("Fallback", fallback))
+        results = [(role, provider, check(provider)) for role, provider in roles]
+        show_from_worker(self, self._show_check, results)
+
+    def _show_check(self, results: list[tuple[str, Any, str]]) -> None:
+        parts: list[tuple[str, str]] = []
+        for role, provider, outcome in results:
+            style = "$success" if outcome == "OK" else "$warning"
+            if parts:
+                parts.append(("   ", ""))
+            parts += [
+                (f"{role}: ", "$text-muted"),
+                (f"{provider.label} ", "bold"),
+                (outcome, f"bold {style}"),
+            ]
+        self.query_one("#ai-check-status", Static).update(Content.assemble(*parts))
+        self.query_one("#btn-check-ai", Button).disabled = False
 
     # --- maintenance ----------------------------------------------------------
 

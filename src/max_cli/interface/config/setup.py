@@ -1,85 +1,99 @@
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from max_cli.common.atomic import atomic_write_text
 from max_cli.common.logger import console, log_error, log_success
+from max_cli.config import settings
 
 app = typer.Typer()
 
 GLOBAL_CONFIG_PATH = Path.home() / ".max_config.env"
 
 
-def _write_env_file(path: Path, data: dict) -> None:
-    """Helper to write a clean .env file."""
-    lines = [
-        "# Max CLI Global Configuration",
-        "# Created automatically via 'max config setup'",
-        "",
-    ]
-    for key, value in data.items():
-        if value is not None:
-            lines.append(f"{key}={value}")
+# Per provider: the model to suggest.
+DEFAULT_MODELS = {
+    "openai": "gpt-5-nano",
+    "openrouter": "openrouter/free",
+    "gemini": "gemini-2.5-flash",
+    "ollama": "llama3.1",
+}
+NO_FALLBACK = "none"
 
-    atomic_write_text(path, "\n".join(lines) + "\n")
+
+def _ask_provider(changes: dict[str, Optional[str]], name: str) -> None:
+    """A provider's key (or Ollama's URL) and model, into `changes`."""
+    from max_cli.core.engines.ai_providers import PROVIDERS
+
+    provider = PROVIDERS[name]
+    if name == "ollama":
+        changes["OLLAMA_BASE_URL"] = Prompt.ask(
+            "Ollama URL", default=settings.OLLAMA_BASE_URL
+        )
+    else:
+        hint = "keeps the saved one" if provider.key() else "required"
+        key = Prompt.ask(
+            f"{provider.label} API key ({hint})", password=True, default=""
+        )
+        if key:
+            changes[provider.key_setting] = key
+        if name == "openai":
+            url = Prompt.ask(
+                "Custom URL (empty for OpenAI)", default=settings.OPENAI_BASE_URL or ""
+            )
+            changes["OPENAI_BASE_URL"] = url or None
+    current = provider.model()
+    default = current if settings.AI_PROVIDER else DEFAULT_MODELS[name]
+    changes[provider.model_setting] = Prompt.ask(
+        f"{provider.label} model", default=default or DEFAULT_MODELS[name]
+    )
 
 
 @app.command("setup")
 def setup_config():
-    """Interactive wizard to configure Global Settings (API Keys, Models, URLs)."""
+    """Pick the AI Max uses and a fallback, with each one's API key and model.
+
+    Only these settings change; the rest of ~/.max_config.env stays.
+    """
+    from max_cli.common.settings_file import update_settings_file
+    from max_cli.core.engines.ai_providers import PROVIDERS, main_provider
+
     console.print(
         Panel(
             "[bold cyan]Max CLI Configuration Wizard[/bold cyan]", border_style="cyan"
         )
     )
     console.print(f"Settings will be saved to: [dim]{GLOBAL_CONFIG_PATH}[/dim]\n")
-
-    config_data = {}
-
-    provider = Prompt.ask(
-        "Select your AI Provider",
-        choices=["gemini", "openai", "ollama", "custom"],
-        default="gemini",
+    console.print(
+        "[dim]Gemini has a free API key: https://aistudio.google.com/apikey[/dim]\n"
     )
 
-    if provider == "gemini":
-        config_data["OPENAI_BASE_URL"] = (
-            "https://generativelanguage.googleapis.com/v1beta/openai/"
-        )
-        config_data["OLLAMA_ENABLED"] = "false"
-        default_text_model = "gemini-1.5-flash"
-        default_img_model = "gemini-2.5-flash-image"
-    elif provider == "openai":
-        config_data["OPENAI_BASE_URL"] = ""
-        config_data["OLLAMA_ENABLED"] = "false"
-        default_text_model = "gpt-4o"
-        default_img_model = "dall-e-3"
-    elif provider == "ollama":
-        config_data["OPENAI_BASE_URL"] = "http://localhost:11434/v1"
-        config_data["OLLAMA_ENABLED"] = "true"
-        config_data["OPENAI_API_KEY"] = "ollama"
-        default_text_model = Prompt.ask("Ollama Model", default="llama3")
-        config_data["OLLAMA_MODEL"] = default_text_model
-        default_img_model = default_text_model
-    else:
-        config_data["OPENAI_BASE_URL"] = Prompt.ask("Enter Custom Base URL")
-        config_data["OLLAMA_ENABLED"] = "false"
-        default_text_model = "gpt-3.5-turbo"
-        default_img_model = "dall-e-3"
-        api_key = Prompt.ask(f"Enter {provider.capitalize()} API Key", password=True)
-        config_data["OPENAI_API_KEY"] = api_key
+    changes: dict[str, Optional[str]] = {}
+    names = list(PROVIDERS)
+    main = Prompt.ask("Main AI", choices=names, default=main_provider().name)
+    changes["AI_PROVIDER"] = main
+    _ask_provider(changes, main)
 
-    console.print("\n[bold]Model Configuration[/bold] (Press Enter to keep default)")
-    config_data["AI_MODEL"] = Prompt.ask("Text/Logic Model", default=default_text_model)
-    config_data["AI_IMAGE_MODEL"] = Prompt.ask(
-        "Image Generation Model", default=default_img_model
+    others = [name for name in names if name != main]
+    fallback = Prompt.ask(
+        "Fallback when the main AI fails",
+        choices=[NO_FALLBACK, *others],
+        default=settings.AI_FALLBACK_PROVIDER or NO_FALLBACK,
     )
+    changes["AI_FALLBACK_PROVIDER"] = "" if fallback == NO_FALLBACK else fallback
+    if fallback != NO_FALLBACK:
+        _ask_provider(changes, fallback)
 
+    changes["AI_IMAGE_MODEL"] = Prompt.ask(
+        "Image model (create and edit)", default=settings.AI_IMAGE_MODEL
+    )
     try:
-        _write_env_file(GLOBAL_CONFIG_PATH, config_data)
-        log_success("Configuration updated successfully!")
-        console.print(f"[green]Global settings saved to {GLOBAL_CONFIG_PATH}[/green]")
-    except Exception as e:
+        update_settings_file(changes, GLOBAL_CONFIG_PATH)
+    except OSError as e:
         log_error(f"Failed to save config: {e}")
+        return
+    log_success("Configuration updated successfully!")
+    console.print(f"[green]Global settings saved to {GLOBAL_CONFIG_PATH}[/green]")
+    console.print("[dim]Check them with: max config validate[/dim]")

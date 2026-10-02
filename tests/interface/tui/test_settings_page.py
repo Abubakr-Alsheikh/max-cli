@@ -12,8 +12,10 @@ from max_cli.common.settings_file import read_settings_file, settings_file_path
 from max_cli.config import REMOVED_SETTINGS, Settings, settings
 from max_cli.interface.tui.widgets import settings_panel
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
-from max_cli.interface.tui.widgets.settings_panel import FIELDS, SettingsPanel
+from max_cli.interface.tui.widgets.settings_panel import FIELDS, LEGACY, SettingsPanel
 from max_cli.interface.tui.workers import _show_if_open
+
+from .waiting import wait_until
 
 SIZE = (130, 80)
 SRC = Path(__file__).resolve().parents[3] / "src" / "max_cli"
@@ -56,6 +58,9 @@ def _used_settings() -> set[str]:
         text = path.read_text(encoding="utf-8")
         found |= set(re.findall(r"settings\.([A-Z][A-Z0-9_]+)", text))
         found |= set(re.findall(r'Setting\("([A-Z][A-Z0-9_]+)"\)', text))
+        if "getattr(settings," in text:
+            # A table of setting names read by name (core/engines/ai_providers).
+            found |= set(re.findall(r'"([A-Z][A-Z0-9_]+)"', text))
     return found & set(Settings.model_fields)
 
 
@@ -63,7 +68,8 @@ def _used_settings() -> set[str]:
 
 
 def test_the_page_shows_every_setting():
-    assert set(FIELDS) == set(Settings.model_fields)
+    assert set(FIELDS) | LEGACY == set(Settings.model_fields)
+    assert not set(FIELDS) & LEGACY
 
 
 def test_code_reads_every_setting():
@@ -375,3 +381,67 @@ async def test_a_late_worker_result_is_ignored_when_the_page_is_closing():
             "undo": 0,
         }
         _show_if_open(panel, panel._show_upkeep, facts)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_main_ai_shows_the_provider_in_use_without_a_change(monkeypatch):
+    """An older file has no AI_PROVIDER; the page must not count that as a change."""
+    monkeypatch.setattr(settings, "AI_PROVIDER", "")
+    monkeypatch.setattr(settings, "OLLAMA_ENABLED", True)
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        main = app.query_one("#set-AI_PROVIDER", Select).value
+        pending = app.query_one(SettingsPanel).changes()
+
+    assert main == "ollama"
+    assert pending == {}
+
+
+@pytest.mark.asyncio
+async def test_choosing_a_fallback_saves_it_with_its_key():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#set-AI_FALLBACK_PROVIDER", Select).value = "gemini"
+        app.query_one("#set-GEMINI_API_KEY", Input).value = "g-key"
+        save = app.query_one("#btn-save-settings", Button)
+        await wait_until(pilot, lambda: not save.disabled)  # the edits counted
+        save.press()
+        await _settle(app, pilot)
+
+    saved = read_settings_file()
+    assert saved["AI_FALLBACK_PROVIDER"] == "gemini"
+    assert saved["GEMINI_API_KEY"] == "g-key"
+    assert settings.AI_FALLBACK_PROVIDER == "gemini"
+
+
+@pytest.mark.asyncio
+async def test_check_ai_reports_each_provider(monkeypatch):
+    from max_cli.core.engines import ai_providers
+
+    monkeypatch.setattr(settings, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "gemini")
+    outcomes = {"openrouter": "no credit left (402)", "gemini": "OK"}
+    monkeypatch.setattr(ai_providers, "check", lambda provider: outcomes[provider.name])
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#btn-check-ai", Button).press()
+        await _settle(app, pilot)
+        status = str(app.query_one("#ai-check-status", Static).content)
+
+    assert "Main: OpenRouter no credit left (402)" in status
+    assert "Fallback: Google Gemini OK" in status
+
+
+@pytest.mark.asyncio
+async def test_every_key_has_its_own_show_button():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#reveal-GEMINI_API_KEY", Button).press()
+        await pilot.pause()
+
+        assert not app.query_one("#set-GEMINI_API_KEY", Input).password
+        assert app.query_one("#set-OPENAI_API_KEY", Input).password

@@ -1,6 +1,6 @@
 # AI Commands
 
-The `max ai` commands need an AI provider. Run `max config setup` to pick Google Gemini, OpenAI, Ollama (local, no API key) or a custom endpoint.
+The `max ai` commands need an AI provider. Run `max config setup` (or open the dashboard's Settings page) to pick the main AI (OpenAI or a custom URL, OpenRouter, Google Gemini, or Ollama on this computer) and a fallback that takes over when the main one fails. Each has its own API key. The answer panel names the model that answered and adds "(fallback)" when the main AI failed. See [config setup](config.md#setup).
 
 ## ask
 

@@ -144,6 +144,24 @@ class AgentReply:
     text: str
     steps: list[Step] = field(default_factory=list)
     tokens: int = 0
+    model: str = ""  # the model that answered
+    fallback: bool = False  # the main provider failed and the fallback answered
+
+    def facts(self) -> str:
+        """`2 actions · 3,248 tokens · gemini-2.5-flash (fallback)`."""
+        actions = sum(
+            1
+            for step in self.steps
+            if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED)
+        )
+        parts = []
+        if actions:
+            parts.append(f"{actions} action{'s' if actions != 1 else ''}")
+        if self.tokens:
+            parts.append(f"{self.tokens:,} tokens")
+        if self.model:
+            parts.append(f"{self.model} (fallback)" if self.fallback else self.model)
+        return " · ".join(parts)
 
 
 Confirm = Callable[[ActionCall], bool]
@@ -191,7 +209,7 @@ class Agent:
     @classmethod
     def from_settings(cls, **kwargs: Any) -> "Agent":
         """An agent on the configured provider (settings: AI and Ollama)."""
-        from max_cli.core.engines.ai_engine import chat_model, make_client
+        from max_cli.core.engines.ai_providers import chat_model, make_client
 
         client = make_client()
         if client is None:
@@ -251,6 +269,8 @@ class Agent:
             reply.tokens += int(getattr(usage, "total_tokens", 0) or 0)
             message = response.choices[0].message
             tool_calls = list(message.tool_calls or [])
+            reply.model = str(getattr(self.client, "model", self.model))
+            reply.fallback = bool(getattr(self.client, "used_fallback", False))
             if not tool_calls:
                 reply.text = (message.content or "").strip() or "Done."
                 self.messages.append({"role": "assistant", "content": reply.text})
@@ -297,8 +317,9 @@ class Agent:
             )
         except BadRequestError as e:
             if "tool" in str(e).lower():
+                model = getattr(self.client, "model", self.model)
                 raise AIError(
-                    f"The model {self.model} can't call tools, so the agent can't "
+                    f"The model {model} can't call tools, so the agent can't "
                     "use it. Pick one that can (most OpenAI, Gemini, Claude and "
                     "Llama 3.1+ models do)."
                 ) from e

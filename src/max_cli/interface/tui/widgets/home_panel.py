@@ -338,10 +338,10 @@ class HomePanel(Vertical):
     @staticmethod
     def _status() -> Content:
         from max_cli.common.ffmpeg_resolver import FFmpegResolver
-        from max_cli.config import settings
+        from max_cli.core.engines.ai_providers import provider_chain
 
         ffmpeg = bool(shutil.which("ffmpeg") or FFmpegResolver.get_cached_resolution())
-        ai = bool(settings.OPENAI_API_KEY)
+        ai = bool(provider_chain())  # the main AI or its fallback has a key
 
         def light(on: bool, label: str) -> tuple[str, str]:
             return (f"● {label}   ", "$success" if on else "$text-muted")

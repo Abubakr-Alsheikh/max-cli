@@ -21,7 +21,7 @@ from max_cli.interface.cli_ai import app as ai_app
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
 
 ENGINE_PATH = "max_cli.interface.cli_ai._get_engine"
-CLIENT_PATH = "max_cli.core.engines.ai_engine.make_client"
+CLIENT_PATH = "max_cli.core.engines.ai_providers.make_client"
 DOWNLOAD_PATH = "max_cli.core.engines.ai_engine.download_image"
 
 # The shared Rich console is built at import time, so it may still emit ANSI

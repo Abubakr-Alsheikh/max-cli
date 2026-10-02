@@ -146,7 +146,8 @@ Press `Ctrl+P` and type part of an action's or a page's name, such as `merge` or
 
 The Settings page (`,`) edits the same settings as `max config`, saved in `~/.max_config.env`. It shows only settings that change something:
 
-- **AI:** the API key (hidden; press Show to see it), the base URL, the chat and image models, and Ollama.
+- **AI:** the main AI and its fallback (OpenAI or a custom URL, OpenRouter, Google Gemini, Ollama), the image model, and **Check AI**, which sends a tiny request to each and says which work ("OK", "no credit left (402)", "quota or rate limit reached (429)", "the API key is wrong (401)"). Save before you check.
+- **AI providers:** each provider's API key (hidden; press Show to see it) and model, the custom URL for OpenAI-compatible services, and Ollama's URL.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.

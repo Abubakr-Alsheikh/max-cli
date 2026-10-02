@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gpt-5-nano"  # For 'ask', 'chat', 'analyze'
     AI_IMAGE_MODEL: str = "gpt-image-1"  # For 'create', 'edit'
 
+    # Main provider and fallback: openai, openrouter, gemini or ollama
+    # (core/engines/ai_providers.py). An empty AI_PROVIDER keeps what older
+    # settings meant: Ollama when OLLAMA_ENABLED, else OpenAI.
+    AI_PROVIDER: str = ""
+    AI_FALLBACK_PROVIDER: str = ""
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_MODEL: str = "openrouter/free"
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
     # Ollama Configuration
     OLLAMA_ENABLED: bool = False
     OLLAMA_BASE_URL: str = "http://localhost:11434"

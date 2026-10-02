@@ -16,27 +16,6 @@ DOWNLOAD_CHUNK_SIZE = 8192
 logger = logging.getLogger(__name__)
 
 
-def make_client(ollama: Optional[bool] = None) -> Optional[Any]:
-    """An OpenAI-compatible client for the configured provider.
-
-    Ollama when OLLAMA_ENABLED (or `ollama`) is on, else the API key with its
-    base URL (OpenAI, OpenRouter, Gemini ...). None when there's no key.
-    """
-    from openai import OpenAI
-
-    use_ollama = settings.OLLAMA_ENABLED if ollama is None else ollama
-    if use_ollama:
-        return OpenAI(api_key="ollama", base_url=f"{settings.OLLAMA_BASE_URL}/v1")
-    if settings.OPENAI_API_KEY:
-        return OpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL)
-    return None
-
-
-def chat_model() -> str:
-    """The model for chat and the agent: Ollama's or AI_MODEL."""
-    return settings.OLLAMA_MODEL if settings.OLLAMA_ENABLED else settings.AI_MODEL
-
-
 def find_searchable_files(folder: Path, extensions: list[str]) -> list[Path]:
     """Files under `folder` (recursive) whose suffix is in `extensions`.
 
@@ -119,21 +98,17 @@ def json_object(text: str) -> dict[str, Any]:
 class AIEngine:
     def __init__(self):
         self._client = None
-        self.ollama_mode = False
-        self._client_initialized = False
-
-        if settings.OLLAMA_ENABLED:
-            self.ollama_mode = True
-
         self.history: list[dict[str, str]] = []
         self._history_file = Path.home() / ".max_cli" / "chat_history.json"
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_history()
 
     def _get_client(self):
-        """Lazily create OpenAI client on first access."""
+        """The main provider with its fallback (ai_providers), made on first use."""
         if self._client is None:
-            self._client = make_client(ollama=self.ollama_mode)
+            from max_cli.core.engines.ai_providers import make_client
+
+            self._client = make_client()
         return self._client
 
     @property
@@ -142,10 +117,11 @@ class AIEngine:
 
     @property
     def current_model(self) -> str:
-        """Get the current model based on provider mode."""
-        if self.ollama_mode:
-            return settings.OLLAMA_MODEL
-        return settings.AI_MODEL
+        """The main provider's model. The fallback client sends each provider
+        its own model, whatever a request names."""
+        from max_cli.core.engines.ai_providers import chat_model
+
+        return chat_model()
 
     def _load_history(self) -> None:
         """Load conversation history from disk."""

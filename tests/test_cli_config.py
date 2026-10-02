@@ -17,6 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from max_cli.common.exceptions import MaxError
+from max_cli.common.settings_file import read_settings_file
 from max_cli.interface.cli_config import app as config_app
 from max_cli.interface.config import grab as grab_wizard_module
 from max_cli.interface.config import manage as manage_module
@@ -199,7 +200,11 @@ class TestExportImport:
         )
         assert "API key" in _plain(result)
 
-    def test_export_with_defaults(self, tmp_path: Path) -> None:
+    def test_export_with_defaults(self, tmp_path: Path, monkeypatch) -> None:
+        from max_cli.config import settings
+
+        monkeypatch.setattr(settings, "GEMINI_API_KEY", "g-secret")
+        monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "or-secret")
         output = tmp_path / "exported.json"
 
         result = runner.invoke(
@@ -210,7 +215,8 @@ class TestExportImport:
         exported = json.loads(output.read_text(encoding="utf-8"))
         assert "MAX_WORKERS" in exported
         assert "CONFIRM_DESTRUCTIVE" in exported
-        assert "OPENAI_API_KEY" not in exported
+        for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY"):
+            assert key not in exported, key
         assert "Config exported to" in _plain(result)
 
     def test_import_to_local_env(self, tmp_path: Path) -> None:
@@ -254,18 +260,41 @@ class TestExportImport:
 
 
 class TestWizards:
-    def test_setup_openai_writes_global_config(self, isolated_config: Path) -> None:
-        with patch.object(
-            wizard_module.Prompt, "ask", side_effect=["openai", "gpt-4o", "dall-e-3"]
-        ):
+    def test_setup_saves_main_ai_and_fallback_with_their_keys(
+        self, isolated_config: Path
+    ) -> None:
+        isolated_config.write_text("GRAB_QUALITY=s\n", encoding="utf-8")
+        answers = [
+            "openrouter",  # main AI
+            "or-key",
+            "openrouter/free",
+            "gemini",  # fallback
+            "g-key",
+            "gemini-2.5-flash",
+            "gpt-image-1",
+        ]
+        with patch.object(wizard_module.Prompt, "ask", side_effect=answers):
             result = runner.invoke(config_app, ["setup"])
 
         assert result.exit_code == 0, result.output
-        config_text = isolated_config.read_text(encoding="utf-8")
-        assert "AI_MODEL=gpt-4o" in config_text
-        assert "AI_IMAGE_MODEL=dall-e-3" in config_text
-        assert "OLLAMA_ENABLED=false" in config_text
+        saved = read_settings_file(isolated_config)
+        assert saved["AI_PROVIDER"] == "openrouter"
+        assert saved["OPENROUTER_API_KEY"] == "or-key"
+        assert saved["AI_FALLBACK_PROVIDER"] == "gemini"
+        assert saved["GEMINI_API_KEY"] == "g-key"
+        assert saved["GEMINI_MODEL"] == "gemini-2.5-flash"
+        assert saved["GRAB_QUALITY"] == "s"  # the rest of the file stays
         assert "Configuration updated successfully!" in _plain(result)
+
+    def test_setup_without_a_fallback(self, isolated_config: Path) -> None:
+        answers = ["gemini", "g-key", "gemini-2.5-flash", "none", "gpt-image-1"]
+        with patch.object(wizard_module.Prompt, "ask", side_effect=answers):
+            result = runner.invoke(config_app, ["setup"])
+
+        assert result.exit_code == 0, result.output
+        saved = read_settings_file(isolated_config)
+        assert saved["AI_PROVIDER"] == "gemini"
+        assert "AI_FALLBACK_PROVIDER" not in saved or not saved["AI_FALLBACK_PROVIDER"]
 
     def test_grab_replaces_existing_grab_keys(
         self, isolated_config: Path, tmp_path: Path

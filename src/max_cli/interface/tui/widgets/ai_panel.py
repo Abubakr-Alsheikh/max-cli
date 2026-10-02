@@ -68,9 +68,10 @@ CARD_NOTES = {
 
 
 def ai_is_set_up() -> bool:
-    from max_cli.config import settings
+    """The main provider or the fallback has a key (Ollama needs none)."""
+    from max_cli.core.engines.ai_providers import provider_chain
 
-    return bool(settings.OPENAI_API_KEY) or settings.OLLAMA_ENABLED
+    return bool(provider_chain())
 
 
 class ToolCard(Collapsible):
@@ -258,15 +259,10 @@ class AgentTurn(Vertical):
         self.query_one(".turn-status", Static).update(summary)
 
     def finish(self, reply: "AgentReply") -> None:
-        actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
-        facts = []
-        if actions:
-            facts.append(f"{actions} action{'s' if actions != 1 else ''}")
-        if reply.tokens:
-            facts.append(f"{reply.tokens:,} tokens")
         self._stop(
             Content.assemble(
-                ("Max  ", "bold $primary"), ("  ·  ".join(facts), "$text-muted")
+                ("Max  ", "bold $primary"),
+                (reply.facts().replace(" · ", "  ·  "), "$text-muted"),
             )
         )
         self.mount(Markdown(reply.text))
@@ -469,7 +465,7 @@ class AIPanel(Vertical):
         self.call_after_refresh(self._log().scroll_end, animate=False)
 
     def _show_status(self) -> None:
-        from max_cli.core.engines.ai_engine import chat_model
+        from max_cli.core.engines.ai_providers import chat_model
 
         parts = [chat_model()]
         if self._tokens:

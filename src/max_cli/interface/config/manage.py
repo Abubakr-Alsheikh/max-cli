@@ -13,6 +13,8 @@ from max_cli.config import settings
 app = typer.Typer()
 
 GLOBAL_CONFIG_PATH = Path.home() / ".max_config.env"
+# API keys: an export leaves them out unless --include-secrets.
+SECRET_SETTINGS = ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY")
 
 
 def _write_env_file(path: Path, data: dict) -> None:
@@ -48,13 +50,24 @@ def show_config():
         )
         console.print("[dim]Local settings take priority over Global settings.[/dim]")
 
+    from max_cli.core.engines.ai_providers import fallback_provider, main_provider
+
     console.print("\n[bold]Active Configuration:[/bold]")
-    console.print(f"Text Model:  [green]{settings.AI_MODEL}[/green]")
-    console.print(f"Image Model: [green]{settings.AI_IMAGE_MODEL}[/green]")
+    for role, provider in (
+        ("Main AI", main_provider()),
+        ("Fallback", fallback_provider()),
+    ):
+        if provider is None:
+            console.print(f"{role + ':':<13}[dim]none[/dim]")
+            continue
+        key = "" if provider.is_set_up() else "  [yellow](no API key)[/yellow]"
+        console.print(
+            f"{role + ':':<13}[green]{provider.label}[/green]  "
+            f"[dim]{provider.model()}[/dim]{key}"
+        )
+    console.print(f"{'Image model:':<13}[green]{settings.AI_IMAGE_MODEL}[/green]")
     if settings.OPENAI_BASE_URL:
-        console.print(f"Base URL:    [dim]{settings.OPENAI_BASE_URL}[/dim]")
-    if settings.OLLAMA_ENABLED:
-        console.print(f"Ollama:      [green]Enabled ({settings.OLLAMA_MODEL})[/green]")
+        console.print(f"{'Custom URL:':<13}[dim]{settings.OPENAI_BASE_URL}[/dim]")
 
 
 @app.command("save")
@@ -152,10 +165,19 @@ def validate_config():
             f"{name} is no longer a setting; remove it from {GLOBAL_CONFIG_PATH}"
         )
 
-    if settings.OPENAI_API_KEY:
-        table.add_row("OPENAI_API_KEY", "***configured***", "[green]OK[/green]")
-    else:
-        table.add_row("OPENAI_API_KEY", "[not set]", "[yellow]Warning[/yellow]")
+    from max_cli.core.engines.ai_providers import fallback_provider, main_provider
+
+    for setting, provider in (
+        ("AI_PROVIDER", main_provider()),
+        ("AI_FALLBACK_PROVIDER", fallback_provider()),
+    ):
+        if provider is None:
+            continue
+        if provider.is_set_up():
+            table.add_row(setting, provider.label, "[green]OK[/green]")
+        else:
+            table.add_row(setting, provider.label, "[yellow]No API key[/yellow]")
+            issues.append(f"{provider.label} needs {provider.key_setting}")
 
     console.print(table)
 
@@ -186,12 +208,16 @@ def export_config(
         config_dict = {
             name: str(value) if isinstance(value, Path) else value
             for name, value in settings.model_dump().items()
-            if name != "OPENAI_API_KEY"
+            if name not in SECRET_SETTINGS
         }
     else:
         non_defaults = {
+            "AI_PROVIDER": settings.AI_PROVIDER,
+            "AI_FALLBACK_PROVIDER": settings.AI_FALLBACK_PROVIDER,
             "OPENAI_BASE_URL": settings.OPENAI_BASE_URL,
             "AI_MODEL": settings.AI_MODEL,
+            "OPENROUTER_MODEL": settings.OPENROUTER_MODEL,
+            "GEMINI_MODEL": settings.GEMINI_MODEL,
             "AI_IMAGE_MODEL": settings.AI_IMAGE_MODEL,
             "GRAB_QUALITY": settings.GRAB_QUALITY,
             "GRAB_STRIP_PLAYLIST": settings.GRAB_STRIP_PLAYLIST,
@@ -203,10 +229,15 @@ def export_config(
             if v is not None and v != "":
                 config_dict[k] = v
 
-    if include_secrets and settings.OPENAI_API_KEY:
-        config_dict["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+    secrets = {
+        name: getattr(settings, name)
+        for name in SECRET_SETTINGS
+        if getattr(settings, name)
+    }
+    if include_secrets and secrets:
+        config_dict.update(secrets)
         console.print(
-            "[yellow]Warning: the export contains your API key in plain text. "
+            "[yellow]Warning: the export contains your API keys in plain text. "
             "Don't share or commit the file.[/yellow]"
         )
 

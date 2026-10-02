@@ -3,63 +3,28 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from max_cli.common.exceptions import MaxError
-from max_cli.core.engines.ai_engine import AIEngine, chat_model, make_client
+from max_cli.config import settings
+from max_cli.core.engines.ai_engine import AIEngine
 
 
 class TestAIEngine:
     """Tests for AI operations."""
 
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_init_with_api_key(self, mock_settings, mock_openai):
-        """Test initialization with API key."""
-        mock_settings.OPENAI_API_KEY = "test-key"
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_settings.OLLAMA_ENABLED = False
+    def test_the_client_comes_from_the_providers(self, monkeypatch):
+        monkeypatch.setattr(settings, "AI_PROVIDER", "openai")
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", "test-key")
 
         engine = AIEngine()
+
         assert engine._client is None
-        client = engine.client
-        assert client is not None
+        assert engine.client is not None
 
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_init_without_api_key(self, mock_settings, mock_openai):
-        """Test initialization without API key."""
-        mock_settings.OPENAI_API_KEY = None
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_settings.OLLAMA_ENABLED = False
+    def test_without_a_key_there_is_no_client(self, monkeypatch):
+        monkeypatch.setattr(settings, "AI_PROVIDER", "openai")
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
+        monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "")
 
-        engine = AIEngine()
-        assert engine._client is None
-        assert engine.client is None
-
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_make_client_prefers_ollama(self, mock_settings, mock_openai):
-        mock_settings.OLLAMA_ENABLED = True
-        mock_settings.OLLAMA_BASE_URL = "http://localhost:11434"
-        mock_settings.OLLAMA_MODEL = "llama3.1"
-
-        make_client()
-
-        mock_openai.assert_called_once_with(
-            api_key="ollama", base_url="http://localhost:11434/v1"
-        )
-        assert chat_model() == "llama3.1"
-
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_make_client_without_a_key_is_none(self, mock_settings, mock_openai):
-        mock_settings.OLLAMA_ENABLED = False
-        mock_settings.OPENAI_API_KEY = None
-
-        assert make_client() is None
-        mock_openai.assert_not_called()
+        assert AIEngine().client is None
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
@@ -184,7 +149,10 @@ class TestAIEngine:
 
         engine = AIEngine()
 
-        with pytest.raises(MaxError, match="AI Client not configured"):
+        with (
+            patch("max_cli.core.engines.ai_providers.make_client", return_value=None),
+            pytest.raises(MaxError, match="AI Client not configured"),
+        ):
             engine.generate_image("A test image")
 
     @patch("openai.OpenAI")

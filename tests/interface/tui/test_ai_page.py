@@ -18,7 +18,7 @@ from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 from .waiting import wait_until
 
 SIZE = (140, 44)
-CLIENT_PATH = "max_cli.core.engines.ai_engine.make_client"
+CLIENT_PATH = "max_cli.core.engines.ai_providers.make_client"
 
 
 def _call(name: str, arguments: dict, call_id: str) -> Any:

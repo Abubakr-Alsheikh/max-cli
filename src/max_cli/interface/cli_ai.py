@@ -110,19 +110,14 @@ def _show_reply(reply: "AgentReply") -> None:
     """The answer as Markdown in a panel; the footer counts actions and tokens."""
     from rich.markdown import Markdown
 
-    actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
-    facts = []
-    if actions:
-        facts.append(f"{actions} action{'s' if actions != 1 else ''}")
-    if reply.tokens:
-        facts.append(f"{reply.tokens:,} tokens")
+    facts = reply.facts()
     console.print()
     console.print(
         Panel(
             Markdown(reply.text),
             title="[bold cyan]Max[/bold cyan]",
             title_align="left",
-            subtitle=f"[dim]{' · '.join(facts)}[/dim]" if facts else None,
+            subtitle=f"[dim]{escape(facts)}[/dim]" if facts else None,
             subtitle_align="right",
             border_style="cyan",
             padding=(1, 2),
