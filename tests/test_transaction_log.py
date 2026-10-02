@@ -341,3 +341,18 @@ class TestTransactionLogLoad:
 
         loaded = TransactionLog.load(txn.group_id, txn_storage)
         assert loaded.undo_status == "undone"
+
+
+def test_undo_removes_made_folders_only_when_empty(tmp_path):
+    store = tmp_path / "store"
+    txn = TransactionLog(command="test", storage_dir=store)
+    txn.make_dirs(tmp_path / "a" / "b")
+    txn.make_dirs(tmp_path / "c")
+    (tmp_path / "c" / "new.txt").write_text("added later", encoding="utf-8")
+    txn.save()
+
+    steps = TransactionLog.load(txn.group_id, storage_dir=store).undo()
+
+    assert not (tmp_path / "a").exists()
+    assert (tmp_path / "c" / "new.txt").exists()
+    assert "Kept folder with files in it: c" in steps

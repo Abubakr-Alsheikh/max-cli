@@ -69,7 +69,8 @@ class TestMaxDashboardApp:
         mock_activity_log.get_entries.return_value = entries
 
         async with MaxDashboardApp().run_test() as pilot:
-            pilot.app._show_panel("history")
+            pilot.app.navigate("activity")
+            pilot.app.query_one("#activity-panel").show_tab("history")
             await pilot.pause()
 
             panel = pilot.app.query_one("#history-panel")
@@ -79,7 +80,7 @@ class TestMaxDashboardApp:
             table = pilot.app.query_one("#history-table", DataTable)
             assert table.row_count == 2
 
-            filter_input = pilot.app.query_one("#history-filter")
+            filter_input = pilot.app.query_one("#history-search")
             filter_input.value = "download"
             await pilot.pause()
 

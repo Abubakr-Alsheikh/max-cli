@@ -908,11 +908,11 @@ async def test_installing_the_youtube_fix_asks_first(monkeypatch):
 async def test_tool_buttons_open_other_pages():
     from max_cli.interface.tui.messages import OpenPage
 
-    opened: list[str] = []
+    opened: list[tuple[str, str]] = []
 
     class RecordingApp(PanelApp):
         def on_open_page(self, message: OpenPage) -> None:
-            opened.append(message.section_id)
+            opened.append((message.section_id, message.tab))
 
     app = RecordingApp()
     async with app.run_test(size=(140, 60)) as pilot:
@@ -920,7 +920,7 @@ async def test_tool_buttons_open_other_pages():
         app.query_one("#btn-goto-config", Button).press()
         await _settle(app, pilot)
 
-    assert opened == ["queue", "settings"]
+    assert opened == [("activity", "queue"), ("settings", "")]
 
 
 @pytest.mark.asyncio

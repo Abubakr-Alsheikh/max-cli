@@ -29,6 +29,7 @@ class TransactionLog:
     OP_MOVE = "move"
     OP_DELETE = "delete"
     OP_CREATE = "create"
+    OP_MKDIR = "mkdir"  # a folder Max created; undo removes it if empty
 
     MAX_GROUPS = 50
     RETENTION_DAYS = 30
@@ -59,6 +60,22 @@ class TransactionLog:
                 "backup_path": str(backup_path) if backup_path else None,
             }
         )
+
+    def make_dirs(self, folder: Path) -> None:
+        """Create `folder` and any missing parents, recording each new one.
+
+        Undo then removes the folders Max made once the files are back, so
+        `audio organize` no longer leaves empty Artist/Album trees behind.
+        A folder that already existed is never recorded, so never removed.
+        """
+        missing: list[Path] = []
+        current = folder
+        while not current.exists():
+            missing.append(current)
+            current = current.parent
+        for path in reversed(missing):
+            path.mkdir()
+            self.record(op_type=self.OP_MKDIR, original_path=None, new_path=path)
 
     def save(self) -> Path:
         """Persist the transaction group to disk."""
@@ -132,6 +149,13 @@ class TransactionLog:
                             f"Cannot undo delete: no backup found for {original}"
                         )
 
+                elif op_type == self.OP_MKDIR:
+                    if new and new.is_dir() and not any(new.iterdir()):
+                        new.rmdir()
+                        results.append(f"Removed empty folder: {new.name}")
+                    elif new and new.exists():
+                        results.append(f"Kept folder with files in it: {new.name}")
+
                 elif op_type == self.OP_CREATE:
                     if new and new.exists():
                         new.unlink()
@@ -174,15 +198,17 @@ class TransactionLog:
 
     @classmethod
     def list_groups(cls, storage_dir: Optional[Path] = None) -> list[dict]:
-        """List all transaction groups, newest first."""
+        """List all transaction groups, newest first by when they ran.
+
+        Not by file time: undo rewrites a group's file, which moved an undone
+        group to the top and hid the next one to undo.
+        """
         store = storage_dir or Path.home() / ".max_cli" / "transactions"
         if not store.exists():
             return []
 
         groups = []
-        for f in sorted(
-            store.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True
-        ):
+        for f in store.glob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 groups.append(
@@ -191,14 +217,38 @@ class TransactionLog:
                         "command": data["command"],
                         "timestamp": data["timestamp"],
                         "operation_count": len(data["operations"]),
+                        # Where the change happened: the first moved, renamed
+                        # or deleted file's folder (two "files order" rows
+                        # looked the same in the dashboard's Undo list).
+                        "folder": next(
+                            (
+                                str(Path(op["original_path"]).parent)
+                                for op in data["operations"]
+                                if op.get("original_path")
+                            ),
+                            None,
+                        ),
                         "status": data["status"],
                         "undo_status": data.get("undo_status"),
                     }
                 )
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError, KeyError):
                 continue
 
+        groups.sort(key=lambda group: group["timestamp"], reverse=True)
         return groups
+
+    @classmethod
+    def next_to_undo(cls, storage_dir: Optional[Path] = None) -> Optional[dict]:
+        """The newest group not undone yet: undo steps back one group a time."""
+        return next(
+            (
+                group
+                for group in cls.list_groups(storage_dir)
+                if group["undo_status"] != "undone"
+            ),
+            None,
+        )
 
     @classmethod
     def get_latest_group(cls, storage_dir: Optional[Path] = None) -> Optional[dict]:

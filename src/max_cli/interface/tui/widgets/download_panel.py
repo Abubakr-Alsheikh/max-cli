@@ -740,7 +740,7 @@ class DownloadPanel(Vertical):
                 yield Button("Install fix", id="btn-youtube-fix")
             with Horizontal(id="dl-tool-buttons"):
                 yield Button("Open download folder", id="btn-open-downloads")
-                yield Button("Queue page", id="btn-goto-queue")
+                yield Button("Queue", id="btn-goto-queue")
                 yield Button("Download settings", id="btn-goto-config")
 
     @staticmethod
@@ -1581,5 +1581,7 @@ class DownloadPanel(Vertical):
 
     @on(Button.Pressed, "#btn-goto-queue, #btn-goto-config")
     def _on_goto(self, event: Button.Pressed) -> None:
-        page = "queue" if event.button.id == "btn-goto-queue" else "settings"
-        self.post_message(OpenPage(page))
+        if event.button.id == "btn-goto-queue":
+            self.post_message(OpenPage("activity", tab="queue"))
+        else:
+            self.post_message(OpenPage("settings"))

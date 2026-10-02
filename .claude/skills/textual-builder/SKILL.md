@@ -10,7 +10,7 @@ These rules win over anything below. Source: `AGENTS.md`.
 - Python >= 3.9: write `Optional[X]`/`Union[X, Y]` (or add `from __future__ import annotations`); no `match`, no PEP 695 `type`/`class C[T]`, no `typing.TypeAlias` at runtime.
 - Installed Textual is **8.2.7**; pyproject requires `textual>=0.48`. Read `references/workers-and-testing.md` (verified on 8.2.7) before writing workers or Pilot tests.
 - Install via `pip install -e .[tui]`, not `uv pip`.
-- Dashboard code lives in `src/max_cli/interface/tui/`; widgets call engines only through `command_executor.py`/`_get_engine()`, never at import time.
+- Dashboard code lives in `src/max_cli/interface/tui/`; widgets run actions through the catalog (`ActionForm`, `core/catalog/runner.py`) or an operation in a thread worker, and never create engines at import time.
 - The card-game template is a generic example, not a pattern for this project.
 
 # Textual Builder

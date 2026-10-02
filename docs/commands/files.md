@@ -1,6 +1,6 @@
 # File Commands
 
-Max records every rename, move and delete these commands make, so `max files undo` can reverse the last one. `shred` is the exception: it keeps no copy on purpose.
+Max records every rename, move and delete these commands make, so `max files undo` can reverse them, newest first. `shred` is the exception: it keeps no copy on purpose.
 
 In the dashboard, the Tools page has a form for each command, and the Files page's Organize, Duplicates and Backup buttons open those forms filled in. A form asks before it moves or deletes anything.
 
@@ -128,7 +128,7 @@ max files backup-cleanup [--days N] [--force]
 
 ## undo
 
-Reverse the last group of file operations.
+Reverse the newest group of file operations that isn't undone yet. Run it again to step further back, one command at a time.
 
 ```bash
 max files undo
@@ -138,6 +138,7 @@ This command:
 
 - Reverses the renames, moves and deletes from the last operation
 - Restores deleted files from the automatic backups
+- Removes the folders the operation created (organize's Artist/Album folders, smart-sort's category folders) once they're empty again; a folder you made yourself stays
 - Works with `files order`, `files smart-sort`, `files duplicates --delete` and `audio organize`. `files shred` can't be undone.
 
 ## history

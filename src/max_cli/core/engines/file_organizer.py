@@ -263,13 +263,16 @@ class FileOrganizer:
                 if transaction_log:
                     from max_cli.common.transaction_log import TransactionLog
 
+                    # The folder first: undo runs backwards, so the file
+                    # moves back before the emptied folder is removed.
+                    transaction_log.make_dirs(dest_dir)
                     transaction_log.record(
                         op_type=TransactionLog.OP_MOVE,
                         original_path=src,
                         new_path=dest,
                     )
-
-                dest_dir.mkdir(parents=True, exist_ok=True)
+                else:
+                    dest_dir.mkdir(parents=True, exist_ok=True)
                 src.rename(dest)
                 actions.append(f"{filename} -> {category}/")
                 moved += 1

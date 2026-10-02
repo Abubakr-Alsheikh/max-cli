@@ -474,16 +474,18 @@ class AudioMetadataEngine:
                     moved.append(f"{file_path.name} -> {dest_path}")
                     continue
 
-                dest_dir.mkdir(parents=True, exist_ok=True)
                 if transaction_log:
                     from max_cli.common.transaction_log import TransactionLog
 
+                    transaction_log.make_dirs(dest_dir)
                     transaction_log.record(
                         op_type=TransactionLog.OP_MOVE,
                         original_path=file_path,
                         new_path=dest_path,
                     )
 
+                else:
+                    dest_dir.mkdir(parents=True, exist_ok=True)
                 file_path.rename(dest_path)
                 moved.append(f"{file_path.name} -> {dest_path}")
 

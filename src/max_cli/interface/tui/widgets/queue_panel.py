@@ -1,4 +1,4 @@
-"""Queue page: the work the dashboard runs, one task at a time.
+"""The Activity page's Queue tab: the work the dashboard runs, one task at a time.
 
 - Tiles count what's running and waiting, and what finished or failed today.
 - NOW RUNNING shows the running task with its progress, speed and time left.
@@ -318,12 +318,19 @@ class QueueTile(Vertical):
 
 
 class QueuePanel(Vertical):
-    """The Queue page."""
+    """The Activity page's Queue tab (with brand=True, a page of its own)."""
 
     DEFAULT_CSS = """
     #queue-header {
         height: 3;
         margin-bottom: 1;
+    }
+    /* Inside the Activity page, whose header says what the page is. */
+    #queue-header.-plain {
+        height: 1;
+    }
+    #queue-header.-plain Static {
+        height: 1;
     }
     #queue-brand {
         width: 1fr;
@@ -394,14 +401,17 @@ class QueuePanel(Vertical):
     }
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, brand: bool = True, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self._show_brand = brand
         self._lists: dict[str, list[str]] = {}
         self._worker_shown: Optional[bool] = None
 
     def compose(self) -> ComposeResult:
-        with Horizontal(id="queue-header"):
-            yield Static(self._brand(), id="queue-brand")
+        with Horizontal(
+            id="queue-header", classes="" if self._show_brand else "-plain"
+        ):
+            yield Static(self._brand() if self._show_brand else "", id="queue-brand")
             yield Static("", id="queue-worker")
         with Grid(id="queue-tiles"):
             yield QueueTile("RUNNING", id="tile-running")
@@ -612,4 +622,4 @@ class QueuePanel(Vertical):
 
     @on(Button.Pressed, "#btn-goto-history")
     def _on_goto_history(self) -> None:
-        self.post_message(OpenPage("history"))
+        self.post_message(OpenPage("activity", tab="history"))
