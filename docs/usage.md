@@ -68,8 +68,8 @@ max video concat "*.mp4" -o joined.mp4
 # Chat mode
 max ai chat
 
-# Describe a task and let Max suggest the command
-max ai ask "Compress all PDFs in this folder"
+# Say what you want done; the AI agent runs Max's commands
+max "Compress all PDFs in this folder"
 
 # Semantic search
 max ai search "query" ./directory

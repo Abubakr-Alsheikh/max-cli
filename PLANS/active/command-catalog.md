@@ -133,7 +133,7 @@ Each step is one PR, with tests first.
 4. **`grab download`: next, by the maintainer's choice.**
    - Split out a core `download` operation: retries, URL cleaning and playlist rules.
    - The CLI keeps its interactive prompt loop, and the dashboard's Download page calls the operation.
-5. **Agent tool views:** `list_groups`, `load_group` and JSON Schema. Test that the first prompt holds only the group list, and measure the tokens. This step feeds roadmap Step 4.
+5. **Agent tool views:** `list_groups`, `load_group` and JSON Schema. Test that the first prompt holds only the group list, and measure the tokens. This step feeds roadmap Step 4. Done 2026-10-02 in `core/agent/tools.py`: the prompt lists groups and action names (about 700 tokens), `load_group` returns the schemas.
 6. **Clean up.** Delete `command_registry.py` and `command_executor.py`, and fix the three small bugs above if an earlier step hasn't already.
 
 ## Questions for the maintainer (answered 2026-09-26)

@@ -27,7 +27,7 @@ The sidebar on the left lists eleven sections in three groups, each with its nam
 | `5` | **Images** | Pick an image or a folder, see its size in pixels, format, date and camera (or how many images a folder holds), and run any `max images` action on it |
 | `6` | **PDF** | Pick a PDF, see its pages, paper size and whether it's locked or scanned, and run any `max pdf` action on it |
 | `7` | **Files** | Pick a folder or a file, see what it holds, and sort, clean, back up or undo with any `max files` action |
-| `8` | **Chat** | AI chat with command suggestions |
+| `8` | **AI** | Tell the AI agent what you want done; it runs Max's actions, shows each step and asks before it moves, overwrites or deletes files |
 | | **Track** | |
 | `9` | **Activity** | Three tabs: Queue (running, waiting and finished tasks), History (every action, with filters) and Undo (put back what Max moved, renamed or deleted) |
 | | **More** | |
@@ -113,6 +113,18 @@ Every action you ran from the dashboard, newest first, 10 at a time with Prev an
 ### Undo
 
 The file changes Max recorded (organize, order, smart-sort and duplicates --delete), newest first, with the folder each one changed. **Undo** puts back the newest change that isn't undone yet, after one confirmation; press it again to step further back. Folders that a change created, such as organize's Artist/Album folders, go too when they're empty again.
+
+## AI page
+
+The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, such as "shrink every video in this folder", or press one of the examples.
+
+- Each step shows as it happens: the groups the agent looked up (`·`), the actions it ran (`✓`), failures (`✗`), paths it refused (`!`) and steps you skipped (`-`).
+- Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
+- After a reply, **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
+- **Dry run** shows the steps and changes nothing. **New chat** starts over. The line beside them shows the model and the tokens the chat used.
+- With no API key and Ollama off, the page says so and links to Settings.
+
+Each request and each action the agent runs shows on Activity's History tab.
 
 ## Extras page
 

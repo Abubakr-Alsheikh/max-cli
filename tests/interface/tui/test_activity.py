@@ -193,3 +193,35 @@ async def test_undo_with_nothing_recorded_explains_itself():
         empty_shown = app.query_one("#undo-empty").display
 
     assert disabled and empty_shown
+
+
+def test_a_briefly_locked_log_is_read_after_a_retry(monkeypatch):
+    """Windows refuses a read while another thread replaces the file."""
+    ActivityLog().add_entry("files", "order", "success")
+    real_read = Path.read_text
+    refusals = iter([True, True])
+
+    def flaky(path, *args, **kwargs):
+        if path == ActivityLog.LOG_FILE and next(refusals, False):
+            raise PermissionError("locked")
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", flaky)
+
+    assert [entry.action for entry in ActivityLog().get_entries()] == ["order"]
+
+
+def test_a_log_that_stays_locked_never_overwrites_the_history(monkeypatch):
+    ActivityLog().add_entry("files", "order", "success")
+    saved = ActivityLog.LOG_FILE.read_text(encoding="utf-8")
+
+    def locked(path, *args, **kwargs):
+        raise PermissionError("locked")
+
+    # Only the lock is undone afterwards; the test's own home stays.
+    with monkeypatch.context() as lock:
+        lock.setattr(Path, "read_text", locked)
+        log = ActivityLog()
+        log.add_entry("ai", "agent", "success")  # must not raise or write
+
+    assert ActivityLog.LOG_FILE.read_text(encoding="utf-8") == saved

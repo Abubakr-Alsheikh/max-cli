@@ -40,7 +40,7 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 - [x] Activity: Queue, History and Undo as three tabs of one page (2026-10-02). History rebuilt (paged, kind filter, Failed only, search, detail line); Undo lists the recorded file changes with their folders and steps back one at a time. Key 0 is free now.
 - [x] Extras on key 0 after the `tools` port (2026-10-02): QR code on the page, clipboard image saved under a dated name in Pictures with "Open on the Images page", copy a text file. Extras and Settings share the MORE group, so every page fits a 44-row window.
 - [x] The sidebar starts open with names and remembers whether you folded it (`sidebar_open`), the maintainer's choice (2026-10-02).
-- [ ] AI page with the agent (roadmap step 4). (The Tools page went with the Audio page.)
+- [x] AI page with the agent (2026-10-02): replaced Chat on key 8. Live steps, a dialog before risky actions, Open folder and Undo..., dry run, new chat. (The Tools page went with the Audio page.)
 - [ ] Results: a list of finished runs on each page, with Open.
 
 ## Decisions

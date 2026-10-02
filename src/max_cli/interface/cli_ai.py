@@ -1,18 +1,42 @@
-import shlex
-import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from max_cli.common.atomic import atomic_write_json
+from max_cli.common.exceptions import MaxError
 from max_cli.common.logger import console, log_error, log_success
+
+if TYPE_CHECKING:
+    from max_cli.core.agent.agent import ActionCall, Agent, AgentReply, Step
 
 app = typer.Typer()
 
-MAIN_APP_REF: Optional[typer.Typer] = None
+# Earlier conversation turns a chat session starts from.
+CHAT_MEMORY_TURNS = 20
+EXIT_WORDS = ("exit", "quit")
+DANGER_NOTES = {
+    "moves": "moves or renames files",
+    "overwrites": "overwrites files in place",
+    "deletes": "deletes files",
+}
+STEP_STYLES = {
+    "loaded": ("·", "dim"),
+    "ran": ("✓", "green"),
+    "failed": ("✗", "red"),
+    "refused": ("!", "yellow"),
+    "declined": ("-", "dim"),
+    "planned": ("→", "cyan"),
+}
+EXAMPLES = (
+    "shrink every video in this folder",
+    "merge the PDFs in Downloads into one file",
+    "sort my Music folder into Artist/Album folders",
+    "find duplicate files here",
+)
 
 
 def _get_engine():
@@ -21,78 +45,72 @@ def _get_engine():
     return AIEngine()
 
 
+def _confirm(call: "ActionCall") -> bool:
+    """The agent asks before it moves, overwrites or deletes files."""
+    note = DANGER_NOTES.get(call.action.danger.value, "changes files")
+    return Confirm.ask(
+        f"[yellow]Run [bold]{escape(call.describe())}[/bold]? It {note}.[/yellow]"
+    )
+
+
+def _show_step(step: "Step") -> None:
+    mark, style = STEP_STYLES.get(step.kind.value, ("·", "dim"))
+    console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
+
+
+def _make_agent(dry_run: bool = False) -> "Agent":
+    from max_cli.core.agent.agent import Agent
+
+    return Agent.from_settings(confirm=_confirm, on_step=_show_step, dry_run=dry_run)
+
+
+def _show_reply(reply: "AgentReply") -> None:
+    console.print(Panel(escape(reply.text), title="[cyan]Max[/cyan]", border_style="cyan"))
+    if reply.tokens:
+        console.print(f"[dim]{reply.tokens:,} tokens[/dim]")
+
+
 @app.command("ask")
 @app.command("a", hidden=True)
 def ask_ai(
-    prompt: str = typer.Argument(..., help="What do you want to do?"),
+    prompt: str = typer.Argument(..., help="What do you want done?"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what the agent would run, and run nothing."
+    ),
     explain: bool = typer.Option(
-        False, "--explain", "-e", help="Explain the command logic."
+        False, "--explain", "-e", hidden=True, help="No longer used."
     ),
 ):
     """
-    Natural Language Interface.
+    Ask the AI agent to do something; it runs Max's own commands.
     Example: max ai ask "Compress all PDFs in Documents folder"
+
+    It asks before it moves, overwrites or deletes files, works only in this
+    folder and folders you name, and never runs other programs.
     """
-    if MAIN_APP_REF is None:
-        log_error("Internal Error: Main App reference not linked.")
-        raise typer.Exit(1)
+    try:
+        agent = _make_agent(dry_run)
+        with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
+            # The agent may ask a question; the spinner would draw over it.
+            agent.confirm = _paused(status, _confirm)
+            reply = agent.ask(prompt)
+    except MaxError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    _show_reply(reply)
 
-    console.print(f"[dim]Analyzing request: '{prompt}'...[/dim]")
 
-    with console.status("[bold cyan]Consulting AI...[/bold cyan]"):
+def _paused(status: Any, confirm: Any) -> Any:
+    """`confirm` with the spinner stopped while it asks."""
+
+    def ask(call: "ActionCall") -> bool:
+        status.stop()
         try:
-            eng = _get_engine()
-            result = eng.interpret_intent(prompt, MAIN_APP_REF)
-        except Exception as e:
-            log_error(str(e))
-            raise typer.Exit(1) from None
+            return bool(confirm(call))
+        finally:
+            status.start()
 
-    # Handle AI Rejection
-    if "error" in result:
-        console.print(
-            Panel(result["error"], title="[red]AI Error[/red]", border_style="red")
-        )
-        return
-
-    # Handle Success
-    cmd_str = result.get("command", "")
-    reason = result.get("thought", "")
-    is_dangerous = result.get("dangerous", False)
-
-    # Display Proposal
-    console.print(
-        Panel(
-            f"[dim]{reason}[/dim]\n\n[bold green]> {cmd_str}[/bold green]",
-            title="[cyan]Max Suggests[/cyan]",
-            border_style="green" if not is_dangerous else "yellow",
-        )
-    )
-
-    if explain and result.get("explanation"):
-        console.print(
-            Panel(
-                result["explanation"],
-                title="[dim]How it works[/dim]",
-                border_style="blue",
-            )
-        )
-
-    # Confirmation
-    msg = "Run this command?"
-    if is_dangerous:
-        msg = "[bold red]⚠ This command modifies files. Proceed?[/bold red]"
-
-    if Confirm.ask(msg):
-        console.print("\n[dim]Executing...[/dim]")
-        # Execute safely using subprocess
-        # We split the string safely to handle quotes properly
-        try:
-            args = shlex.split(cmd_str)
-            subprocess.run(args, check=True)
-        except Exception as e:
-            log_error(f"Execution failed: {e}")
-    else:
-        console.print("[yellow]Aborted.[/yellow]")
+    return ask
 
 
 @app.command("analyze")
@@ -218,7 +236,8 @@ def chat_session(
     ),
 ):
     """
-    Start an interactive session with Max. He remembers what you said.
+    Talk with the AI agent: each request runs Max's commands, and it
+    remembers the conversation.
 
     Use --clear to reset history, --export to save, --import to load previous chats.
     """
@@ -245,61 +264,46 @@ def chat_session(
 
     console.print(
         Panel(
-            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' to quit, 'help' for suggestions.",
+            "[bold cyan]Max Interactive Session[/bold cyan]\n"
+            "Ask for what you want done. Type 'help' for examples, 'exit' to quit.",
             border_style="cyan",
         )
     )
 
     eng = _get_engine()
-    if eng.history:
-        console.print(
-            f"[dim]Loaded {len(eng.history)} messages from previous session[/dim]"
-        )
+    try:
+        agent = _make_agent()
+    except MaxError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    earlier = eng.history[-CHAT_MEMORY_TURNS:]
+    agent.messages.extend(earlier)
+    if earlier:
+        console.print(f"[dim]Remembering {len(earlier)} earlier messages[/dim]")
 
     while True:
-        suggestions = eng.get_suggestions()
-        user_input = Prompt.ask(
-            "[bold green]User[/bold green]",
-            choices=suggestions + ["help", "exit", "quit"],
-            show_choices=False,
-        )
-        if user_input.lower() in ["exit", "quit"]:
-            eng._save_history()
+        user_input = Prompt.ask("[bold green]You[/bold green]").strip()
+        if user_input.lower() in EXIT_WORDS:
             break
-        if user_input.lower() == "help":
-            console.print("[bold cyan]Suggestions:[/bold cyan]")
-            for i, s in enumerate(suggestions, 1):
-                console.print(f"  {i}. {s}")
-            console.print("  [dim]Or type your own command[/dim]")
+        if not user_input:
             continue
-
-        with console.status("[dim]Thinking...[/dim]"):
-            try:
-                result = eng.interpret_intent(user_input, MAIN_APP_REF)
-
-                if "error" in result:
-                    console.print(f"[red]Max:[/red] {result['error']}")
-                    continue
-
-                thought = result.get("thought")
-                cmd = result.get("command")
-
-                if thought and not cmd:
-                    console.print(f"[cyan]Max:[/cyan] {thought}")
-
-                elif cmd:
-                    console.print(
-                        f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
-                    )
-                    if thought:
-                        console.print(f"[dim]Reason: {thought}[/dim]")
-
-                    if Confirm.ask("Execute?"):
-                        args = shlex.split(cmd)
-                        subprocess.run(args)
-
-            except Exception as e:
-                log_error(str(e))
+        if user_input.lower() == "help":
+            console.print("[bold cyan]For example:[/bold cyan]")
+            for example in EXAMPLES:
+                console.print(f"  {example}")
+            continue
+        try:
+            with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
+                agent.confirm = _paused(status, _confirm)
+                reply = agent.ask(user_input)
+        except MaxError as e:
+            log_error(escape(str(e)))
+            continue
+        _show_reply(reply)
+        eng.history += [
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": reply.text},
+        ]
 
     eng._save_history()
     console.print("[cyan]Goodbye![/cyan]")

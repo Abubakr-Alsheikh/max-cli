@@ -55,7 +55,7 @@ QUICK_LAUNCH = [
     ("download", "Download"),
     ("video", "Video"),
     ("audio", "Audio"),
-    ("chat", "Ask AI"),
+    ("ai", "Ask AI"),
 ]
 
 

@@ -77,13 +77,39 @@ def test_running_a_group_loads_it_on_demand():
     assert "Queue Statistics" in result.output
 
 
-def test_ai_group_gets_the_full_app_for_its_command_list(monkeypatch):
-    from max_cli.interface import cli_ai
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        (["shrink every video in Downloads"], ["shrink every video in Downloads"]),
+        (["shrink", "every", "video"], ["shrink every video"]),
+        (["shrink", "it", "--dry-run"], ["shrink it", "--dry-run"]),
+    ],
+)
+def test_text_that_isnt_a_command_goes_to_the_agent(monkeypatch, args, expected):
+    """D1: `max "<request>"` and `max <words>` run `max ai ask`."""
+    # No AI set up: `ai ask` stops at once, after the routing under test.
+    monkeypatch.setattr("max_cli.core.engines.ai_engine.make_client", lambda: None)
+    seen = {}
 
-    monkeypatch.setattr(cli_ai, "MAIN_APP_REF", None)
-    registry.register(typer.Typer(cls=LazyTyperGroup))
+    class Spy(LazyTyperGroup):
+        def parse_args(self, ctx, given):
+            result = super().parse_args(ctx, given)
+            seen["args"] = list(ctx.protected_args) + list(ctx.args)
+            return result
 
-    load_group("ai")
+    app = typer.Typer(name="max", cls=Spy)
+    registry.register(app)
+    runner.invoke(app, args)
 
-    group_names = {group.name for group in cli_ai.MAIN_APP_REF.registered_groups}
-    assert {"video", "pdf", "grab", "queue"} <= group_names
+    assert seen["args"] == ["ai", "ask", *expected]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [["video", "--help"], ["--help"], ["queue", "stats"]],
+)
+def test_commands_and_options_are_not_requests(args):
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
+
+    assert not group._is_request(args[0])

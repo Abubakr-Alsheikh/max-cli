@@ -6,13 +6,15 @@ importing any of them. `max video compress ...` imports only
 and every engine out of startup (hardening decision D5).
 
 It also routes a bare `max`: a person at a terminal gets the dashboard,
-scripts and pipes get the help text (dashboard-first-ai-agent.md, D2).
+scripts and pipes get the help text (dashboard-first-ai-agent.md, D2). And
+`max <text>` whose first word isn't a command goes to the AI agent as one
+request (D1): `max "shrink every video in Downloads"`.
 """
 
 import importlib
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 # Typer 0.27+ bundles its own click (typer._click), older versions use the
 # click package. Build everything from Typer's classes so both work, and
@@ -28,8 +30,6 @@ class LazyGroupSpec:
     help: str = ""
     hidden: bool = False
     attribute: str = "app"
-    # Called with the loaded module, e.g. to hand it the full app.
-    on_load: Optional[Callable[[object], None]] = None
 
 
 LAZY_GROUPS: dict[str, LazyGroupSpec] = {}
@@ -52,8 +52,6 @@ def load_group(name: str) -> Any:
 
     spec = LAZY_GROUPS[name]
     module = importlib.import_module(spec.module)
-    if spec.on_load is not None:
-        spec.on_load(module)
     command = typer.main.get_command(getattr(module, spec.attribute))
     command.name = name
     if spec.help:
@@ -69,12 +67,30 @@ class LazyTyperGroup(TyperGroup):
     _rendering_help = False
     # What a bare `max` runs at an interactive terminal (D2).
     interactive_default = "dashboard"
+    # What `max <text>` runs when <text> isn't a command (D1).
+    agent_command = ("ai", "ask")
 
     def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
         if not args and is_interactive():
             args = [self.interactive_default]
+        elif args and self._is_request(args[0]):
+            # Words up to the first option are the request; options such as
+            # --dry-run stay options of `ai ask`.
+            words = next(
+                (index for index, arg in enumerate(args) if arg.startswith("-")),
+                len(args),
+            )
+            args = [*self.agent_command, " ".join(args[:words]), *args[words:]]
         result: list[str] = super().parse_args(ctx, args)
         return result
+
+    def _is_request(self, word: str) -> bool:
+        """Words for the agent: not an option, not a command or group."""
+        return (
+            not word.startswith("-")
+            and word not in LAZY_GROUPS
+            and word not in self.commands
+        )
 
     def list_commands(self, ctx: Any) -> list[str]:
         eager = super().list_commands(ctx)

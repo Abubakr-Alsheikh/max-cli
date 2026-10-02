@@ -1,0 +1,369 @@
+"""The agent loop (core/agent) with a scripted model: no network, real actions in tmp_path."""
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import httpx
+import openai
+import pytest
+
+from max_cli.common.exceptions import AIError, ConfigurationError
+from max_cli.core.agent.agent import ActionCall, Agent, StepKind
+from max_cli.core.agent.scope import PathScope, folders_named_in
+from max_cli.core.agent.tools import agent_groups, tool_definitions
+from max_cli.core.catalog import actions_for
+from max_cli.core.catalog.spec import Surface
+
+# The first prompt (system message plus the two tool definitions) must stay
+# small: about 4 characters per token, so this is roughly 900 tokens.
+FIRST_PROMPT_CHAR_BUDGET = 3_600
+
+
+def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
+    text = arguments if isinstance(arguments, str) else json.dumps(arguments)
+    return SimpleNamespace(
+        id=call_id, function=SimpleNamespace(name=name, arguments=text)
+    )
+
+
+def _answer(content: str = "", calls: tuple = (), tokens: int = 10) -> Any:
+    message = SimpleNamespace(content=content, tool_calls=list(calls) or None)
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=message)],
+        usage=SimpleNamespace(total_tokens=tokens),
+    )
+
+
+class ScriptedModel:
+    """Answers with the given responses in order and records each request."""
+
+    def __init__(self, *responses: Any) -> None:
+        self._responses = list(responses)
+        self.requests: list[dict[str, Any]] = []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **request: Any) -> Any:
+        self.requests.append(json.loads(json.dumps(request, default=str)))
+        return self._responses.pop(0)
+
+
+def _agent(
+    model: ScriptedModel, cwd: Path, answer: bool = True, **kwargs: Any
+) -> Agent:
+    asked: list[ActionCall] = []
+
+    def confirm(call: ActionCall) -> bool:
+        asked.append(call)
+        return answer
+
+    agent = Agent(model, "test-model", confirm=confirm, cwd=cwd, **kwargs)
+    agent.asked = asked  # type: ignore[attr-defined]  # the test reads what was asked
+    return agent
+
+
+def _note(folder: Path, text: str = "hello\nworld\n") -> Path:
+    note = folder / "note.txt"
+    note.write_text(text, encoding="utf-8")
+    return note
+
+
+# --- what the model sees first ------------------------------------------------
+
+
+def test_the_first_prompt_holds_only_the_group_list(tmp_path):
+    model = ScriptedModel(_answer("Hi."))
+    agent = _agent(model, tmp_path)
+
+    agent.ask("hello")
+
+    first = model.requests[0]
+    system = first["messages"][0]["content"]
+    for group in agent_groups():
+        assert f"- {group}:" in system
+    # No action's arguments are in it: those come from load_group.
+    for group in agent_groups():
+        for action in actions_for(group, Surface.AGENT):
+            assert action.id not in system
+    size = len(system) + len(json.dumps(first["tools"]))
+    assert size < FIRST_PROMPT_CHAR_BUDGET, f"first prompt is {size} characters"
+
+
+def test_tools_are_load_group_and_run_action_only():
+    names = [tool["function"]["name"] for tool in tool_definitions()]
+    assert names == ["load_group", "run_action"]
+
+
+# --- running actions ----------------------------------------------------------
+
+
+def test_loads_a_group_then_runs_its_action(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.preview", "arguments": {"target": str(note)}},
+                    "call-2",
+                ),
+            )
+        ),
+        _answer("It says hello world.", tokens=25),
+    )
+    seen = []
+    agent = _agent(model, tmp_path)
+    agent.on_step = seen.append
+
+    reply = agent.ask("what's in note.txt?")
+
+    assert reply.text == "It says hello world."
+    assert [step.kind for step in reply.steps] == [StepKind.LOADED, StepKind.RAN]
+    assert seen == reply.steps
+    assert reply.tokens == 45
+    group_reply = model.requests[1]["messages"][-1]
+    assert group_reply["role"] == "tool" and "files.preview" in group_reply["content"]
+    action_reply = model.requests[2]["messages"][-1]
+    assert action_reply["tool_call_id"] == "call-2"
+    assert "hello" in action_reply["content"]
+
+
+def test_an_action_needs_its_group_loaded_first(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.shred", "arguments": {"target": str(note)}},
+                ),
+            )
+        ),
+        _answer("Sorry."),
+    )
+    agent = _agent(model, tmp_path)
+
+    reply = agent.ask("shred note.txt")
+
+    assert note.exists()
+    assert agent.asked == []
+    assert reply.steps == []
+    assert "load_group('files')" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_wrong_arguments_go_back_to_the_model(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.preview", "arguments": {"colour": "red"}},
+                ),
+            )
+        ),
+        _answer("I couldn't."),
+    )
+
+    reply = _agent(model, tmp_path).ask("preview")
+
+    assert reply.steps[-1].kind == StepKind.FAILED
+    assert "unknown option" in model.requests[2]["messages"][-1]["content"]
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        _call("run_action", "{not json"),
+        _call("shell", {"command": "rm -rf /"}),
+        _call("run_action", {"action": "files.nothing", "arguments": {}}),
+    ],
+)
+def test_bad_tool_calls_are_answered_with_an_error(tmp_path, call):
+    model = ScriptedModel(_answer(calls=(call,)), _answer("OK."))
+
+    reply = _agent(model, tmp_path).ask("do it")
+
+    assert reply.text == "OK."
+    assert model.requests[1]["messages"][-1]["content"].startswith("Error:")
+
+
+# --- guardrails ---------------------------------------------------------------
+
+
+def _shred(note: Path) -> tuple:
+    return (
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.shred", "arguments": {"target": str(note)}},
+                ),
+            )
+        ),
+    )
+
+
+def test_a_delete_asks_and_a_no_keeps_the_file(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(*_shred(note), _answer("Left it."))
+    agent = _agent(model, tmp_path, answer=False)
+
+    reply = agent.ask("shred note.txt")
+
+    assert note.exists()
+    assert [call.action.id for call in agent.asked] == ["files.shred"]
+    assert reply.steps[-1].kind == StepKind.DECLINED
+    assert "said no" in model.requests[2]["messages"][-1]["content"]
+
+
+def test_a_delete_runs_after_a_yes(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(*_shred(note), _answer("Gone."))
+
+    reply = _agent(model, tmp_path, answer=True).ask("shred note.txt")
+
+    assert not note.exists()
+    assert reply.steps[-1].kind == StepKind.RAN
+
+
+def test_confirmation_does_not_follow_the_confirm_destructive_setting(
+    tmp_path, monkeypatch
+):
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "CONFIRM_DESTRUCTIVE", False)
+    note = _note(tmp_path)
+    model = ScriptedModel(*_shred(note), _answer("Left it."))
+    agent = _agent(model, tmp_path, answer=False)
+
+    agent.ask("shred note.txt")
+
+    assert note.exists() and agent.asked
+
+
+def test_a_path_outside_the_allowed_folders_is_refused(tmp_path):
+    work, elsewhere = tmp_path / "work", tmp_path / "elsewhere"
+    work.mkdir()
+    elsewhere.mkdir()
+    note = _note(elsewhere)
+    model = ScriptedModel(*_shred(note), _answer("I can't."))
+    agent = _agent(model, work)
+
+    reply = agent.ask("shred the note")
+
+    assert note.exists()
+    assert agent.asked == []
+    assert reply.steps[-1].kind == StepKind.REFUSED
+    assert "outside" in model.requests[2]["messages"][-1]["content"]
+
+
+def test_a_folder_named_in_the_request_is_allowed(tmp_path):
+    work, elsewhere = tmp_path / "work", tmp_path / "elsewhere"
+    work.mkdir()
+    elsewhere.mkdir()
+    note = _note(elsewhere)
+    model = ScriptedModel(*_shred(note), _answer("Gone."))
+
+    _agent(model, work).ask(f"shred the note in {elsewhere}")
+
+    assert not note.exists()
+
+
+def test_dry_run_checks_without_running(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(*_shred(note), _answer("Would shred it."))
+    agent = _agent(model, tmp_path, dry_run=True)
+
+    reply = agent.ask("shred note.txt")
+
+    assert note.exists()
+    assert agent.asked == []
+    assert reply.steps[-1].kind == StepKind.PLANNED
+
+
+def test_the_step_limit_stops_a_request(tmp_path):
+    loads = [_call("load_group", {"name": "files"}, f"call-{n}") for n in range(3)]
+    model = ScriptedModel(_answer(calls=tuple(loads)))
+    agent = _agent(model, tmp_path, max_steps=2)
+
+    reply = agent.ask("loop")
+
+    assert "stopped after 2 steps" in reply.text
+    assert len(model.requests) == 1
+    # Every tool call got an answer, so the conversation can go on.
+    answers = {
+        m["tool_call_id"]: m["content"] for m in agent.messages if m["role"] == "tool"
+    }
+    assert set(answers) == {"call-0", "call-1", "call-2"}
+    assert answers["call-2"].startswith("Not run")
+    assert agent.messages[-1] == {"role": "assistant", "content": reply.text}
+
+
+def test_the_conversation_carries_on(tmp_path):
+    model = ScriptedModel(_answer("First."), _answer("Second."))
+    agent = _agent(model, tmp_path)
+
+    agent.ask("one")
+    agent.ask("two")
+
+    roles = [message["role"] for message in model.requests[1]["messages"]]
+    assert roles == ["system", "user", "assistant", "user"]
+
+
+# --- the provider ---------------------------------------------------------------
+
+
+def test_a_model_without_tool_support_gets_a_clear_message(tmp_path):
+    response = httpx.Response(400, request=httpx.Request("POST", "http://ai.test"))
+    error = openai.BadRequestError(
+        "This model does not support tools", response=response, body=None
+    )
+
+    class NoTools(ScriptedModel):
+        def _create(self, **request: Any) -> Any:
+            raise error
+
+    with pytest.raises(AIError, match="can't call tools"):
+        _agent(NoTools(), tmp_path).ask("hi")
+
+
+def test_without_a_key_or_ollama_there_is_no_agent(monkeypatch):
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
+    monkeypatch.setattr(settings, "OLLAMA_ENABLED", False)
+
+    with pytest.raises(ConfigurationError, match="No AI is set up"):
+        Agent.from_settings(confirm=lambda call: False)
+
+
+# --- the allowed folders ------------------------------------------------------
+
+
+def test_scope_reads_paths_and_usual_folders(tmp_path, isolated_home):
+    (isolated_home / "Downloads").mkdir()
+    photos = tmp_path / "Photos"
+    photos.mkdir()
+
+    found = folders_named_in(f'shrink "{photos}" and my downloads, and/or more')
+
+    assert photos.resolve() in found
+    assert (isolated_home / "Downloads").resolve() in found
+
+
+def test_scope_never_opens_a_whole_drive(tmp_path):
+    anchor = Path(tmp_path.anchor)
+
+    assert folders_named_in(f"look in {anchor}") == []
+
+
+def test_scope_checks_the_folder_of_a_pattern(tmp_path):
+    scope = PathScope(tmp_path)
+
+    assert scope.allows(tmp_path / "music" / "*.mp3")
+    assert scope.allows("relative/file.txt")
+    assert not scope.allows(tmp_path.parent / "other.txt")

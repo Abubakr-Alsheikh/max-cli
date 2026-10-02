@@ -47,7 +47,7 @@ Max turns multi-step jobs, like compressing a video, merging PDFs or downloading
 | **Fill PDF forms** | `max pdf form-fill` | `max pdf form-fill form.pdf -f name="John"` |
 | **Compress images** | `max images compress` | `max images compress photos/` |
 | **Resize images** | `max images resize` | `max images resize logo.png -w 800` |
-| **Ask AI anything** | `max ai ask` | `max ai ask "Merge and Compress those pdf files"` |
+| **Let the AI agent do it** | `max "<request>"` | `max "merge and compress the PDFs here"` |
 | **Generate images** | `max ai create` | `max ai create "A cat on a bike"` |
 | **Search files by meaning** | `max ai search` | `max ai search "tax receipts" ./docs` |
 | **Organize files** | `max files smart-sort` | `max files smart-sort downloads/` |
@@ -436,18 +436,20 @@ max images strip ./photos
 
 ### 🤖 AI Assistant
 
-Max has a smart AI that understands what you want.
+Max has an AI agent that does the work with Max's own commands.
 
-#### Ask Anything
+#### Ask for What You Want Done
 
 ```bash
-# Get help with a task
-max ai ask "How do I compress this video?"
+# Say it in plain words; the agent picks and runs the commands
+max "shrink every video in this folder"
+max ai ask "merge the PDFs in Downloads into one file"
 
-# In a folder with a file, just describe what you want
-max ai ask "Make this image smaller"
-# Max figures out which file you mean!
+# See the steps without changing anything
+max "sort my Music folder into Artist/Album folders" --dry-run
 ```
+
+It asks before it moves, overwrites or deletes files, works only in this folder and folders you name, and never runs other programs. The dashboard's AI page (`8`) runs the same agent.
 
 #### Analyze Images
 
@@ -472,7 +474,7 @@ max ai edit photo.jpg "Add a sunset background" -o new_photo.jpg
 #### Chat Mode
 
 ```bash
-# Start an interactive conversation
+# Talk with the agent; it remembers the conversation
 max ai chat
 ```
 
@@ -592,7 +594,7 @@ In a script, a pipe or CI, a bare `max` prints the help text instead, so nothing
 | **Activity** | Queue (pause, cancel, retry), History of every action, and Undo for file changes |
 | **Files** | Pick a folder, see its files by kind and size, sort, clean, back up or undo |
 | **Settings** | Your defaults (AI, downloads, images, safety), plus FFmpeg status and cleanup |
-| **Chat** | AI chat |
+| **AI** | Tell the AI agent what you want done; it runs Max's actions and asks before risky ones |
 | **Extras** | QR code for a link, save a clipboard screenshot, copy a text file |
 
 Press `Ctrl+P` to find any action by name, `q` to quit, `r` to refresh and `Ctrl+B` to fold the sidebar to icons.

@@ -49,27 +49,29 @@ The design and build order live in `command-catalog.md`.
 
 ### Step 3: New front door
 - [x] Bare `max` opens the dashboard when a person is at an interactive terminal (D2). `LazyTyperGroup.parse_args` does it; `textual` and `psutil` are required dependencies now, with `textual>=6.0.0` because older releases fail the dashboard tests (2026-09-26).
-- [ ] `max <text>` routes to the agent (D1). The routing lives in `LazyTyperGroup` (`core/cli/lazy_group.py`), where an unknown command name becomes an agent request.
+- [x] `max <text>` routes to the agent (D1). `LazyTyperGroup.parse_args` turns a first word that isn't a command or option into `max ai ask "<all the words>"` (2026-10-02).
 - [ ] `max --help` and every existing command keep working unchanged.
 
 ### Step 4: Agent v2
-- [ ] A tool-calling loop in core (`core/agent/`):
+- [x] A tool-calling loop in core (`core/agent/`), 2026-10-02, branch `feat/ai-agent`:
   1. The model picks a tool from the catalog.
   2. The engine runs it.
   3. The result goes back to the model, and the loop repeats until done.
-- [ ] Plan and confirm: show the steps before running, and ask before destructive ones (D4).
-- [ ] Undo: every file change goes through the transaction log, so "undo that" works.
-- [ ] Progress through the event system, so the CLI and the Chat panel both show live steps.
-- [ ] The dashboard Chat panel and `max <text>` run the same agent.
-- [ ] **Load commands on demand (maintainer, 2026-09-26).** Don't put the whole command catalog in the context window.
+- [x] Plan and confirm: each step shows as it runs, and MOVES/OVERWRITES/DELETES ask first (D4). `--dry-run` (and the AI page's Dry run) shows the steps without running them. A full plan shown before the first step is still open.
+- [x] Undo: file changes go through the transaction log; the AI page's Undo... opens Activity's Undo tab, and the agent can run `files.undo`.
+- [x] Live steps: the agent reports `Step`s through an `on_step` callback, which the CLI prints and the AI page shows. (A callback, not the event system: steps aren't progress bars.)
+- [x] The dashboard's AI page (it replaced Chat) and `max <text>` run the same agent.
+- [x] **Load commands on demand (maintainer, 2026-09-26).** Don't put the whole command catalog in the context window. Done: the first prompt lists the groups with their action names (about 700 tokens); `load_group` returns one group's arguments (250 to 1,800 tokens). Feature packs don't exist yet, so every group shows.
   - At the start, the agent sees only the parent command groups, each with a one-line description (`video`, `pdf`, `grab`, ...).
   - When a request needs a group, the agent calls a lookup tool (for example `load_group("video")`). That tool returns the group's child commands with their parameters, defaults and usage notes, and only then does the agent call them.
   - The agent sees only the groups for features the user turned on (see `feature-packs.md`).
   - Loaded groups stay available for the rest of the conversation, so they aren't fetched twice.
   - Measure the token cost per request, and add a test that the first prompt holds only the group list.
   - Goal: an efficient agent that uses a small context, picks the right command, and gets the work done.
-- [ ] Guardrails: path limits, a step limit, cost and token limits, a dry-run mode.
-- [ ] Replace `ai ask`'s "write one command string" approach, keeping `ai ask` as an alias.
+- [x] Guardrails: path limits, a step limit (12), a token limit (60,000 per request), a dry-run mode.
+- [x] Replace `ai ask`'s "write one command string" approach, keeping `ai ask` as an alias. `ai ask` and `ai chat` ran whatever command string the model wrote through `subprocess`; both use the agent now.
+- [ ] Small local models: D5's simpler one-step mode. A model that can't call tools gets a clear error today.
+- [ ] The `ai` group (analyze, create, search ...) isn't in the catalog, so the agent can't call it yet.
 
 ### Step 5: Onboarding and packaging
 - [ ] A first-run wizard covering the API key (optional), FFmpeg and the download folder, with sensible defaults. It uses the arrow-key select menus from `feature-packs.md`, so you pick which settings to set up instead of typing answers.
@@ -78,7 +80,7 @@ The design and build order live in `command-catalog.md`.
 
 ### Tests and docs
 - [ ] Routing tests for D1 and D2, including non-interactive terminals. D2 is covered in `tests/test_front_door.py`.
-- [ ] Agent tests with a mocked model: tool selection, confirmation, refusal, undo.
+- [x] Agent tests with a mocked model: tool selection, confirmation, refusal, dry run, limits (`tests/test_agent.py`, `tests/test_cli_ai.py`, `tests/interface/tui/test_ai_page.py`). Checked live against OpenRouter's `openrouter/free` on 2026-10-02.
 - [ ] README and `docs/`: a new "Getting started" built around `max` and plain-language requests.
 
 ## Related drafts

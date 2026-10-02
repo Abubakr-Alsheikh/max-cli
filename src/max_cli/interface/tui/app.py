@@ -13,7 +13,7 @@ from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.tool_pages import TOOL_PAGES
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
 from max_cli.interface.tui.widgets.activity_panel import ActivityPanel
-from max_cli.interface.tui.widgets.chat_panel import ChatPanel
+from max_cli.interface.tui.widgets.ai_panel import AIPanel
 from max_cli.interface.tui.widgets.download_panel import DownloadPanel
 from max_cli.interface.tui.widgets.extras_panel import ExtrasPanel
 from max_cli.interface.tui.widgets.home_panel import HomePanel
@@ -51,6 +51,8 @@ RENAMED_PAGES = {
     # Queue and History became the Activity page's tabs.
     "queue": "activity",
     "history": "activity",
+    # The AI page with the agent replaced Chat (2026-10-02).
+    "chat": "ai",
 }
 # True when you left the sidebar showing names. A new name, not the earlier
 # "sidebar_collapsed": that one was saved while icons were the default, and
@@ -172,76 +174,6 @@ class MaxDashboardApp(App):
     }
 
 
-    /* Inner scroll areas keep a usable height; the page scrolls around them. */
-    #chat-scroll {
-        min-height: 6;
-    }
-
-    /* ══════════════════════════════════════════════════════
-       FILES PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #files-nav {
-        height: auto;
-        margin-bottom: 1;
-    }
-    #filter-label, #sort-label {
-        margin: 0 0 0 1;
-    }
-    #files-filter {
-        width: 20;
-    }
-    #files-sort {
-        width: 16;
-    }
-    #files-count {
-        margin: 0 0 0 1;
-    }
-
-
-    /* ══════════════════════════════════════════════════════
-       CHAT PANEL
-       ══════════════════════════════════════════════════════ */
-
-    #chat-scroll {
-        height: 1fr;
-        border: solid $border;
-        background: $surface;
-    }
-    #chat-messages {
-        padding: 1;
-    }
-
-    .chat-msg {
-        margin: 1 0;
-        padding: 1;
-        border: round $border;
-    }
-    .chat-msg-max {
-        background: $surface;
-        border: round $border;
-    }
-    .chat-msg-user {
-        background: $boost;
-        border: round $border;
-        margin-left: 4;
-    }
-
-    #chat-suggestions {
-        height: auto;
-        margin: 1 0;
-    }
-    #chat-suggestions Button {
-        margin: 0 1;
-    }
-    #chat-input-row {
-        height: auto;
-        dock: bottom;
-    }
-    #chat-input {
-        width: 1fr;
-    }
-
     /* ══════════════════════════════════════════════════════
        HISTORY PANEL
        ══════════════════════════════════════════════════════ */
@@ -273,7 +205,7 @@ class MaxDashboardApp(App):
                 yield ActivityPanel(id="activity-panel")
                 yield ExtrasPanel(id="extras-panel")
                 yield SettingsPanel(id="settings-panel")
-                yield ChatPanel(id="chat-panel")
+                yield AIPanel(id="ai-panel")
         yield JobsDrawer(id="jobs")
         yield Footer()
 

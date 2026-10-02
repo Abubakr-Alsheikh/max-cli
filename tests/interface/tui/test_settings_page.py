@@ -288,7 +288,7 @@ def test_the_sidebar_pages():
         "images",
         "pdf",
         "files",
-        "chat",
+        "ai",
         "activity",
         "extras",
         "settings",
