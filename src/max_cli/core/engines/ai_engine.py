@@ -85,6 +85,37 @@ def _ai_call_errors() -> tuple[type[BaseException], ...]:
     )
 
 
+# Folder for a file the AI didn't place, by its kind (common/file_kinds).
+KIND_FOLDERS = {
+    "video": "Videos",
+    "audio": "Music",
+    "image": "Images",
+    "pdf": "PDFs",
+    "document": "Documents",
+    "archive": "Archives",
+}
+FALLBACK_FOLDER = "Other"
+
+
+def kind_folder(file_name: str) -> str:
+    """Where a file goes when the AI can't say: its kind's folder."""
+    from max_cli.common.file_kinds import kind_of
+
+    return KIND_FOLDERS.get(kind_of(Path(file_name)), FALLBACK_FOLDER)
+
+
+def json_object(text: str) -> dict[str, Any]:
+    """The JSON object in a model's reply, even inside a ```json fence or
+    with words around it. Raises json.JSONDecodeError when there's none."""
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        raise json.JSONDecodeError("No JSON object in the reply", text, 0)
+    found = json.loads(text[start : end + 1])
+    if not isinstance(found, dict):
+        raise json.JSONDecodeError("The reply's JSON isn't an object", text, 0)
+    return found
+
+
 class AIEngine:
     def __init__(self):
         self._client = None
@@ -166,12 +197,16 @@ class AIEngine:
                 model=self.current_model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            result = json.loads(response.choices[0].message.content)
-            cache.set(cache_key, result, ttl=3600)
-            return result
-        except _ai_call_errors():
-            logger.warning("AI categorization failed; using 'Other'", exc_info=True)
-            return {f: "Other" for f in file_list}
+            answer = json_object(response.choices[0].message.content or "")
+        except _ai_call_errors() as e:
+            # One line, not a traceback: the sort still works, by kind.
+            logger.warning("AI categories unavailable (%s); sorting by file kind", e)
+            return {name: kind_folder(name) for name in file_list}
+        result = {
+            name: str(answer.get(name) or kind_folder(name)) for name in file_list
+        }
+        cache.set(cache_key, result, ttl=3600)
+        return result
 
     def analyze_image_content(self, image_path: Path, prompt: str) -> str:
         """

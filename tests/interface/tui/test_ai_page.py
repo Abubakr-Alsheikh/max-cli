@@ -163,7 +163,7 @@ async def test_a_request_shows_its_steps_and_the_reply(ai_on):
 
     assert card.has_class("-ok")
     assert card.title.startswith("✓ files preview")
-    assert "Looked up files" in lookups
+    assert "files actions" in lookups
     assert "1 action" in turn_status and "300 tokens" in turn_status
     assert replies == ["It says **hello**.\n\n- one\n- two"]
     assert "300 tokens" in status

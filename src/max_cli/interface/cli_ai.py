@@ -25,6 +25,7 @@ DANGER_NOTES = {
 }
 STEP_STYLES = {
     "loaded": ("·", "dim"),
+    "looked": ("·", "dim"),
     "started": ("⚙", "bold cyan"),
     "ran": ("✓", "green"),
     "failed": ("✗", "red"),
@@ -73,9 +74,11 @@ def _show_step(step: "Step") -> None:
     kind = step.kind.value
     mark, style = STEP_STYLES.get(kind, ("·", "dim"))
     if kind in ("started", "planned", "refused", "declined"):
-        title = {"started": step.label, "planned": f"Would run {step.label}"}.get(
-            kind, step.text
-        )
+        title = {
+            "started": step.label,
+            "planned": f"Would run {step.label}",
+            "declined": f"Skipped {step.label}",
+        }.get(kind, step.text)
         console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
         _show_arguments(step)
         return

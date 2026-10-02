@@ -115,7 +115,33 @@ class TestAIEngine:
 
         result = engine.categorize_files(["file1.txt", "file2.txt"])
 
-        assert result == {"file1.txt": "Other", "file2.txt": "Other"}
+        # By kind when the AI can't answer: .txt is a document.
+        assert result == {"file1.txt": "Documents", "file2.txt": "Documents"}
+
+    @pytest.mark.parametrize(
+        "reply, expected",
+        [
+            (
+                'Here you go:\n```json\n{"a.mp3": "Chill"}\n```',
+                {"a.mp3": "Chill", "b.jpg": "Images"},
+            ),
+            ("", {"a.mp3": "Music", "b.jpg": "Images"}),
+        ],
+    )
+    @patch("max_cli.core.engines.ai_engine.get_default_cache")
+    def test_categorize_reads_fenced_json_and_falls_back_by_kind(
+        self, mock_cache, reply, expected
+    ):
+        """A free model wrapped its JSON in a fence, or sent nothing at all."""
+        mock_cache.return_value.get.return_value = None
+        engine = AIEngine()
+        engine._client = MagicMock()
+        engine._client.chat.completions.create.return_value.choices = [MagicMock()]
+        engine._client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = reply
+
+        assert engine.categorize_files(["a.mp3", "b.jpg"]) == expected
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")

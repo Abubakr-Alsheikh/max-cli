@@ -70,6 +70,7 @@ The design and build order live in `command-catalog.md`.
   - Goal: an efficient agent that uses a small context, picks the right command, and gets the work done.
 - [x] Guardrails: path limits, a step limit (12), a token limit (60,000 per request), a dry-run mode.
 - [x] Replace `ai ask`'s "write one command string" approach, keeping `ai ask` as an alias. `ai ask` and `ai chat` ran whatever command string the model wrote through `subprocess`; both use the agent now.
+- [x] Look before acting (maintainer, 2026-10-02: "the AI is not having the necessary tools ... to have more context"). `list_folder` and `inspect` read a folder or file without changing it, from the pages' `describe` functions; an audio folder's facts name its top artists and albums. Asked how to organize a folder of tagged MP3s, the agent now proposes `audio organize` by Artist/Album instead of a `smart-sort` into "Other". A dry run no longer asks for confirmation. `smart-sort` reads JSON in a code fence and falls back to a folder per kind (Music, Videos ...) instead of "Other", without a traceback.
 - [ ] Small local models: D5's simpler one-step mode. A model that can't call tools gets a clear error today.
 - [ ] The `ai` group (analyze, create, search ...) isn't in the catalog, so the agent can't call it yet.
 

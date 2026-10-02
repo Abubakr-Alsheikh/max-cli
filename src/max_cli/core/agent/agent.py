@@ -19,9 +19,12 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from max_cli.common.exceptions import AIError, ConfigurationError, MaxError
+from max_cli.core.agent import looks
 from max_cli.core.agent.scope import PathScope
 from max_cli.core.agent.tools import (
+    LIST_FOLDER,
     LOAD_GROUP,
+    LOOK_TOOLS,
     RUN_ACTION,
     agent_groups,
     group_actions,
@@ -50,6 +53,9 @@ Command groups, with their actions:
 {groups}
 
 How to work:
+- Look before you act or advise: list_folder shows what a folder holds, \
+inspect gives a file's facts (a song's artist and album, a video's length, a \
+photo's date). Base suggestions on what you saw.
 - The user is in {cwd}. "Here", "this folder" and relative paths mean that \
 folder; don't ask which folder unless the request names another one.
 - Call load_group(name) to see a group's actions and their arguments, then \
@@ -65,6 +71,7 @@ or two short sentences what you did and where the results are.
 
 class StepKind(str, Enum):
     LOADED = "loaded"  # read a group's actions
+    LOOKED = "looked"  # listed a folder or inspected a file
     STARTED = "started"  # an action is running now; RAN or FAILED follows
     RAN = "ran"  # ran an action and it worked
     FAILED = "failed"  # ran an action and it failed, or its arguments were wrong
@@ -253,12 +260,38 @@ class Agent:
             return "Error: the arguments must be a JSON object."
         if name == LOAD_GROUP:
             return self._load_group(str(arguments.get("name", "")), reply)
+        if name in LOOK_TOOLS:
+            return self._look(name, str(arguments.get("path", "")), reply)
         if name == RUN_ACTION:
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
                 return "Error: 'arguments' must be an object."
             return self._run(str(arguments.get("action", "")), dict(given), reply)
-        return f"Error: there is no tool '{name}'. Use load_group or run_action."
+        return (
+            f"Error: there is no tool '{name}'. Use list_folder, inspect, "
+            "load_group or run_action."
+        )
+
+    def _look(self, tool: str, raw_path: str, reply: AgentReply) -> str:
+        """list_folder or inspect: read-only, inside the allowed folders."""
+        if not raw_path.strip():
+            return "Error: give a path."
+        path = self.scope.resolve(raw_path)
+        if not self.scope.allows(path):
+            allowed = "; ".join(str(root) for root in self.scope.roots)
+            text = f"{path} is outside the folders I may use"
+            self._report(reply, Step(StepKind.REFUSED, tool, text))
+            return f"Error: {text} ({allowed}). Ask the user to name it."
+        look = looks.list_folder if tool == LIST_FOLDER else looks.inspect
+        try:
+            found = look(path)
+        except MaxError as e:
+            return f"Error: {e}"
+        except OSError as e:
+            return f"Error: couldn't read {path}: {e}"
+        verb = "Listed" if tool == LIST_FOLDER else "Inspected"
+        self._report(reply, Step(StepKind.LOOKED, tool, f"{verb} {path.name or path}"))
+        return found
 
     def _load_group(self, name: str, reply: AgentReply) -> str:
         if name not in agent_groups():
@@ -318,7 +351,12 @@ class Agent:
                 ),
             )
             return "Dry run: checked, not run. Carry on as if it worked."
-        if action.danger in CONFIRM_DANGERS and not self.confirm(call):
+        # A dry run (smart-sort --dry-run, organize --dry-run) changes
+        # nothing, so it doesn't ask.
+        changes_files = action.danger in CONFIRM_DANGERS and not arguments.get(
+            "dry_run"
+        )
+        if changes_files and not self.confirm(call):
             self._report(
                 reply,
                 Step(

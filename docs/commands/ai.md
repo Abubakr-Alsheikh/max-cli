@@ -38,11 +38,14 @@ max "shrink every video in this folder"
 max "merge the PDFs in Downloads into one file" --dry-run
 ```
 
+**How it decides:** before it acts or advises, the agent can look at your files without changing them. It lists a folder (subfolders, each file's kind and size, counts by kind) and inspects a file or folder: a song's artist, album and length, a video's length and codecs, a photo's size, date and camera, a PDF's pages, or a summary of a music or photo folder (its artists and albums, its formats). Ask "how would you organize this folder?" and it answers from what's there.
+
 **What the agent may do:**
 
 - It runs only Max's actions. It never runs other programs or shell commands.
 - It works in the folder you started in, plus folders you name in your request: a path such as `D:\Photos`, or a usual folder by name ("my Downloads", "Music"). It also may save to your download folder. It refuses any other path and asks you to name the folder.
-- Before an action moves, overwrites or deletes files, it asks you, even when `CONFIRM_DESTRUCTIVE` is off. Answer no and it skips that step.
+- Before an action moves, overwrites or deletes files, it asks you, even when `CONFIRM_DESTRUCTIVE` is off. Answer no and it skips that step. A dry run (`smart-sort --dry-run`, `organize --dry-run`) changes nothing, so it doesn't ask.
+- Looking at files never asks and never changes anything, but stays inside the same folders.
 - One request stops after 12 steps or 60,000 tokens. Ask it to go on if there's more.
 - File changes go into the undo log, so `max files undo` puts them back.
 

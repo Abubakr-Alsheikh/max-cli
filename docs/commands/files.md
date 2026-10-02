@@ -2,6 +2,8 @@
 
 Max records every rename, move and delete these commands make, so `max files undo` can reverse them, newest first. `shred` is the exception: it keeps no copy on purpose.
 
+`smart-sort` asks the AI for a folder per file. When the AI can't answer, or skips a file, the file goes to a folder for its kind: Music, Videos, Images, PDFs, Documents or Archives.
+
 In the dashboard, the Files page (`7`) has a form for each command. A form asks before it moves or deletes anything. To skip those questions here and in the CLI, turn off **Ask before moving, overwriting or deleting files** in Settings (`CONFIRM_DESTRUCTIVE=false`): it works like `--force` on every command. `shred` asks either way.
 
 ## order

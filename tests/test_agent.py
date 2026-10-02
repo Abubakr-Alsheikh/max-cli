@@ -16,8 +16,8 @@ from max_cli.core.catalog import actions_for
 from max_cli.core.catalog.spec import Surface
 
 # The first prompt (system message plus the two tool definitions) must stay
-# small: about 4 characters per token, so this is roughly 900 tokens.
-FIRST_PROMPT_CHAR_BUDGET = 3_600
+# small: about 4 characters per token, so this is roughly 1,100 tokens.
+FIRST_PROMPT_CHAR_BUDGET = 4_400
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -89,9 +89,9 @@ def test_the_first_prompt_holds_only_the_group_list(tmp_path):
     assert size < FIRST_PROMPT_CHAR_BUDGET, f"first prompt is {size} characters"
 
 
-def test_tools_are_load_group_and_run_action_only():
+def test_the_tools_look_load_and_run():
     names = [tool["function"]["name"] for tool in tool_definitions()]
-    assert names == ["load_group", "run_action"]
+    assert names == ["list_folder", "inspect", "load_group", "run_action"]
 
 
 # --- running actions ----------------------------------------------------------
@@ -196,6 +196,96 @@ def test_bad_tool_calls_are_answered_with_an_error(tmp_path, call):
 
     assert reply.text == "OK."
     assert model.requests[1]["messages"][-1]["content"].startswith("Error:")
+
+
+# --- looking -----------------------------------------------------------------
+
+
+def test_list_folder_shows_kinds_without_asking(tmp_path):
+    (tmp_path / "song.mp3").write_bytes(b"x")
+    (tmp_path / "clip.mp4").write_bytes(b"x")
+    (tmp_path / "sub").mkdir()
+    model = ScriptedModel(
+        _answer(calls=(_call("list_folder", {"path": "."}),)), _answer("Seen.")
+    )
+    agent = _agent(model, tmp_path)
+
+    reply = agent.ask("what's here?")
+
+    listing = json.loads(model.requests[1]["messages"][-1]["content"])
+    assert listing["kinds"] == {"audio": 1, "video": 1}
+    assert listing["subfolders"] == ["sub"]
+    assert [entry["name"] for entry in listing["files"]] == ["clip.mp4", "song.mp3"]
+    assert [step.kind for step in reply.steps] == [StepKind.LOOKED]
+    assert agent.asked == []
+
+
+def test_inspect_gives_a_files_facts(tmp_path):
+    note = _note(tmp_path)
+    model = ScriptedModel(
+        _answer(calls=(_call("inspect", {"path": "note.txt"}),)), _answer("A note.")
+    )
+
+    _agent(model, tmp_path).ask("what is note.txt?")
+
+    facts = json.loads(model.requests[1]["messages"][-1]["content"])
+    assert facts["basics"]["kind"] == "document"
+    assert facts["basics"]["size_bytes"] == note.stat().st_size
+
+
+def test_inspect_summarises_a_photo_folder(tmp_path, dummy_image):
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    for index in range(2):
+        (photos / f"p{index}.jpg").write_bytes(dummy_image.read_bytes())
+    model = ScriptedModel(
+        _answer(calls=(_call("inspect", {"path": "photos"}),)), _answer("Photos.")
+    )
+
+    _agent(model, tmp_path).ask("what's in photos?")
+
+    facts = json.loads(model.requests[1]["messages"][-1]["content"])
+    assert facts["image"]["image_count"] == 2
+
+
+def test_looking_outside_the_allowed_folders_is_refused(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    model = ScriptedModel(
+        _answer(calls=(_call("list_folder", {"path": str(tmp_path)}),)),
+        _answer("I can't."),
+    )
+
+    reply = _agent(model, work).ask("list the parent")
+
+    assert reply.steps[-1].kind == StepKind.REFUSED
+    assert "outside" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_a_dry_run_action_runs_without_asking(tmp_path):
+    (tmp_path / "a.txt").write_text("a", encoding="utf-8")
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "files.order",
+                        "arguments": {"folder": str(tmp_path), "dry_run": True},
+                    },
+                ),
+            )
+        ),
+        _answer("It would number a.txt."),
+    )
+    agent = _agent(model, tmp_path, answer=False)
+
+    reply = agent.ask("what would numbering do?")
+
+    assert agent.asked == []
+    assert reply.steps[-1].kind == StepKind.RAN
+    assert (tmp_path / "a.txt").exists()
 
 
 # --- guardrails ---------------------------------------------------------------

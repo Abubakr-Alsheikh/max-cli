@@ -231,10 +231,13 @@ class AgentTurn(Vertical):
 
     def add_step(self, step: "Step") -> None:
         kind = step.kind.value
-        if kind == "loaded":
-            self._lookups.append(step.action_id)
+        if kind in ("loaded", "looked"):
+            # What it read before acting: folders, files, a group's actions.
+            self._lookups.append(
+                f"{step.action_id} actions" if kind == "loaded" else step.text
+            )
             lookups = self.query_one(".turn-lookups", Static)
-            lookups.update(f"· Looked up {', '.join(self._lookups)} actions")
+            lookups.update("· " + "  ·  ".join(self._lookups))
             lookups.display = True
             return
         card = self._cards.get(step.action_id)

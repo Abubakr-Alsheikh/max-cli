@@ -256,6 +256,18 @@ def test_describe_a_folder_counts_untagged_tracks(tmp_path):
     assert facts.total_duration == pytest.approx(3 * 0.52, abs=0.05)
 
 
+def test_describe_a_folder_names_its_artists_and_albums(tmp_path):
+    files = _album(tmp_path / "lp", 3)
+    audio.set_tags(files[0], artist="Ana", album="Blue")
+    audio.set_tags(files[1], artist="Ana", album="Blue")
+    audio.set_tags(files[2], artist="Bo", album="Red")
+
+    facts = audio.describe(tmp_path / "lp")
+
+    assert facts.artists == {"Ana": 2, "Bo": 1}
+    assert facts.albums == {"Blue": 2, "Red": 1}
+
+
 def test_undo_removes_the_folders_organize_made(tmp_path):
     """Undo put the files back but left empty Artist/Album folders."""
     from max_cli.core.operations import files
