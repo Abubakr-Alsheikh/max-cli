@@ -26,13 +26,12 @@ from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 from max_cli.common.utils import format_size
 from max_cli.config import Settings, settings
 from max_cli.interface.tui.text import markup
+from max_cli.interface.tui.widgets.ai_slot import FALLBACK, MAIN, AISlot, slot_settings
 from max_cli.interface.tui.workers import show_from_worker
 
 KEEP_DAYS = 30
 # Settings also loads this file from the current folder, after the saved one.
 LOCAL_ENV_FILE = ".env"
-SECRET_HIDDEN_LABEL = "Show"
-SECRET_SHOWN_LABEL = "Hide"
 
 
 @dataclass(frozen=True)
@@ -45,86 +44,17 @@ class SettingField:
     wide: bool = False  # takes both columns of its card
 
 
-AI_PROVIDER_CHOICES = (
-    ("OpenAI or a custom URL", "openai"),
-    ("OpenRouter", "openrouter"),
-    ("Google Gemini", "gemini"),
-    ("Ollama (this computer)", "ollama"),
-)
 CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
     (
         "AI",
         "settings-ai",
         (
             SettingField(
-                "AI_PROVIDER",
-                "Main AI",
-                "choice",
-                "Who answers the AI page, max ai and smart-sort.",
-                AI_PROVIDER_CHOICES,
-            ),
-            SettingField(
-                "AI_FALLBACK_PROVIDER",
-                "Fallback",
-                "choice",
-                "Takes over when the main AI fails: no credit, a rate limit, "
-                "a wrong key, the service down.",
-                (("No fallback", ""), *AI_PROVIDER_CHOICES),
-            ),
-            SettingField(
                 "AI_IMAGE_MODEL",
                 "Image model",
                 "text",
-                "For creating and editing images.",
+                "For max ai create and edit: an image model of the main AI.",
                 wide=True,
-            ),
-        ),
-    ),
-    (
-        "AI PROVIDERS",
-        "settings-ai-providers",
-        (
-            # One row per provider: its key, then its model.
-            SettingField(
-                "GEMINI_API_KEY",
-                "Gemini API key",
-                "secret",
-                "aistudio.google.com/apikey (free)",
-            ),
-            SettingField(
-                "GEMINI_MODEL", "Gemini model", "text", "For example gemini-2.5-flash."
-            ),
-            SettingField(
-                "OPENROUTER_API_KEY",
-                "OpenRouter API key",
-                "secret",
-                "openrouter.ai/keys",
-            ),
-            SettingField(
-                "OPENROUTER_MODEL",
-                "OpenRouter model",
-                "text",
-                "openrouter/free picks a free model.",
-            ),
-            SettingField(
-                "OPENAI_API_KEY",
-                "OpenAI API key",
-                "secret",
-                "From platform.openai.com, or your custom URL's key.",
-            ),
-            SettingField("AI_MODEL", "OpenAI model", "text", "For example gpt-5-nano."),
-            SettingField(
-                "OPENAI_BASE_URL",
-                "Custom URL (OpenAI)",
-                "text",
-                "Empty for OpenAI; any URL that speaks OpenAI's API.",
-                wide=True,
-            ),
-            SettingField(
-                "OLLAMA_BASE_URL", "Ollama URL", "text", "Where Ollama listens."
-            ),
-            SettingField(
-                "OLLAMA_MODEL", "Ollama model", "text", "For example llama3.1."
             ),
         ),
     ),
@@ -227,24 +157,14 @@ FIELDS = {field.name: field for _title, _id, fields in CARDS for field in fields
 # Read, but not on the page: Main AI replaced it. A settings file from before
 # AI_PROVIDER that turns it on still means Ollama (ai_providers.main_provider).
 LEGACY = frozenset({"OLLAMA_ENABLED"})
+# The provider settings the two AI slots edit (widgets/ai_slot.py).
+SLOT_SETTINGS = slot_settings()
 # Settings read once at start-up; a change applies the next time max starts.
 APPLY_ON_RESTART = frozenset({"GRAB_MAX_CONCURRENT"})
-# Optional settings: an empty box removes them from the file.
-OPTIONAL = frozenset(
-    {"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENROUTER_API_KEY", "GEMINI_API_KEY"}
-)
 
 
 def saved_text(name: str) -> Optional[str]:
-    """A setting's current value as the text the file holds; None when unset.
-
-    An unset AI_PROVIDER reads as the provider older settings mean, so the
-    page shows what's in use and doesn't count it as a change.
-    """
-    if name == "AI_PROVIDER" and not settings.AI_PROVIDER:
-        from max_cli.core.engines.ai_providers import main_provider
-
-        return main_provider().name
+    """A setting's current value as the text the file holds; None when unset."""
     value = getattr(settings, name)
     if value is None:
         return None
@@ -346,14 +266,6 @@ class SettingsPanel(Vertical):
     SettingsPanel .upkeep-row Button {
         min-width: 16;
     }
-    #ai-check-row {
-        height: auto;
-        margin-bottom: 1;
-    }
-    #ai-check-status {
-        width: 1fr;
-        padding: 1 2;
-    }
     #upkeep-about {
         margin: 1 0;
     }
@@ -371,19 +283,12 @@ class SettingsPanel(Vertical):
         for title, card_id, fields in CARDS:
             with Vertical(id=card_id, classes="settings-card") as card:
                 card.border_title = title
+                if card_id == "settings-ai":
+                    yield AISlot(MAIN, id="ai-slot-main")
+                    yield AISlot(FALLBACK, id="ai-slot-fallback")
                 with Grid(classes="settings-grid"):
                     for field in fields:
                         yield self._field(field)
-                if card_id == "settings-ai":
-                    with Horizontal(id="ai-check-row"):
-                        yield Button("Check AI", id="btn-check-ai")
-                        yield Static(
-                            Content.styled(
-                                "Sends a tiny request to each one. Save first.",
-                                "$text-muted",
-                            ),
-                            id="ai-check-status",
-                        )
         with Horizontal(id="settings-bar"):
             yield Button("Save changes", id="btn-save-settings", variant="success")
             yield Button("Discard", id="btn-discard-settings")
@@ -431,15 +336,9 @@ class SettingsPanel(Vertical):
         label = Label(field.label.upper(), classes="setting-label")
         if field.kind == "choice":
             control: Any = Select(list(field.choices), allow_blank=False, id=widget_id)
-        elif field.kind in ("secret", "path"):
-            text_input = Input(
-                id=widget_id, password=field.kind == "secret", placeholder=field.help
-            )
-            button = (
-                Button(SECRET_HIDDEN_LABEL, id=f"reveal-{field.name}", classes="reveal")
-                if field.kind == "secret"
-                else Button("Change...", id=f"browse-{field.name}")
-            )
+        elif field.kind == "path":
+            text_input = Input(id=widget_id, placeholder=field.help)
+            button = Button("Change...", id=f"browse-{field.name}")
             control = Horizontal(text_input, button, classes="setting-row")
         else:
             control = Input(
@@ -470,6 +369,28 @@ class SettingsPanel(Vertical):
         with self.app.batch_update():
             for name, text in self._saved.items():
                 self._set_control(name, text)
+            main, fallback = self._slots()
+            main.load()
+            fallback.load()
+            fallback.exclude(main.provider_name)
+        self._sync_dirty()
+
+    def _slots(self) -> tuple[AISlot, AISlot]:
+        return (
+            self.query_one("#ai-slot-main", AISlot),
+            self.query_one("#ai-slot-fallback", AISlot),
+        )
+
+    def on_show(self) -> None:
+        # Read the providers' model lists when the page is first looked at,
+        # not every time the dashboard starts.
+        for slot in self._slots():
+            slot.refresh_models()
+
+    @on(AISlot.ProviderChanged)
+    def _on_provider_changed(self, event: AISlot.ProviderChanged) -> None:
+        if event.slot.role == MAIN:
+            self._slots()[1].exclude(event.provider)
         self._sync_dirty()
 
     def _set_control(self, name: str, text: Optional[str]) -> None:
@@ -490,18 +411,19 @@ class SettingsPanel(Vertical):
             return "true" if widget.value else "false"
         if isinstance(widget, Select):
             return None if widget.is_blank() else str(widget.value)
-        text = widget.value.strip() if isinstance(widget, Input) else ""
-        if not text and name in OPTIONAL:
-            return None
-        return text
+        return widget.value.strip() if isinstance(widget, Input) else ""
 
     def changes(self) -> dict[str, Optional[str]]:
-        """Settings whose control differs from the saved value."""
-        return {
+        """Settings whose control differs from the saved value, the AI
+        slots' included."""
+        found = {
             name: text
             for name in FIELDS
             if (text := self._control_text(name)) != self._saved.get(name)
         }
+        for slot in self._slots():
+            found.update(slot.changes())
+        return found
 
     def _sync_dirty(self) -> None:
         count = len(self.changes())
@@ -553,15 +475,6 @@ class SettingsPanel(Vertical):
     def _on_discard(self) -> None:
         self._load()
 
-    @on(Button.Pressed, ".reveal")
-    def _on_reveal(self, event: Button.Pressed) -> None:
-        name = (event.button.id or "").removeprefix("reveal-")
-        key_input = self.query_one(f"#set-{name}", Input)
-        key_input.password = not key_input.password
-        event.button.label = (
-            SECRET_HIDDEN_LABEL if key_input.password else SECRET_SHOWN_LABEL
-        )
-
     @on(Button.Pressed, "#browse-GRAB_DEFAULT_PATH")
     def _on_browse(self) -> None:
         from max_cli.interface.tui.widgets.path_picker import PathPicker, PickMode
@@ -574,45 +487,6 @@ class SettingsPanel(Vertical):
                 folder_input.value = str(path)
 
         self.app.push_screen(PathPicker(start, PickMode.FOLDER), _picked)
-
-    # --- checking the AI -------------------------------------------------------
-
-    @on(Button.Pressed, "#btn-check-ai")
-    def _on_check_ai(self, event: Button.Pressed) -> None:
-        event.button.disabled = True
-        self.query_one("#ai-check-status", Static).update(
-            Content.styled("Checking...", "$primary")
-        )
-        self.run_worker(self._check_ai, thread=True, group="settings-ai-check")
-
-    def _check_ai(self) -> None:
-        """Runs in a thread: one tiny request to the main AI and the fallback."""
-        from max_cli.core.engines.ai_providers import (
-            check,
-            fallback_provider,
-            main_provider,
-        )
-
-        roles = [("Main", main_provider())]
-        fallback = fallback_provider()
-        if fallback is not None:
-            roles.append(("Fallback", fallback))
-        results = [(role, provider, check(provider)) for role, provider in roles]
-        show_from_worker(self, self._show_check, results)
-
-    def _show_check(self, results: list[tuple[str, Any, str]]) -> None:
-        parts: list[tuple[str, str]] = []
-        for role, provider, outcome in results:
-            style = "$success" if outcome == "OK" else "$warning"
-            if parts:
-                parts.append(("   ", ""))
-            parts += [
-                (f"{role}: ", "$text-muted"),
-                (f"{provider.label} ", "bold"),
-                (outcome, f"bold {style}"),
-            ]
-        self.query_one("#ai-check-status", Static).update(Content.assemble(*parts))
-        self.query_one("#btn-check-ai", Button).disabled = False
 
     # --- maintenance ----------------------------------------------------------
 

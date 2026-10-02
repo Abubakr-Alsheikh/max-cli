@@ -146,8 +146,13 @@ Press `Ctrl+P` and type part of an action's or a page's name, such as `merge` or
 
 The Settings page (`,`) edits the same settings as `max config`, saved in `~/.max_config.env`. It shows only settings that change something:
 
-- **AI:** the main AI and its fallback (OpenAI or a custom URL, OpenRouter, Google Gemini, Ollama), the image model, and **Check AI**, which sends a tiny request to each and says which work ("OK", "no credit left (402)", "quota or rate limit reached (429)", "the API key is wrong (401)"). Save before you check.
-- **AI providers:** each provider's API key (hidden; press Show to see it) and model, the custom URL for OpenAI-compatible services, and Ollama's URL.
+- **AI:** two slots, **Main AI** and **Fallback**. In each, pick a provider (OpenAI or compatible, OpenRouter, Google Gemini, Ollama, or no fallback), and the slot shows only what that provider needs:
+  - its **API key** (hidden; press Show), with where to get one; Ollama needs none;
+  - a **URL** for an OpenAI-compatible service, or where Ollama runs;
+  - the **model**, picked from the list the provider offers your key (Reload list reads it again). Until the list loads, a few known models are offered. OpenRouter and Gemini start with no model: pick one.
+  - **Test** sends one tiny request with what's on screen, before you save, and says "✓ Works" or what's wrong ("no credit left (402)", "quota or rate limit reached (429)", "the API key is wrong (401)").
+
+  The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. The **image model** for `max ai create` and `edit` sits below.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.panel import Panel
@@ -21,6 +21,7 @@ DEFAULT_MODELS = {
     "ollama": "llama3.1",
 }
 NO_FALLBACK = "none"
+MODELS_SHOWN = 15  # model names the wizard lists before asking
 
 
 def _ask_provider(changes: dict[str, Optional[str]], name: str) -> None:
@@ -44,11 +45,40 @@ def _ask_provider(changes: dict[str, Optional[str]], name: str) -> None:
                 "Custom URL (empty for OpenAI)", default=settings.OPENAI_BASE_URL or ""
             )
             changes["OPENAI_BASE_URL"] = url or None
+    _show_models(
+        provider,
+        changes.get(provider.key_setting) if provider.key_setting else None,
+        changes.get("OLLAMA_BASE_URL") or changes.get("OPENAI_BASE_URL"),
+    )
     current = provider.model()
     default = current if settings.AI_PROVIDER else DEFAULT_MODELS[name]
     changes[provider.model_setting] = Prompt.ask(
         f"{provider.label} model", default=default or DEFAULT_MODELS[name]
     )
+
+
+def _show_models(provider: Any, key: Optional[str], url: Optional[str]) -> None:
+    """Print the models this key can use, so the answer is a real name."""
+    from openai import APIError
+
+    from max_cli.core.engines.ai_providers import error_text, list_models
+
+    try:
+        models = list_models(provider, key, url)
+    except APIError as e:
+        console.print(
+            f"[dim]Couldn't read {provider.label}'s models: {error_text(e)}[/dim]"
+        )
+        return
+    if not models:
+        return
+    shown = ", ".join(models[:MODELS_SHOWN])
+    more = (
+        f" (and {len(models) - MODELS_SHOWN} more)"
+        if len(models) > MODELS_SHOWN
+        else ""
+    )
+    console.print(f"[dim]Models: {shown}{more}[/dim]")
 
 
 @app.command("setup")

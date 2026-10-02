@@ -10,7 +10,7 @@ max config setup
 
 The wizard asks for:
 
-- **Main AI:** `openai` (or any URL that speaks OpenAI's API), `openrouter`, `gemini` or `ollama`, then that provider's API key and model. Press Enter at the key to keep the saved one.
+- **Main AI:** `openai` (or any URL that speaks OpenAI's API), `openrouter`, `gemini` or `ollama`, then that provider's API key and model. Press Enter at the key to keep the saved one. Before asking for the model, the wizard lists the models your key can use.
 - **Fallback:** another provider, or `none`, with its key and model. When the main AI fails (no credit left, a rate limit, a wrong key, an unknown model, the service down), Max sends the same request to the fallback and stays on it for the rest of that run.
 - **Image model** for `max ai create` and `edit`.
 
@@ -22,7 +22,7 @@ It changes only these settings; the rest of `~/.max_config.env` stays.
 |----------|-----------------|---------------|-------|
 | OpenAI or a custom URL | `OPENAI_API_KEY` (+ `OPENAI_BASE_URL`) | `AI_MODEL` | Pay as you go; any OpenAI-compatible URL |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `openrouter/free` picks a free model |
-| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Free key at aistudio.google.com/apikey; `gemini-2.5-flash` by default |
+| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Free key at aistudio.google.com/apikey; for example `gemini-2.5-flash` |
 | Ollama | none | `OLLAMA_MODEL` | Runs on this computer (`OLLAMA_BASE_URL`) |
 
 For example, free OpenRouter models first and Gemini when they run out:

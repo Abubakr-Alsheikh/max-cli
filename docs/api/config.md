@@ -14,9 +14,9 @@ from max_cli.config import settings
 | AI_FALLBACK_PROVIDER | str | "" | Takes over when the main AI fails; empty for none |
 | OPENAI_API_KEY | str | None | OpenAI's key, or the key for OPENAI_BASE_URL |
 | OPENROUTER_API_KEY | str | None | OpenRouter's key |
-| OPENROUTER_MODEL | str | openrouter/free | OpenRouter's model |
+| OPENROUTER_MODEL | str | "" | OpenRouter's model; pick one on the Settings page (openrouter/free picks a free model) |
 | GEMINI_API_KEY | str | None | Google Gemini's key (free at aistudio.google.com/apikey) |
-| GEMINI_MODEL | str | gemini-2.5-flash | Gemini's model |
+| GEMINI_MODEL | str | "" | Gemini's model, e.g. gemini-2.5-flash |
 | OPENAI_BASE_URL | str | None | API base URL; empty for OpenAI |
 | AI_MODEL | str | gpt-5-nano | OpenAI's (or the custom URL's) model |
 | AI_IMAGE_MODEL | str | gpt-image-1 | Model for creating and editing images |

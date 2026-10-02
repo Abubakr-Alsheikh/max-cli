@@ -29,6 +29,8 @@ def no_keys(monkeypatch):
     monkeypatch.setattr(settings, "AI_PROVIDER", "")
     monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "")
     monkeypatch.setattr(settings, "OLLAMA_ENABLED", False)
+    monkeypatch.setattr(settings, "OPENROUTER_MODEL", "openrouter/free")
+    monkeypatch.setattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
 
 
 def _api_error(cls: type, message: str = "nope", status: int = 0) -> Exception:
@@ -160,6 +162,48 @@ def test_a_working_main_provider_never_touches_the_fallback(monkeypatch):
     assert not client.used_fallback
 
 
+def test_a_provider_without_a_model_is_not_set_up(monkeypatch):
+    monkeypatch.setattr(settings, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "g-key")
+    monkeypatch.setattr(settings, "GEMINI_MODEL", "")
+
+    gemini = ai_providers.PROVIDERS["gemini"]
+    assert not gemini.is_set_up() and gemini.missing() == "no model picked"
+    assert make_client() is None
+
+
+# --- listing models -----------------------------------------------------------
+
+
+def test_list_models_keeps_chat_models_without_the_models_prefix(monkeypatch):
+    listed = [
+        SimpleNamespace(id=name)
+        for name in (
+            "models/gemini-2.5-flash",
+            "models/gemini-2.5-pro",
+            "models/text-embedding-004",
+            "models/imagen-3.0",
+        )
+    ]
+    fake = SimpleNamespace(models=SimpleNamespace(list=lambda: listed))
+    seen = {}
+
+    def client(provider, key=None, url=None):
+        seen.update(key=key, url=url)
+        return fake
+
+    monkeypatch.setattr(ai_providers, "_openai_client", client)
+
+    names = ai_providers.list_models(ai_providers.PROVIDERS["gemini"], key="typed")
+
+    assert names == ["gemini-2.5-flash", "gemini-2.5-pro"]
+    assert seen["key"] == "typed"  # the key typed on the page, before saving
+
+
+def test_list_models_without_a_key_lists_nothing():
+    assert ai_providers.list_models(ai_providers.PROVIDERS["openrouter"]) == []
+
+
 # --- checking a provider ------------------------------------------------------
 
 
@@ -176,7 +220,7 @@ def test_a_working_main_provider_never_touches_the_fallback(monkeypatch):
 def test_check_says_what_works(monkeypatch, error, expected):
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "g-key")
     fake = FakeProvider(error if error is not None else "OK")
-    monkeypatch.setattr(ai_providers, "_openai_client", lambda provider: fake)
+    monkeypatch.setattr(ai_providers, "_openai_client", lambda *args: fake)
 
     assert check(ai_providers.PROVIDERS["gemini"]) == expected
 

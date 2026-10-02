@@ -614,7 +614,7 @@ def test_without_a_key_or_ollama_there_is_no_agent(monkeypatch):
     monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
     monkeypatch.setattr(settings, "OLLAMA_ENABLED", False)
 
-    with pytest.raises(ConfigurationError, match="No AI is set up"):
+    with pytest.raises(ConfigurationError, match="The AI isn.t set up"):
         Agent.from_settings(confirm=lambda call: False)
 
 

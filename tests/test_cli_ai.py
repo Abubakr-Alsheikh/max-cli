@@ -165,7 +165,7 @@ class TestAsk:
             result = runner.invoke(ai_app, ["ask", "anything"])
 
         assert result.exit_code == 1
-        assert "No AI is set up" in _plain(result)
+        assert "The AI isn't set up" in _plain(result)
 
     def test_old_explain_flag_still_works(self, note) -> None:
         with patch(CLIENT_PATH, return_value=ScriptedModel(_answer("Hi."))):

@@ -209,13 +209,18 @@ class Agent:
     @classmethod
     def from_settings(cls, **kwargs: Any) -> "Agent":
         """An agent on the configured provider (settings: AI and Ollama)."""
-        from max_cli.core.engines.ai_providers import chat_model, make_client
+        from max_cli.core.engines.ai_providers import (
+            chat_model,
+            main_provider,
+            make_client,
+        )
 
         client = make_client()
         if client is None:
+            main = main_provider()
             raise ConfigurationError(
-                "No AI is set up. Add an API key (max config setup, or the "
-                "dashboard's Settings page), or turn on Ollama."
+                f"The AI isn't set up: {main.label} has {main.missing()}. Fix it "
+                "on the dashboard's Settings page (,) or with max config setup."
             )
         return cls(client, chat_model(), **kwargs)
 

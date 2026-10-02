@@ -23,6 +23,7 @@ from max_cli.interface.config import grab as grab_wizard_module
 from max_cli.interface.config import manage as manage_module
 from max_cli.interface.config import setup as wizard_module
 
+LIST_MODELS = "max_cli.core.engines.ai_providers.list_models"
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
 
 RESOLVER_CLASS_PATH = "max_cli.common.ffmpeg_resolver.FFmpegResolver"
@@ -251,9 +252,7 @@ class TestExportImport:
         assert "Invalid JSON" in _plain(result)
 
     def test_import_missing_file_exits_1(self, tmp_path: Path) -> None:
-        result = runner.invoke(
-            config_app, ["import", str(tmp_path / "none.json")]
-        )
+        result = runner.invoke(config_app, ["import", str(tmp_path / "none.json")])
 
         assert result.exit_code == 1
         assert "File not found" in _plain(result)
@@ -273,10 +272,14 @@ class TestWizards:
             "gemini-2.5-flash",
             "gpt-image-1",
         ]
-        with patch.object(wizard_module.Prompt, "ask", side_effect=answers):
+        with (
+            patch.object(wizard_module.Prompt, "ask", side_effect=answers),
+            patch(LIST_MODELS, return_value=["openrouter/free", "gemini-2.5-flash"]),
+        ):
             result = runner.invoke(config_app, ["setup"])
 
         assert result.exit_code == 0, result.output
+        assert "Models: openrouter/free, gemini-2.5-flash" in _plain(result)
         saved = read_settings_file(isolated_config)
         assert saved["AI_PROVIDER"] == "openrouter"
         assert saved["OPENROUTER_API_KEY"] == "or-key"
@@ -288,7 +291,10 @@ class TestWizards:
 
     def test_setup_without_a_fallback(self, isolated_config: Path) -> None:
         answers = ["gemini", "g-key", "gemini-2.5-flash", "none", "gpt-image-1"]
-        with patch.object(wizard_module.Prompt, "ask", side_effect=answers):
+        with (
+            patch.object(wizard_module.Prompt, "ask", side_effect=answers),
+            patch(LIST_MODELS, return_value=[]),
+        ):
             result = runner.invoke(config_app, ["setup"])
 
         assert result.exit_code == 0, result.output
@@ -308,9 +314,7 @@ class TestWizards:
                 "ask",
                 side_effect=["x", "audio", str(tmp_path)],
             ),
-            patch.object(
-                grab_wizard_module.Confirm, "ask", side_effect=[True, False]
-            ),
+            patch.object(grab_wizard_module.Confirm, "ask", side_effect=[True, False]),
         ):
             result = runner.invoke(config_app, ["grab"])
 

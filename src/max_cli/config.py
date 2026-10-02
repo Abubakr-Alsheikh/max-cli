@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = ""
     AI_FALLBACK_PROVIDER: str = ""
     OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_MODEL: str = "openrouter/free"
+    OPENROUTER_MODEL: str = ""  # picked on the Settings page
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = ""
 
     # Ollama Configuration
     OLLAMA_ENABLED: bool = False

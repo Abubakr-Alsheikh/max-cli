@@ -29,6 +29,7 @@ OLLAMA = "ollama"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 OLLAMA_KEY = "ollama"  # Ollama ignores the key, but the client needs one
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
 CHECK_PROMPT = "Reply with the word OK."
 CHECK_MAX_TOKENS = 5
 
@@ -47,25 +48,41 @@ class Provider:
             return OLLAMA_KEY
         return getattr(settings, self.key_setting) or None
 
-    def base_url(self) -> Optional[str]:
+    def saved_url(self) -> str:
+        """The URL setting as saved (OPENAI_BASE_URL, OLLAMA_BASE_URL); ""
+        for a provider with a fixed endpoint."""
+        return (
+            str(getattr(settings, self.url_setting) or "") if self.url_setting else ""
+        )
+
+    def base_url(self, url: Optional[str] = None) -> Optional[str]:
+        """The endpoint the client talks to; `url` replaces the saved URL
+        setting (the Settings page checks values before they're saved)."""
+        typed = self.saved_url() if url is None else url
         if self.name == OLLAMA:
-            return f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1"
-        if self.url:
-            return self.url
-        return getattr(settings, self.url_setting) or None if self.url_setting else None
+            return f"{(typed or DEFAULT_OLLAMA_URL).rstrip('/')}/v1"
+        return self.url or typed or None
 
     def model(self) -> str:
-        return str(getattr(settings, self.model_setting))
+        return str(getattr(settings, self.model_setting) or "")
 
     def is_set_up(self) -> bool:
-        """It has a key (Ollama needs none)."""
-        return bool(self.key())
+        """It has a key (Ollama needs none) and a model."""
+        return bool(self.key()) and bool(self.model())
+
+    def missing(self) -> str:
+        """What it still needs, in a few words; "" when it's set up."""
+        if not self.key():
+            return "no API key"
+        if not self.model():
+            return "no model picked"
+        return ""
 
 
 PROVIDERS: dict[str, Provider] = {
     OPENAI: Provider(
         OPENAI,
-        "OpenAI (or a custom URL)",
+        "OpenAI or compatible",
         "OPENAI_API_KEY",
         "AI_MODEL",
         url_setting="OPENAI_BASE_URL",
@@ -80,8 +97,37 @@ PROVIDERS: dict[str, Provider] = {
     GEMINI: Provider(
         GEMINI, "Google Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", GEMINI_URL
     ),
-    OLLAMA: Provider(OLLAMA, "Ollama (this computer)", "", "OLLAMA_MODEL"),
+    OLLAMA: Provider(
+        OLLAMA,
+        "Ollama (this computer)",
+        "",
+        "OLLAMA_MODEL",
+        url_setting="OLLAMA_BASE_URL",
+    ),
 }
+# Offered when a provider's own list can't be read (no key yet, offline).
+SUGGESTED_MODELS: dict[str, tuple[str, ...]] = {
+    OPENAI: ("gpt-5-nano", "gpt-5-mini", "gpt-5"),
+    OPENROUTER: ("openrouter/free", "openrouter/auto"),
+    GEMINI: ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"),
+    OLLAMA: ("llama3.1", "qwen2.5", "mistral"),
+}
+# Model ids that aren't chat models, left out of a provider's list.
+NOT_CHAT = (
+    "embedding",
+    "embed",
+    "tts",
+    "transcribe",
+    "whisper",
+    "audio",
+    "realtime",
+    "moderation",
+    "dall-e",
+    "image",
+    "imagen",
+    "aqa",
+    "veo",
+)
 
 
 def main_provider() -> Provider:
@@ -106,10 +152,27 @@ def provider_chain() -> list[Provider]:
     return [provider for provider in chain if provider.is_set_up()]
 
 
-def _openai_client(provider: Provider) -> Any:
+def _openai_client(
+    provider: Provider, key: Optional[str] = None, url: Optional[str] = None
+) -> Any:
+    """A client for `provider`; `key` and `url` replace the saved ones."""
     from openai import OpenAI
 
-    return OpenAI(api_key=provider.key(), base_url=provider.base_url())
+    return OpenAI(api_key=key or provider.key(), base_url=provider.base_url(url))
+
+
+def list_models(
+    provider: Provider, key: Optional[str] = None, url: Optional[str] = None
+) -> list[str]:
+    """The chat models the provider offers this key, sorted. Raises the
+    openai error when it can't list them."""
+    if provider.key_setting and not (key or provider.key()):
+        return []
+    found = _openai_client(provider, key, url).models.list()
+    names = {str(model.id).removeprefix("models/") for model in found}
+    return sorted(
+        name for name in names if not any(word in name.lower() for word in NOT_CHAT)
+    )
 
 
 class _Completions:
@@ -192,24 +255,29 @@ def chat_model() -> str:
     return main_provider().model()
 
 
-def check(provider: Provider) -> str:
-    """Send a tiny request; "OK", or what went wrong in a few words."""
-    from openai import APIConnectionError, APIError, APIStatusError
+def check(
+    provider: Provider,
+    key: Optional[str] = None,
+    url: Optional[str] = None,
+    model: Optional[str] = None,
+) -> str:
+    """Send a tiny request; "OK", or what went wrong in a few words. `key`,
+    `url` and `model` replace the saved ones."""
+    from openai import APIError
 
-    if not provider.is_set_up():
+    if provider.key_setting and not (key or provider.key()):
         return "no API key"
+    model = model if model is not None else provider.model()
+    if not model:
+        return "no model picked"
     try:
-        _openai_client(provider).chat.completions.create(
-            model=provider.model(),
+        _openai_client(provider, key, url).chat.completions.create(
+            model=model,
             messages=[{"role": "user", "content": CHECK_PROMPT}],
             max_tokens=CHECK_MAX_TOKENS,
         )
-    except APIConnectionError:
-        return "can't reach it"
-    except APIStatusError as e:
-        return _status_text(e.status_code)
     except APIError as e:
-        return str(e)[:80]
+        return error_text(e)
     return "OK"
 
 
@@ -220,6 +288,17 @@ STATUS_TEXT = {
     404: "unknown model (404)",
     429: "quota or rate limit reached (429)",
 }
+
+
+def error_text(error: Exception) -> str:
+    """An openai error in a few words, for the Settings page."""
+    from openai import APIConnectionError, APIStatusError
+
+    if isinstance(error, APIConnectionError):
+        return "can't reach it"
+    if isinstance(error, APIStatusError):
+        return _status_text(error.status_code)
+    return str(error)[:80]
 
 
 def _status_text(status: int) -> str:

@@ -6,13 +6,18 @@ from unittest.mock import patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Button, Checkbox, Input, Select, Static
+from textual.widgets import Button, Input, Select, Static
 
 from max_cli.common.settings_file import read_settings_file, settings_file_path
 from max_cli.config import REMOVED_SETTINGS, Settings, settings
 from max_cli.interface.tui.widgets import settings_panel
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
-from max_cli.interface.tui.widgets.settings_panel import FIELDS, LEGACY, SettingsPanel
+from max_cli.interface.tui.widgets.settings_panel import (
+    FIELDS,
+    LEGACY,
+    SLOT_SETTINGS,
+    SettingsPanel,
+)
 from max_cli.interface.tui.workers import _show_if_open
 
 from .waiting import wait_until
@@ -36,6 +41,33 @@ def restore_settings(monkeypatch):
     yield
     for name, value in before.items():
         setattr(settings, name, value)
+
+
+LISTED_MODELS = ["gpt-5-mini", "gpt-5-nano"]
+
+
+@pytest.fixture(autouse=True)
+def known_ai(monkeypatch):
+    """A main AI with a key, no fallback, and a model list that never goes
+    to the network."""
+    from max_cli.core.engines import ai_providers
+
+    for name, value in {
+        "AI_PROVIDER": "openai",
+        "AI_FALLBACK_PROVIDER": "",
+        "OPENAI_API_KEY": "sk-secret",
+        "OPENAI_BASE_URL": None,
+        "AI_MODEL": "gpt-5-nano",
+        "OPENROUTER_API_KEY": None,
+        "OPENROUTER_MODEL": "",
+        "GEMINI_API_KEY": None,
+        "GEMINI_MODEL": "",
+        "OLLAMA_ENABLED": False,
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    monkeypatch.setattr(
+        ai_providers, "list_models", lambda provider, key=None, url=None: LISTED_MODELS
+    )
 
 
 async def _settle(app: App, pilot) -> None:
@@ -68,8 +100,9 @@ def _used_settings() -> set[str]:
 
 
 def test_the_page_shows_every_setting():
-    assert set(FIELDS) | LEGACY == set(Settings.model_fields)
-    assert not set(FIELDS) & LEGACY
+    shown = set(FIELDS) | SLOT_SETTINGS
+    assert shown | LEGACY == set(Settings.model_fields)
+    assert not shown & LEGACY
 
 
 def test_code_reads_every_setting():
@@ -93,37 +126,6 @@ def test_format_size():
 
 
 # --- editing ------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_controls_start_from_the_current_settings(monkeypatch):
-    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-secret")
-    monkeypatch.setattr(settings, "GRAB_QUALITY", "m")
-    monkeypatch.setattr(settings, "GRAB_STRIP_PLAYLIST", False)
-    app = SettingsApp()
-    async with app.run_test(size=SIZE) as pilot:
-        await _settle(app, pilot)
-        key = app.query_one("#set-OPENAI_API_KEY", Input)
-        quality = app.query_one("#set-GRAB_QUALITY", Select).value
-        strip = app.query_one("#set-GRAB_STRIP_PLAYLIST", Checkbox).value
-        save_disabled = app.query_one("#btn-save-settings", Button).disabled
-
-    assert key.value == "sk-secret" and key.password
-    assert quality == "m" and strip is False
-    assert save_disabled
-
-
-@pytest.mark.asyncio
-async def test_show_reveals_the_api_key():
-    app = SettingsApp()
-    async with app.run_test(size=SIZE) as pilot:
-        await _settle(app, pilot)
-        app.query_one("#reveal-OPENAI_API_KEY", Button).press()
-        await pilot.pause()
-        shown = not app.query_one("#set-OPENAI_API_KEY", Input).password
-        label = str(app.query_one("#reveal-OPENAI_API_KEY", Button).label)
-
-    assert shown and label == "Hide"
 
 
 @pytest.mark.asyncio
@@ -159,38 +161,6 @@ async def test_a_bad_value_is_refused_and_nothing_is_written():
     assert status.startswith("Images at once (1-16):")
     assert not settings_file_path().exists()
     assert settings.MAX_WORKERS != 99
-
-
-@pytest.mark.asyncio
-async def test_emptying_the_api_key_removes_it(monkeypatch):
-    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-old")
-    settings_file_path().write_text("OPENAI_API_KEY=sk-old\n", encoding="utf-8")
-    app = SettingsApp()
-    async with app.run_test(size=SIZE) as pilot:
-        await _settle(app, pilot)
-        app.query_one("#set-OPENAI_API_KEY", Input).value = ""
-        await pilot.pause()
-        app.query_one("#btn-save-settings", Button).press()
-        await _settle(app, pilot)
-
-    assert read_settings_file() == {}
-    assert settings.OPENAI_API_KEY is None
-
-
-@pytest.mark.asyncio
-async def test_discard_puts_the_saved_values_back():
-    app = SettingsApp()
-    async with app.run_test(size=SIZE) as pilot:
-        await _settle(app, pilot)
-        original = app.query_one("#set-AI_MODEL", Input).value
-        app.query_one("#set-AI_MODEL", Input).value = "something-else"
-        await pilot.pause()
-        app.query_one("#btn-discard-settings", Button).press()
-        await pilot.pause()
-        value = app.query_one("#set-AI_MODEL", Input).value
-
-    assert value == original
-    assert not settings_file_path().exists()
 
 
 # --- maintenance --------------------------------------------------------------
@@ -383,65 +353,211 @@ async def test_a_late_worker_result_is_ignored_when_the_page_is_closing():
         _show_if_open(panel, panel._show_upkeep, facts)  # must not raise
 
 
+# --- the AI slots ---------------------------------------------------------------
+
+
+def _slot_value(app: App, role: str, part: str):
+    widget = app.query_one(f"#slot-{role}-{part}")
+    return widget.value
+
+
 @pytest.mark.asyncio
-async def test_main_ai_shows_the_provider_in_use_without_a_change(monkeypatch):
-    """An older file has no AI_PROVIDER; the page must not count that as a change."""
+async def test_the_main_slot_starts_from_the_saved_settings():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        key = app.query_one("#slot-main-key", Input)
+        provider = _slot_value(app, "main", "provider")
+        fallback = _slot_value(app, "fallback", "provider")
+        save_disabled = app.query_one("#btn-save-settings", Button).disabled
+
+    assert provider == "openai"
+    assert key.value == "sk-secret" and key.password
+    assert fallback == ""
+    assert save_disabled  # nothing counts as a change on load
+
+
+@pytest.mark.asyncio
+async def test_older_settings_show_the_provider_in_use(monkeypatch):
     monkeypatch.setattr(settings, "AI_PROVIDER", "")
     monkeypatch.setattr(settings, "OLLAMA_ENABLED", True)
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
-        main = app.query_one("#set-AI_PROVIDER", Select).value
+        provider = _slot_value(app, "main", "provider")
         pending = app.query_one(SettingsPanel).changes()
 
-    assert main == "ollama"
+    assert provider == "ollama"
     assert pending == {}
 
 
 @pytest.mark.asyncio
-async def test_choosing_a_fallback_saves_it_with_its_key():
+@pytest.mark.parametrize(
+    "provider, key_shown, url_shown",
+    [("gemini", True, False), ("ollama", False, True), ("openai", True, True)],
+)
+async def test_a_slot_shows_only_its_providers_fields(provider, key_shown, url_shown):
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
-        app.query_one("#set-AI_FALLBACK_PROVIDER", Select).value = "gemini"
-        app.query_one("#set-GEMINI_API_KEY", Input).value = "g-key"
+        app.query_one("#slot-main-provider", Select).value = provider
+        await _settle(app, pilot)
+        key_row = app.query_one("#ai-slot-main .slot-key")
+        url_row = app.query_one("#ai-slot-main .slot-url")
+
+        assert key_row.display is key_shown
+        assert url_row.display is url_shown
+
+
+@pytest.mark.asyncio
+async def test_the_model_is_picked_from_the_providers_list():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        model = app.query_one("#slot-main-model", Select)
+        await wait_until(pilot, lambda: len(model._options) > len(LISTED_MODELS))
+        model.value = "gpt-5-mini"
+        await pilot.pause()
+        pending = app.query_one(SettingsPanel).changes()
+
+    assert pending == {"AI_MODEL": "gpt-5-mini"}
+
+
+@pytest.mark.asyncio
+async def test_a_fallback_with_its_key_and_model_is_saved():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-fallback-provider", Select).value = "gemini"
+        await _settle(app, pilot)
+        app.query_one("#slot-fallback-key", Input).value = "g-key"
+        model = app.query_one("#slot-fallback-model", Select)
+        await wait_until(pilot, lambda: ("gpt-5-mini", "gpt-5-mini") in model._options)
+        model.value = "gpt-5-mini"
+        panel = app.query_one(SettingsPanel)
+        await wait_until(pilot, lambda: "GEMINI_MODEL" in panel.changes())
         save = app.query_one("#btn-save-settings", Button)
-        await wait_until(pilot, lambda: not save.disabled)  # the edits counted
         save.press()
         await _settle(app, pilot)
 
     saved = read_settings_file()
     assert saved["AI_FALLBACK_PROVIDER"] == "gemini"
     assert saved["GEMINI_API_KEY"] == "g-key"
+    assert saved["GEMINI_MODEL"] == "gpt-5-mini"
+    assert "OPENAI_API_KEY" not in saved  # the main AI didn't change
     assert settings.AI_FALLBACK_PROVIDER == "gemini"
 
 
 @pytest.mark.asyncio
-async def test_check_ai_reports_each_provider(monkeypatch):
-    from max_cli.core.engines import ai_providers
-
-    monkeypatch.setattr(settings, "AI_PROVIDER", "openrouter")
-    monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "gemini")
-    outcomes = {"openrouter": "no credit left (402)", "gemini": "OK"}
-    monkeypatch.setattr(ai_providers, "check", lambda provider: outcomes[provider.name])
+async def test_the_fallback_cannot_be_the_main_ai():
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
-        app.query_one("#btn-check-ai", Button).press()
+        app.query_one("#slot-main-provider", Select).value = "gemini"
         await _settle(app, pilot)
-        status = str(app.query_one("#ai-check-status", Static).content)
+        choices = [
+            value
+            for _label, value in app.query_one(
+                "#slot-fallback-provider", Select
+            )._options
+        ]
 
-    assert "Main: OpenRouter no credit left (402)" in status
-    assert "Fallback: Google Gemini OK" in status
+    assert "gemini" not in choices and "openai" in choices
 
 
 @pytest.mark.asyncio
-async def test_every_key_has_its_own_show_button():
+async def test_switching_to_openrouter_reuses_the_key_set_for_its_url(monkeypatch):
+    monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
-        app.query_one("#reveal-GEMINI_API_KEY", Button).press()
-        await pilot.pause()
+        app.query_one("#slot-main-provider", Select).value = "openrouter"
+        await _settle(app, pilot)
+        key = app.query_one("#slot-main-key", Input).value
 
-        assert not app.query_one("#set-GEMINI_API_KEY", Input).password
-        assert app.query_one("#set-OPENAI_API_KEY", Input).password
+    assert key == "sk-secret"
+
+
+@pytest.mark.asyncio
+async def test_show_reveals_the_slots_api_key():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-reveal", Button).press()
+        await pilot.pause()
+        shown = not app.query_one("#slot-main-key", Input).password
+        label = str(app.query_one("#slot-main-reveal", Button).label)
+
+    assert shown and label == "Hide"
+
+
+@pytest.mark.asyncio
+async def test_emptying_the_api_key_removes_it():
+    settings_file_path().write_text("OPENAI_API_KEY=sk-secret\n", encoding="utf-8")
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-key", Input).value = ""
+        save = app.query_one("#btn-save-settings", Button)
+        await wait_until(pilot, lambda: not save.disabled)
+        save.press()
+        await _settle(app, pilot)
+
+    assert read_settings_file() == {}
+    assert settings.OPENAI_API_KEY is None
+
+
+@pytest.mark.asyncio
+async def test_discard_puts_the_saved_key_back():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-key", Input).value = "sk-typo"
+        discard = app.query_one("#btn-discard-settings", Button)
+        await wait_until(pilot, lambda: not discard.disabled)
+        discard.press()
+        await _settle(app, pilot)
+        value = app.query_one("#slot-main-key", Input).value
+
+    assert value == "sk-secret"
+    assert not settings_file_path().exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outcome, shown", [("OK", "✓ Works"), ("no credit left (402)", "✗ no credit left")]
+)
+async def test_test_checks_the_values_on_screen(monkeypatch, outcome, shown):
+    from max_cli.core.engines import ai_providers
+
+    seen = {}
+
+    def fake_check(provider, key=None, url=None, model=None):
+        seen.update(provider=provider.name, key=key, model=model)
+        return outcome
+
+    monkeypatch.setattr(ai_providers, "check", fake_check)
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-key", Input).value = "sk-typed"
+        await pilot.pause()
+        app.query_one("#slot-main-test", Button).press()
+        status = app.query_one("#slot-main-status", Static)
+        await wait_until(pilot, lambda: shown in str(status.content))
+
+    assert seen == {"provider": "openai", "key": "sk-typed", "model": "gpt-5-nano"}
+
+
+@pytest.mark.asyncio
+async def test_a_provider_without_a_model_asks_for_one():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-provider", Select).value = "gemini"
+        await _settle(app, pilot)
+        app.query_one("#slot-main-key", Input).value = "g-key"
+        await pilot.pause()
+        status = str(app.query_one("#slot-main-status", Static).content)
+
+    assert "Pick a model" in status or "models available" in status
