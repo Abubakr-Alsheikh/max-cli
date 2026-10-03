@@ -26,13 +26,12 @@ from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 from max_cli.common.utils import format_size
 from max_cli.config import Settings, settings
 from max_cli.interface.tui.text import markup
+from max_cli.interface.tui.widgets.ai_slot import FALLBACK, MAIN, AISlot, slot_settings
 from max_cli.interface.tui.workers import show_from_worker
 
 KEEP_DAYS = 30
 # Settings also loads this file from the current folder, after the saved one.
 LOCAL_ENV_FILE = ".env"
-SECRET_HIDDEN_LABEL = "Show"
-SECRET_SHOWN_LABEL = "Hide"
 
 
 @dataclass(frozen=True)
@@ -46,46 +45,8 @@ class SettingField:
 
 
 CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
-    (
-        "AI",
-        "settings-ai",
-        (
-            SettingField(
-                "OPENAI_API_KEY",
-                "API key",
-                "secret",
-                "Your OpenAI key, or an OpenRouter or Gemini key with its base URL.",
-                wide=True,
-            ),
-            SettingField(
-                "OPENAI_BASE_URL",
-                "Base URL",
-                "text",
-                "Empty for OpenAI. OpenRouter: https://openrouter.ai/api/v1",
-                wide=True,
-            ),
-            SettingField(
-                "AI_MODEL", "Chat model", "text", "For ask, chat and analyze."
-            ),
-            SettingField(
-                "AI_IMAGE_MODEL",
-                "Image model",
-                "text",
-                "For creating and editing images.",
-            ),
-            SettingField(
-                "OLLAMA_ENABLED",
-                "Use Ollama on this computer instead",
-                "bool",
-                "Runs a local model; no API key needed.",
-                wide=True,
-            ),
-            SettingField(
-                "OLLAMA_BASE_URL", "Ollama URL", "text", "Where Ollama listens."
-            ),
-            SettingField("OLLAMA_MODEL", "Ollama model", "text", "For example llama3."),
-        ),
-    ),
+    # The AI card holds the two AI slots (widgets/ai_slot.py), no fields.
+    ("AI", "settings-ai", ()),
     (
         "DOWNLOADS",
         "settings-downloads",
@@ -182,10 +143,13 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
 # Every setting appears here; a test fails when one isn't, or when no code
 # reads one (delete it then, and add it to config.REMOVED_SETTINGS).
 FIELDS = {field.name: field for _title, _id, fields in CARDS for field in fields}
+# Read, but not on the page: Main AI replaced it. A settings file from before
+# AI_PROVIDER that turns it on still means Ollama (ai_providers.main_provider).
+LEGACY = frozenset({"OLLAMA_ENABLED"})
+# The provider settings the two AI slots edit (widgets/ai_slot.py).
+SLOT_SETTINGS = slot_settings()
 # Settings read once at start-up; a change applies the next time max starts.
 APPLY_ON_RESTART = frozenset({"GRAB_MAX_CONCURRENT"})
-# Optional settings: an empty box removes them from the file.
-OPTIONAL = frozenset({"OPENAI_API_KEY", "OPENAI_BASE_URL"})
 
 
 def saved_text(name: str) -> Optional[str]:
@@ -308,9 +272,13 @@ class SettingsPanel(Vertical):
         for title, card_id, fields in CARDS:
             with Vertical(id=card_id, classes="settings-card") as card:
                 card.border_title = title
-                with Grid(classes="settings-grid"):
-                    for field in fields:
-                        yield self._field(field)
+                if card_id == "settings-ai":
+                    yield AISlot(MAIN, id="ai-slot-main")
+                    yield AISlot(FALLBACK, id="ai-slot-fallback")
+                if fields:
+                    with Grid(classes="settings-grid"):
+                        for field in fields:
+                            yield self._field(field)
         with Horizontal(id="settings-bar"):
             yield Button("Save changes", id="btn-save-settings", variant="success")
             yield Button("Discard", id="btn-discard-settings")
@@ -358,15 +326,9 @@ class SettingsPanel(Vertical):
         label = Label(field.label.upper(), classes="setting-label")
         if field.kind == "choice":
             control: Any = Select(list(field.choices), allow_blank=False, id=widget_id)
-        elif field.kind in ("secret", "path"):
-            text_input = Input(
-                id=widget_id, password=field.kind == "secret", placeholder=field.help
-            )
-            button = (
-                Button(SECRET_HIDDEN_LABEL, id=f"reveal-{field.name}")
-                if field.kind == "secret"
-                else Button("Change...", id=f"browse-{field.name}")
-            )
+        elif field.kind == "path":
+            text_input = Input(id=widget_id, placeholder=field.help)
+            button = Button("Change...", id=f"browse-{field.name}")
             control = Horizontal(text_input, button, classes="setting-row")
         else:
             control = Input(
@@ -397,6 +359,28 @@ class SettingsPanel(Vertical):
         with self.app.batch_update():
             for name, text in self._saved.items():
                 self._set_control(name, text)
+            main, fallback = self._slots()
+            main.load()
+            fallback.load()
+            fallback.exclude(main.provider_name)
+        self._sync_dirty()
+
+    def _slots(self) -> tuple[AISlot, AISlot]:
+        return (
+            self.query_one("#ai-slot-main", AISlot),
+            self.query_one("#ai-slot-fallback", AISlot),
+        )
+
+    def on_show(self) -> None:
+        # Read the providers' model lists when the page is first looked at,
+        # not every time the dashboard starts.
+        for slot in self._slots():
+            slot.refresh_models()
+
+    @on(AISlot.ProviderChanged)
+    def _on_provider_changed(self, event: AISlot.ProviderChanged) -> None:
+        if event.slot.role == MAIN:
+            self._slots()[1].exclude(event.provider)
         self._sync_dirty()
 
     def _set_control(self, name: str, text: Optional[str]) -> None:
@@ -417,18 +401,19 @@ class SettingsPanel(Vertical):
             return "true" if widget.value else "false"
         if isinstance(widget, Select):
             return None if widget.is_blank() else str(widget.value)
-        text = widget.value.strip() if isinstance(widget, Input) else ""
-        if not text and name in OPTIONAL:
-            return None
-        return text
+        return widget.value.strip() if isinstance(widget, Input) else ""
 
     def changes(self) -> dict[str, Optional[str]]:
-        """Settings whose control differs from the saved value."""
-        return {
+        """Settings whose control differs from the saved value, the AI
+        slots' included."""
+        found = {
             name: text
             for name in FIELDS
             if (text := self._control_text(name)) != self._saved.get(name)
         }
+        for slot in self._slots():
+            found.update(slot.changes())
+        return found
 
     def _sync_dirty(self) -> None:
         count = len(self.changes())
@@ -479,14 +464,6 @@ class SettingsPanel(Vertical):
     @on(Button.Pressed, "#btn-discard-settings")
     def _on_discard(self) -> None:
         self._load()
-
-    @on(Button.Pressed, "#reveal-OPENAI_API_KEY")
-    def _on_reveal(self, event: Button.Pressed) -> None:
-        key_input = self.query_one("#set-OPENAI_API_KEY", Input)
-        key_input.password = not key_input.password
-        event.button.label = (
-            SECRET_HIDDEN_LABEL if key_input.password else SECRET_SHOWN_LABEL
-        )
 
     @on(Button.Pressed, "#browse-GRAB_DEFAULT_PATH")
     def _on_browse(self) -> None:

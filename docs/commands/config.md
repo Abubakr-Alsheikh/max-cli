@@ -2,26 +2,39 @@
 
 ## setup
 
-Interactive wizard to configure AI providers and models.
+Pick the AI Max uses and a fallback, each with its own API key and model.
 
 ```bash
 max config setup
 ```
 
-The wizard walks you through:
+The wizard asks for:
 
-- Choosing your AI provider (Google Gemini, OpenAI, Ollama, or custom)
-- Setting model preferences
-- For Ollama: selecting a local model (no API key needed)
+- **Main AI:** `openai` (or any URL that speaks OpenAI's API), `openrouter`, `gemini` or `ollama`, then that provider's API key and model. Press Enter at the key to keep the saved one. Before asking for the model, the wizard lists the models your key can use.
+- **Fallback:** another provider, or `none`, with its key and model. When the main AI fails (no credit left, a rate limit, a wrong key, an unknown model, the service down), Max sends the same request to the fallback and stays on it for the rest of that run.
+- **Image model** of each provider, for `max ai create` and `edit` (empty: that provider makes no images). Images follow the main AI and its fallback like text does.
 
-**Supported Providers:**
+It changes only these settings; the rest of `~/.max_config.env` stays.
 
-| Provider | API Key | Notes |
-|----------|---------|-------|
-| Gemini | Required | Google's free tier available |
-| OpenAI | Required | Pay-as-you-go |
-| Ollama | Not needed | Run AI locally |
-| Custom | Required | Use your own API endpoint |
+**Providers:**
+
+| Provider | API key setting | Model setting | Notes |
+|----------|-----------------|---------------|-------|
+| OpenAI or a custom URL | `OPENAI_API_KEY` (+ `OPENAI_BASE_URL`) | `AI_MODEL` | Pay as you go; any OpenAI-compatible URL |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `openrouter/free` picks a free model |
+| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` | Free key at aistudio.google.com/apikey; `gemini-flash-latest` follows Google's newest Flash |
+| Ollama | none | `OLLAMA_MODEL` | Runs on this computer (`OLLAMA_BASE_URL`) |
+
+For example, free OpenRouter models first and Gemini when they run out:
+
+```ini
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+AI_FALLBACK_PROVIDER=gemini
+GEMINI_API_KEY=AIza...
+```
+
+Settings from before `AI_PROVIDER` keep working: without it, Max uses Ollama when `OLLAMA_ENABLED=true`, otherwise `OPENAI_API_KEY` with `OPENAI_BASE_URL` and `AI_MODEL`. `max config show` names the main AI and the fallback, and `max config validate` warns when one has no key.
 
 ## show
 

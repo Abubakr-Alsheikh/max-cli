@@ -18,7 +18,7 @@ from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 from .waiting import wait_until
 
 SIZE = (140, 44)
-CLIENT_PATH = "max_cli.core.engines.ai_engine.make_client"
+CLIENT_PATH = "max_cli.core.engines.ai_providers.make_client"
 
 
 def _call(name: str, arguments: dict, call_id: str) -> Any:
@@ -117,6 +117,9 @@ async def _dialog_open(app: MaxDashboardApp, pilot) -> None:
 async def test_without_ai_the_page_points_to_settings(monkeypatch):
     from max_cli.config import settings
 
+    # Pin every provider setting: the real settings file may set one up.
+    monkeypatch.setattr(settings, "AI_PROVIDER", "openai")
+    monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "")
     monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
     monkeypatch.setattr(settings, "OLLAMA_ENABLED", False)
     app = MaxDashboardApp()
@@ -171,6 +174,35 @@ async def test_a_request_shows_its_steps_and_the_reply(ai_on):
         (entry.category, entry.action) for entry in ActivityLog().get_entries()
     }
     assert {("ai", "agent"), ("files", "preview")} <= categories
+
+
+@pytest.mark.asyncio
+async def test_actions_run_side_by_side_each_get_their_card(ai_on):
+    for name in ("a", "b"):
+        (ai_on / name).mkdir()
+        (ai_on / name / "note.txt").write_text(name, encoding="utf-8")
+    previews = tuple(
+        _call(
+            "run_action",
+            {"action": "files.preview", "arguments": {"target": f"{name}/note.txt"}},
+            f"run-{name}",
+        )
+        for name in ("a", "b")
+    )
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}, "call-1"),)),
+        _answer(calls=previews),
+        _answer("Both read."),
+    )
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "read both notes")
+            await _replied(app, pilot)
+            cards = list(app.query(ToolCard))
+
+    assert len(cards) == 2
+    assert all(card.has_class("-ok") for card in cards)
 
 
 @pytest.mark.asyncio

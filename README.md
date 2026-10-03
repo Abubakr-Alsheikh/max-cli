@@ -134,10 +134,8 @@ If you want to run AI locally without an internet connection:
 
 ```bash
 # Example Ollama .env settings
-OLLAMA_ENABLED=true
+AI_PROVIDER=ollama
 OLLAMA_MODEL=llama3
-OPENAI_BASE_URL=http://localhost:11434/v1
-OPENAI_API_KEY=ollama
 ```
 
 ### Step 5: Start Using Max
@@ -661,16 +659,18 @@ max config setup
 Create a `.env` file in your project folder:
 
 ```ini
-# For Google Gemini (recommended - has free tier)
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-AI_MODEL=gemini-1.5-flash
-AI_IMAGE_MODEL=gemini-2.0-flash-exp
+# Main AI and a fallback, each with its own key
+# (openai, openrouter, gemini or ollama)
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=openrouter/free
+AI_FALLBACK_PROVIDER=gemini
+GEMINI_API_KEY=AIza...          # free at aistudio.google.com/apikey
+GEMINI_MODEL=gemini-2.5-flash
 
-# For OpenAI
+# OpenAI, or any URL that speaks its API
 OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4o-mini
+AI_MODEL=gpt-6-luna
 
 # Default settings
 DEFAULT_QUALITY=80

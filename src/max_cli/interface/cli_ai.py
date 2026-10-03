@@ -69,60 +69,75 @@ def _show_arguments(step: "Step") -> None:
         )
 
 
-def _show_step(step: "Step") -> None:
-    """One step as it happens: an action's name and arguments when it starts,
-    its result (and the files it made) indented under it when it ends."""
-    kind = step.kind.value
-    mark, style = STEP_STYLES.get(kind, ("·", "dim"))
-    if kind in ("started", "planned", "refused", "declined", "queued"):
-        title = {
-            "started": step.label,
-            "planned": f"Would run {step.label}",
-            "declined": f"Skipped {step.label}",
-            "queued": f"Queued {step.label}",
-        }.get(kind, step.text)
-        console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
-        _show_arguments(step)
-        return
-    if kind in ("ran", "failed") and (step.result is not None or step.seconds):
-        message = step.result.message if step.result is not None else step.text
-        took = (
-            f"  [dim]{step.seconds:.1f}s[/dim]"
-            if step.seconds >= MIN_SHOWN_SECONDS
-            else ""
-        )
-        console.print(
-            f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
-        )
-        for path in step.result.output_files if step.result is not None else []:
-            console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
-        return
-    console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
+class _StepPrinter:
+    """Prints each step as it happens: an action's name and arguments when
+    it starts, its result (and the files it made) indented under it when it
+    ends. Actions run side by side, so when another action printed in
+    between, the result gets its action's name again first."""
+
+    def __init__(self) -> None:
+        self.last_call = ""  # the tool call whose lines printed last
+
+    def __call__(self, step: "Step") -> None:
+        kind = step.kind.value
+        mark, style = STEP_STYLES.get(kind, ("·", "dim"))
+        if kind in ("started", "planned", "refused", "declined", "queued"):
+            title = {
+                "started": step.label,
+                "planned": f"Would run {step.label}",
+                "declined": f"Skipped {step.label}",
+                "queued": f"Queued {step.label}",
+            }.get(kind, step.text)
+            console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
+            _show_arguments(step)
+            self.last_call = step.call_id
+            return
+        if kind in ("ran", "failed") and (step.result is not None or step.seconds):
+            if step.call_id != self.last_call:
+                self._name_again(step)
+            message = step.result.message if step.result is not None else step.text
+            took = (
+                f"  [dim]{step.seconds:.1f}s[/dim]"
+                if step.seconds >= MIN_SHOWN_SECONDS
+                else ""
+            )
+            console.print(
+                f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
+            )
+            for path in step.result.output_files if step.result is not None else []:
+                console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
+            self.last_call = step.call_id
+            return
+        console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
+
+    @staticmethod
+    def _name_again(step: "Step") -> None:
+        """`⚙ audio compress  song.m4a` above a result that lost its header."""
+        first = next(iter(step.arguments.values()), "")
+        name = Path(first).name if first else ""
+        console.print(f"  [dim]⚙ {escape(step.label)}  {escape(name)}[/dim]")
 
 
 def _make_agent(dry_run: bool = False) -> "Agent":
     from max_cli.core.agent.agent import Agent
 
-    return Agent.from_settings(confirm=_confirm, on_step=_show_step, dry_run=dry_run)
+    return Agent.from_settings(
+        confirm=_confirm, on_step=_StepPrinter(), dry_run=dry_run
+    )
 
 
 def _show_reply(reply: "AgentReply") -> None:
     """The answer as Markdown in a panel; the footer counts actions and tokens."""
     from rich.markdown import Markdown
 
-    actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
-    facts = []
-    if actions:
-        facts.append(f"{actions} action{'s' if actions != 1 else ''}")
-    if reply.tokens:
-        facts.append(f"{reply.tokens:,} tokens")
+    facts = reply.facts()
     console.print()
     console.print(
         Panel(
             Markdown(reply.text),
             title="[bold cyan]Max[/bold cyan]",
             title_align="left",
-            subtitle=f"[dim]{' · '.join(facts)}[/dim]" if facts else None,
+            subtitle=f"[dim]{escape(facts)}[/dim]" if facts else None,
             subtitle_align="right",
             border_style="cyan",
             padding=(1, 2),
@@ -264,24 +279,23 @@ def edit_image(
             log_error(str(e))
 
 
-def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
-    """Helper to display URL and download image."""
+def _handle_image_result(source: str, output_path: Optional[Path], default_name: str):
+    """Save the image the AI made: a link is downloaded, a `data:` URL
+    (most providers send the image itself) is decoded."""
     import requests
 
-    from max_cli.core.engines.ai_engine import download_image
+    from max_cli.core.engines.ai_engine import save_image
 
     console.print("\n[green]Image Ready![/green]")
-    console.print(f"🔗 [link={url}]View Online[/link]")
-
-    # Auto-download
+    if not source.startswith("data:"):
+        console.print(f"🔗 [link={source}]View Online[/link]")
     final_path = output_path or Path.cwd() / default_name
-
     try:
-        with console.status(f"[dim]Downloading to {final_path.name}...[/dim]"):
-            download_image(url, final_path)
+        with console.status(f"[dim]Saving {final_path.name}...[/dim]"):
+            save_image(source, final_path)
         log_success(f"Saved to: [bold]{final_path}[/bold]")
-    except (requests.RequestException, OSError) as e:
-        console.print(f"[yellow]Could not auto-download: {e}[/yellow]")
+    except (requests.RequestException, OSError, MaxError) as e:
+        console.print(f"[yellow]Could not save the image: {e}[/yellow]")
 
 
 @app.command("chat")
