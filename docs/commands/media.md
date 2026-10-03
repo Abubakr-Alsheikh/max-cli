@@ -16,6 +16,20 @@ You don't need to install FFmpeg yourself. To install it ahead of time, run:
 max config setup-ffmpeg
 ```
 
+## Several files at once
+
+Every command below except `concat`, `record`, `stream` and `preview` also takes several files, a folder or a pattern:
+
+```bash
+max video compress a.mp4 b.mp4          # these two
+max video compress ~/Videos             # every video in the folder
+max video audio-convert "*.m4a"         # every M4A here, to MP3
+max video compress ~/Videos --recursive # subfolders too
+max video compress ~/Videos --queue     # in the background, one job per file
+```
+
+Max runs up to four files at once and lists each as it finishes. With a folder or a pattern, it skips files whose result is already there (`a.mp4` when `a_compressed.mp4` exists) and never treats its own earlier results as new input. `--redo` runs those files again. Files you name one by one always run. `-o` works only with one file; with several, each result goes next to its file.
+
 ## compress
 
 Compress a video to H.264 MP4.

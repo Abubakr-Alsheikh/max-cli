@@ -201,6 +201,13 @@ class ActionForm(Vertical):
         advanced = [param for param in self.params if param.advanced]
         for param in basic:
             yield self._field(param)
+        if action.each_param() is not None:
+            # Several files, a folder or a pattern: how far to look, and
+            # whether to run files whose result exists already.
+            boxes = [Checkbox("Subfolders too", id="batch-recursive")]
+            if action.output_name:
+                boxes.append(Checkbox("Redo finished files", id="batch-redo"))
+            yield Grid(*boxes, classes="form-toggles")
         if advanced:
             with Collapsible(title="More options", collapsed=True):
                 for param in advanced:
@@ -263,6 +270,10 @@ class ActionForm(Vertical):
         placeholder = "Required" if param.required else "Optional"
         if param.multiple:
             placeholder += f"; separate several with {LIST_SEPARATOR}"
+        elif param.each:
+            placeholder += (
+                f": a file, several split by {LIST_SEPARATOR}, a folder or *.mp4"
+            )
         text_input = Input(
             value=_initial_text(param),
             placeholder=placeholder,
@@ -353,14 +364,40 @@ class ActionForm(Vertical):
         event.stop()
         self._submit(queue=True)
 
+    def batch_options(self) -> tuple[bool, bool]:
+        """(subfolders too, redo finished files), off where the form has none."""
+        recursive = self._optional_box("batch-recursive")
+        redo = self._optional_box("batch-redo")
+        return (
+            bool(recursive is not None and recursive.value),
+            bool(redo is not None and redo.value),
+        )
+
+    def _optional_box(self, box_id: str) -> Optional[Checkbox]:
+        found = self.query(f"#{box_id}")
+        return found.first(Checkbox) if found else None
+
     def _submit(self, queue: bool) -> None:
+        from max_cli.core.catalog.batch import expand_each, is_batch, one_file
         from max_cli.core.catalog.runner import coerce_args
 
         values = self.values()
+        many = is_batch(self.action, values)
         try:
-            coerce_args(self.action, values)
+            if many:
+                found = expand_each(self.action, values, *self.batch_options())
+            coerce_args(
+                self.action,
+                one_file(self.action, values) if self.action.each_param() else values,
+            )
         except MaxError as e:
             self._set_status(markup("[red]$error[/red]", error=e))
+            return
+        if many and not found.files:
+            self._set_status(
+                f"[green]Nothing to do:[/green] all {found.total} files have their "
+                "result already. Tick Redo finished files to run them again."
+            )
             return
 
         if not asks_first(self.action):
@@ -376,9 +413,10 @@ class ActionForm(Vertical):
         from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 
         note = DANGER_NOTES[self.action.danger]
+        files = f" on {len(found.files)} files" if many else ""
         self.app.push_screen(
             ConfirmDialog(
-                f"max {self.action.group} {self.action.name} {note}. Continue?"
+                f"max {self.action.group} {self.action.name}{files} {note}. Continue?"
             ),
             _answered,
         )
@@ -389,27 +427,38 @@ class ActionForm(Vertical):
             return
         self._set_busy(True)
         self._set_status("[cyan]Running...[/cyan]")
-        self.run_worker(lambda: self._run(values), thread=True, group="action-form")
+        options = self.batch_options()
+        self.run_worker(
+            lambda: self._run(values, *options), thread=True, group="action-form"
+        )
 
     def _enqueue(self, values: dict[str, Any]) -> None:
-        from max_cli.core.catalog.runner import enqueue_action
+        from max_cli.core.catalog.batch import enqueue_each
 
         try:
-            task = enqueue_action(self.action, values)
+            tasks, _found = enqueue_each(self.action, values, *self.batch_options())
         except MaxError as e:
             self._set_status(markup("[red]$error[/red]", error=e))
             return
-        self._set_status(
-            f"[green]Queued[/green] (ID: {task.id}). J shows its progress."
-        )
+        if len(tasks) == 1:
+            self._set_status(
+                f"[green]Queued[/green] (ID: {tasks[0].id}). J shows its progress."
+            )
+        else:
+            self._set_status(
+                f"[green]Queued {len(tasks)} jobs[/green], one per file. J shows them."
+            )
         self.notify(f"Queued {self.action.group} {self.action.name}")
         from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
 
         self.post_message(JobsDrawer.Show())
 
-    def _run(self, values: dict[str, Any]) -> None:
-        """Runs in a thread worker; the UI updates go through call_from_thread."""
-        from max_cli.core.catalog.runner import run_action
+    def _run(
+        self, values: dict[str, Any], recursive: bool = False, redo: bool = False
+    ) -> None:
+        """Runs in a thread worker; the UI updates go through call_from_thread.
+        Several files run side by side (catalog.batch); one runs as before."""
+        from max_cli.core.catalog.batch import run_each
 
         activity = ActivityLog()
         entry = activity.start_entry(
@@ -417,8 +466,22 @@ class ActionForm(Vertical):
             action=self.action.name,
             details={"args": {k: str(v) for k, v in values.items()}},
         )
+        finished = 0
+
+        def on_file(path: Path, result: Any, error: str) -> None:
+            nonlocal finished
+            finished += 1
+            self.app.call_from_thread(
+                self._set_status, f"[cyan]Running...[/cyan] {finished} files done"
+            )
+
         try:
-            result = run_action(self.action, values)
+            if self.action.each_param() is not None:
+                result = run_each(self.action, values, recursive, redo, on_file=on_file)
+            else:
+                from max_cli.core.catalog.runner import run_action
+
+                result = run_action(self.action, values)
         except Exception as e:
             activity.complete_entry(entry, "failed", {"error": str(e)})
             self.app.call_from_thread(self._finish, False, str(e))

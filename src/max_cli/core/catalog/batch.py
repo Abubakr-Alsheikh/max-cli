@@ -24,13 +24,8 @@ from typing import Any, Callable, Optional
 
 from max_cli.common.exceptions import ValidationError
 from max_cli.common.file_kinds import kind_of
-from max_cli.core.catalog.runner import (
-    _is_empty,
-    _list_items,
-    coerce_args,
-    enqueue_action,
-    run_action,
-)
+from max_cli.core.catalog import runner
+from max_cli.core.catalog.runner import _is_empty, _list_items, coerce_args
 from max_cli.core.catalog.spec import Action, Param
 from max_cli.core.engines.task_queue import TaskItem
 from max_cli.core.operations.result import ActionResult
@@ -141,13 +136,13 @@ def run_each(
     expanded the files already (to show them first)."""
     if batch is None:
         if not is_batch(action, raw_args):
-            return run_action(action, _one_file(action, raw_args))
+            return runner.run_action(action, one_file(action, raw_args))
         batch = expand_each(action, raw_args, recursive, redo)
     param = _each(action)
 
     def one(path: Path) -> tuple[Path, Optional[ActionResult], str]:
         try:
-            result = run_action(action, {**raw_args, param.name: str(path)})
+            result = runner.run_action(action, {**raw_args, param.name: str(path)})
         except Exception as e:  # noqa: BLE001 - one file's failure goes in the summary
             outcome: tuple[Path, Optional[ActionResult], str] = (path, None, str(e))
         else:
@@ -202,19 +197,19 @@ def enqueue_each(
 ) -> tuple[list[TaskItem], FileBatch]:
     """Queue one task per file, so each shows and can be cancelled alone."""
     if not is_batch(action, raw_args):
-        single = _one_file(action, raw_args)
-        task = enqueue_action(action, single)
+        single = one_file(action, raw_args)
+        task = runner.enqueue_action(action, single)
         return [task], FileBatch([Path(str(single[_each(action).name]))])
     batch = expand_each(action, raw_args, recursive, redo)
     param = _each(action)
     tasks = [
-        enqueue_action(action, {**raw_args, param.name: str(path)})
+        runner.enqueue_action(action, {**raw_args, param.name: str(path)})
         for path in batch.files
     ]
     return tasks, batch
 
 
-def _one_file(action: Action, raw_args: Mapping[str, Any]) -> dict[str, Any]:
+def one_file(action: Action, raw_args: Mapping[str, Any]) -> dict[str, Any]:
     """The args with the file param as one path, not a one-item list."""
     param = _each(action)
     items = _items(raw_args.get(param.name))

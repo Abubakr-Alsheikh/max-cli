@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from max_cli.common.exceptions import ValidationError
-from max_cli.core.catalog import batch, get_action, load_group
+from max_cli.core.catalog import batch, get_action, load_group, runner
 from max_cli.core.catalog.batch import expand_each, output_for, run_each
 from max_cli.core.catalog.runner import run_action
 from max_cli.core.operations.result import ActionResult
@@ -136,7 +136,7 @@ def _fake_runs(monkeypatch, barrier: Any = None) -> list:
             return ActionResult(False, "broken file")
         return ActionResult(True, "ok", [target.with_suffix(".out")])
 
-    monkeypatch.setattr(batch, "run_action", fake)
+    monkeypatch.setattr(runner, "run_action", fake)
     return ran
 
 
@@ -167,13 +167,11 @@ def test_run_each_runs_side_by_side_and_sums_up(tmp_path, monkeypatch):
 def test_one_plain_file_runs_as_before(tmp_path, monkeypatch):
     (single,) = _files(tmp_path, "a.mp4")
     _files(tmp_path, "a_compressed.mp4")  # named files run even when done
-    ran = _fake_runs(monkeypatch)
     monkeypatch.setattr(
-        batch, "run_action", lambda action, args: ActionResult(True, "one")
+        runner, "run_action", lambda action, args: ActionResult(True, "one")
     )
 
     assert run_each(VIDEO_COMPRESS, {"target": str(single)}).message == "one"
-    assert ran == []
 
 
 def test_everything_done_already_is_not_a_failure(tmp_path, monkeypatch):

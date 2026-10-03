@@ -7,7 +7,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from max_cli.common import logger
-from max_cli.core.catalog import batch
+from max_cli.core.catalog import runner as catalog_runner
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.operations.result import ActionResult
 from max_cli.interface import batch_cli
@@ -36,7 +36,7 @@ def ran(monkeypatch) -> list[str]:
             return ActionResult(False, "unreadable file")
         return ActionResult(True, "ok", [target.with_suffix(".mp3")])
 
-    monkeypatch.setattr(batch, "run_action", fake)
+    monkeypatch.setattr(catalog_runner, "run_action", fake)
     monkeypatch.setattr("max_cli.interface.cli_media._get_engine", lambda: None)
     return names
 

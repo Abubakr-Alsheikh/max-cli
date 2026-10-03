@@ -89,8 +89,10 @@ max files preview TARGET [--lines N]
 Copy a file into `~/.max_cli/backups/`.
 
 ```bash
-max files backup TARGET [--label LABEL]
+max files backup TARGET... [--label LABEL] [--recursive]
 ```
+
+TARGET can be several files, a folder or a pattern. `shred` takes one file at a time on purpose: it can't be undone.
 
 **Options:**
 

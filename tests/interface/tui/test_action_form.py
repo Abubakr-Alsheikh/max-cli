@@ -294,3 +294,66 @@ async def test_every_dashboard_form_opens(action):
         values = form.values()
 
     assert set(values) == names
+
+
+def _music_folder(folder: Path) -> Path:
+    for name in ("done.m4a", "done.mp3", "new.m4a"):
+        (folder / name).write_bytes(b"\0")
+    return folder
+
+
+@pytest.mark.asyncio
+async def test_a_folder_runs_the_files_left(tmp_path):
+    folder = _music_folder(tmp_path)
+    app = FormApp(get_action("video.audio-convert"))
+    ran = []
+
+    def fake(action, args, **kwargs):
+        ran.append(Path(args["target"]).name)
+        return ActionResult(True, "ok", [Path(args["target"]).with_suffix(".mp3")])
+
+    with patch(RUN_ACTION, side_effect=fake):
+        async with app.run_test(size=(120, 60)) as pilot:
+            app.query_one("#field-target", Input).value = str(folder)
+            assert app.query("#batch-recursive") and app.query("#batch-redo")
+            app.query_one("#form-run", Button).press()
+            await _settle(app, pilot)
+            status = _status(app)
+
+    assert ran == ["new.m4a"]
+    assert "1 of 2 files done, 1 had their result already" in status
+
+
+@pytest.mark.asyncio
+async def test_queueing_a_folder_adds_a_job_per_file(tmp_path):
+    folder = _music_folder(tmp_path)
+    (folder / "other.m4a").write_bytes(b"\0")
+    app = FormApp(get_action("video.audio-convert"))
+    async with app.run_test(size=(120, 60)) as pilot:
+        app.query_one("#field-target", Input).value = str(folder)
+        app.query_one("#form-queue", Button).press()
+        await _settle(app, pilot)
+        status = _status(app)
+
+    names = sorted(
+        Path(task.payload["args"]["target"]).name
+        for task in get_task_manager().get_all()
+    )
+    assert names == ["new.m4a", "other.m4a"]
+    assert "Queued 2 jobs" in status
+
+
+@pytest.mark.asyncio
+async def test_a_folder_with_nothing_left_says_so(tmp_path):
+    (tmp_path / "a.m4a").write_bytes(b"\0")
+    (tmp_path / "a.mp3").write_bytes(b"\0")
+    app = FormApp(get_action("video.audio-convert"))
+    with patch(RUN_ACTION) as run_action:
+        async with app.run_test(size=(120, 60)) as pilot:
+            app.query_one("#field-target", Input).value = str(tmp_path)
+            app.query_one("#form-run", Button).press()
+            await _settle(app, pilot)
+            status = _status(app)
+
+    run_action.assert_not_called()
+    assert "Nothing to do" in status

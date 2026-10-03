@@ -54,8 +54,8 @@ Ask "how would you organize this folder?" and it answers from what's there. Ever
 - It works in the folder you started in, plus folders you name in your request: a path such as `D:\Photos`, or a usual folder by name ("my Downloads", "Music"). It also may save to your download folder. It refuses any other path and asks you to name the folder.
 - Before an action moves, overwrites or deletes files, it asks you, even when `CONFIRM_DESTRUCTIVE` is off. Answer no and it skips that step. A dry run (`smart-sort --dry-run`, `organize --dry-run`) changes nothing, so it doesn't ask.
 - Looking at files never asks and never changes anything, but stays inside the same folders.
-- When one action applies to several files (convert each M4A to MP3), the agent asks for them in one call and Max runs up to 4 at the same time. You get one question for the whole batch ("Run ... on 11 files?"), not one per file. Actions on the same file or folder run one after another, in order.
-- Long jobs (video compress or denoise, downloads) can go to the queue: the agent says so, Max runs them in the background, and your terminal is free at once. `max queue status` shows them, and closing the terminal doesn't stop them.
+- When one action applies to several files (convert each M4A to MP3), the agent asks for them in one call (a list, a folder or a pattern), skipping files whose result is already there, and Max runs up to 4 at the same time. You get one question for the whole batch ("Run ... on 11 files?"), not one per file. Actions on the same file or folder run one after another, in order.
+- Long jobs (video and audio work, OCR, downloads) can go to the queue: the agent says so, Max runs them in the background, and your terminal is free at once. `max queue status` shows them, and closing the terminal doesn't stop them.
 - One request stops after 12 rounds with the model, 40 actions or 60,000 tokens. Ask it to go on if there's more.
 - File changes go into the undo log, so `max files undo` puts them back.
 

@@ -2,6 +2,8 @@
 
 Most `max pdf` commands take one PDF and accept `-o` to set the output path. Without `-o`, Max writes a new file next to the input.
 
+`split`, `lock`, `rip`, `ocr`, `form-flatten` and `optimize` also take several PDFs, a folder or a pattern such as `"*.pdf"` (`--recursive` for subfolders). With a folder or pattern, Max skips PDFs whose result is already there; `--redo` runs them again. `ocr --queue` runs in the background. `stamp` takes one PDF, because its text comes right after the file name.
+
 A missing input file stops any command with exit code 1. The dashboard's Tools page has a form for each command. The AI agent will get every command except `lock`, so it never sees your password.
 
 ## merge

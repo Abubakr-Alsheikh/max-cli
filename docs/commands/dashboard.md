@@ -52,7 +52,7 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 
 The Video page (`3`) works on one file at a time. Paste a path or press Browse: the FILE card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
 
-Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue.
+Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. The file field also takes a folder, a pattern such as `*.mp4`, or several files split by `;`; then **Subfolders too** and **Redo finished files** appear, the question before a change names how many files, and the status counts the files as they finish. Run it, or add it to the queue (one job per file).
 
 ## Audio page
 

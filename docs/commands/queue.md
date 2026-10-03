@@ -4,13 +4,11 @@ The `max queue` group manages background tasks. You add a task with the `--queue
 
 A task that fails goes back in line and runs again, up to `MAX_RETRIES` more times (2 unless you change it in `max config` or on the dashboard's Settings page). After that it moves to history as failed.
 
-These commands can queue work:
-
-| Command | Flag |
-|---------|------|
-| `max video compress` | `--queue`, `-q` |
-| `max video denoise` | `--queue`, `-q` |
-| `max grab download` | `--queue`, `-Q` |
+These commands can queue work with `--queue`: `max video` compress,
+convert, to-audio, gif, cut, louder, mute, brightness, color, stabilize,
+normalize, denoise and audio-convert; `max audio` compress and denoise;
+`max pdf ocr`; and `max grab download` (`-Q`). With several files, a folder
+or a pattern, each file becomes its own task.
 
 ```bash
 # Queue two jobs

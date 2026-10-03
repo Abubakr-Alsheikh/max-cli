@@ -4,6 +4,8 @@ Manage audio files: read/write metadata, compress large recordings, and organize
 
 Tags use the same names in every format (title, artist, album ...). `batch` and `organize` take files, a folder (its audio files, not those in subfolders) or a pattern such as `"*.mp3"`. The dashboard's Audio page runs every command here.
 
+`compress`, `denoise` and `clear` also take several files, a folder or a pattern, and `--recursive` looks in subfolders. Max runs up to four files at once. With a folder or pattern, `compress` and `denoise` skip files whose result is already there (`--redo` runs them again), and `--queue` runs them in the background. `clear` asks once before it changes the files.
+
 ## compress
 
 Compress an audio file by re-encoding to a lower bitrate. Use it to shrink large recordings. A 4-minute WAV at 80MB becomes an MP3 of about 3MB.

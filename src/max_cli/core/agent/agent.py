@@ -83,7 +83,7 @@ moves, overwrites or deletes files. If they say no, don't retry.
 
 
 QUEUE_RULE = """
-- Long jobs (video compress or denoise, downloads) can run in the \
+- Long jobs (video and audio work, OCR, downloads) can run in the \
 background: run_action with queue true. Say they're queued and that {jobs} \
 shows them."""
 JOBS_WINDOW = "the Jobs window (J)"  # where the dashboard shows queued jobs
