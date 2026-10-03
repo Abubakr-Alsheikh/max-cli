@@ -130,12 +130,15 @@ def find_files(
     newer_than_days: float = 0,
     older_than_days: float = 0,
     sort: str = "size",
+    missing: str = "",
 ) -> str:
     """Files under `path` and its subfolders that match every filter given,
     as JSON: the count and total size of all matches, then the top ones.
 
     `kind` is a file_kinds kind (video, audio, image ...), `name` a pattern
-    such as *.mp4 or *invoice*. Hidden files and folders are skipped.
+    such as *.mp4 or *invoice*. `missing` (an extension such as mp3) keeps
+    only files with no same-name file of that type beside them: the work
+    still to do, for a conversion. Hidden files and folders are skipped.
     """
     import fnmatch
     import time
@@ -149,6 +152,10 @@ def find_files(
     pattern = name.strip().casefold()
     if pattern and not any(mark in pattern for mark in "*?["):
         pattern = f"*{pattern}*"
+    done_suffix = (
+        f".{missing.strip().lstrip('.').casefold()}" if missing.strip() else ""
+    )
+    already_done: list[str] = []
     matches: list[tuple[Path, int, float]] = []
     scanned = 0
     stopped = False
@@ -179,6 +186,13 @@ def find_files(
             continue
         if older_than_days and age_days < older_than_days:
             continue
+        if done_suffix and (
+            entry.suffix.casefold() == done_suffix
+            or entry.with_suffix(done_suffix).exists()
+        ):
+            if entry.suffix.casefold() != done_suffix:
+                already_done.append(str(entry.relative_to(path)))
+            continue
         matches.append((entry, info.st_size, info.st_mtime))
     order = {
         "size": (lambda item: -item[1]),
@@ -203,6 +217,18 @@ def find_files(
                 for found, size, modified in shown
             ],
             "more": max(0, len(matches) - len(shown)),
+            **(
+                {
+                    "already_done": {
+                        "count": len(already_done),
+                        "files": already_done[:MAX_FOUND],
+                        "note": f"These have a {done_suffix} already: leave them "
+                        "out and tell the user you skipped them.",
+                    }
+                }
+                if already_done
+                else {}
+            ),
             "note": (
                 f"Stopped after {MAX_SCANNED:,} files; narrow the folder."
                 if stopped

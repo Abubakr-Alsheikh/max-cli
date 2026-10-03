@@ -743,3 +743,81 @@ def test_scope_checks_the_folder_of_a_pattern(tmp_path):
     assert scope.allows(tmp_path / "music" / "*.mp3")
     assert scope.allows("relative/file.txt")
     assert not scope.allows(tmp_path.parent / "other.txt")
+
+
+# --- one action over several files (each) ---------------------------------------------
+
+
+def _each(action: str, files: list, arguments: Optional[dict] = None) -> tuple:
+    group = action.split(".")[0]
+    return (
+        _answer(calls=(_call("load_group", {"name": group}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": action, "arguments": arguments or {}, "each": files},
+                    "batch",
+                ),
+            )
+        ),
+        _answer("Done."),
+    )
+
+
+def test_each_runs_one_action_over_several_files_side_by_side(tmp_path, monkeypatch):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    files = [str(_note(tmp_path / "a")), str(_note(tmp_path / "b"))]
+    seen = _track_runs(monkeypatch, threading.Barrier(2, timeout=5))
+    model = ScriptedModel(*_each("files.preview", files))
+
+    reply = _agent(model, tmp_path).ask("read both notes")
+
+    assert seen["most"] == 2
+    summary = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert summary["files"] == 2 and summary["worked"] == 2
+    assert summary["failed"] == []
+    ran = [step.call_id for step in reply.steps if step.kind == StepKind.RAN]
+    assert sorted(ran) == ["batch:0", "batch:1"]
+
+
+def test_each_asks_once_for_the_whole_batch(tmp_path):
+    notes = [tmp_path / "one.txt", tmp_path / "two.txt"]
+    for note in notes:
+        note.write_text("x", encoding="utf-8")
+    model = ScriptedModel(*_each("files.shred", [str(note) for note in notes]))
+    agent = _agent(model, tmp_path)
+
+    agent.ask("shred both")
+
+    assert len(agent.asked) == 1
+    assert "2 files (one.txt, two.txt)" in agent.asked[0].describe()
+    assert not any(note.exists() for note in notes)
+
+
+def test_each_reports_files_that_fail_their_checks(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    inside = _note(tmp_path)
+    outside = tmp_path.parent / "elsewhere.txt"
+    model = ScriptedModel(*_each("files.preview", [str(inside), str(outside)]))
+
+    _agent(model, tmp_path).ask("read them")
+
+    summary = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert summary["worked"] == 1
+    assert summary["failed"][0]["file"] == "elsewhere.txt"
+    assert "outside" in summary["failed"][0]["error"]
+
+
+def test_find_files_missing_lists_only_the_work_left(tmp_path):
+    from max_cli.core.agent import looks
+
+    for name in ("done.m4a", "done.mp3", "todo.m4a"):
+        (tmp_path / name).write_bytes(b"\0")
+
+    found = json.loads(looks.find_files(tmp_path, kind="audio", missing="mp3"))
+
+    assert [item["path"] for item in found["files"]] == ["todo.m4a"]
+    assert found["already_done"]["count"] == 1
+    assert found["already_done"]["files"] == ["done.m4a"]

@@ -112,6 +112,11 @@ def _look_definitions() -> list[dict[str, Any]]:
                     "type": "string",
                     "enum": ["size", "newest", "oldest", "name"],
                 },
+                "missing": {
+                    "type": "string",
+                    "description": "An extension, e.g. mp3: only files "
+                    "without a same-name file of that type beside them.",
+                },
             },
             ["path"],
         ),
@@ -144,6 +149,11 @@ def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
         "arguments": {
             "type": "object",
             "description": "Argument names and values.",
+        },
+        "each": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Files to run the action on, one run each.",
         },
     }
     if can_queue:

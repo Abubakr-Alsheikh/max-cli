@@ -41,7 +41,7 @@ from max_cli.core.agent.tools import (
     tool_definitions,
 )
 from max_cli.core.catalog import get_action
-from max_cli.core.catalog.spec import PATH_KINDS, Action, Danger, Surface
+from max_cli.core.catalog.spec import PATH_KINDS, Action, Danger, ParamKind, Surface
 from max_cli.core.operations.result import ActionResult
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,8 @@ DECLINED_NOTE = (
     "The user said no, so it didn't run. Don't run it again unless they ask."
 )
 NOT_RUN_NOTE = "Not run: the action limit for this request was reached."
+MAX_EACH = 100  # files one run_action call may list in `each`
+MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
 
 SYSTEM_PROMPT = """You are Max, an assistant that does file and media work on \
 the user's computer by running Max's actions. You can only act through the \
@@ -74,13 +76,9 @@ run_action(action, arguments). Never invent an action or an argument.
 need a folder outside them, ask the user to name it.
 - Act; don't ask for permission. Max itself asks the user before an action \
 moves, overwrites or deletes files. If they say no, don't retry.
-- Run several actions when a request needs them. When one action applies to \
-several files, call run_action for each file in the same reply: Max runs them \
-at the same time. If the action takes several files or a folder, one call is \
-enough.
-- Once an action has done the job, don't run it again on the same files. \
-When you're done, say in one or two short sentences what you did and where \
-the results are.
+- Plan first: work out which files the request needs. Skip files that already have the result (find_files with missing "mp3" lists the .m4a files without an .mp3) and say which you skipped. Never redo finished work unless asked.
+- One action on several files: one run_action with the files in `each`; Max runs them side by side and asks once.
+- When you're done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead."""
 
 
@@ -97,6 +95,7 @@ FIND_FILTERS = (
     "newer_than_days",
     "older_than_days",
     "sort",
+    "missing",
 )
 
 
@@ -196,6 +195,48 @@ class _Run:
     @property
     def label(self) -> str:
         return f"{self.call.action.group} {self.call.action.name}"
+
+
+@dataclass(frozen=True)
+class _Outcome:
+    """How a run went: the text for the model, and the result behind it."""
+
+    text: str
+    ok: bool
+    result: Optional[ActionResult] = None
+
+
+@dataclass(frozen=True)
+class _Batch:
+    """One run_action call with `each`: a run per file, plus the files that
+    failed their checks before anything ran."""
+
+    label: str
+    runs: tuple[_Run, ...]
+    refused: tuple[tuple[str, str], ...]  # (file, why)
+
+    def summary(self, outcomes: list[_Outcome]) -> str:
+        """What the model hears: counts, failures and the files made."""
+        failed = [{"file": name, "error": why} for name, why in self.refused]
+        outputs: list[str] = []
+        for run, outcome in zip(self.runs, outcomes):
+            if not outcome.ok:
+                why = outcome.result.message if outcome.result else outcome.text
+                name = run.paths[0].name if run.paths else run.label
+                failed.append({"file": name, "error": why})
+            elif outcome.result is not None:
+                outputs += [str(path) for path in outcome.result.output_files]
+        return json.dumps(
+            {
+                "action": self.label,
+                "files": len(self.runs) + len(self.refused),
+                "worked": sum(outcome.ok for outcome in outcomes),
+                "failed": failed,
+                "outputs": outputs[:MAX_LISTED_OUTPUTS],
+                "more_outputs": max(0, len(outputs) - MAX_LISTED_OUTPUTS),
+            },
+            ensure_ascii=False,
+        )[:MAX_RESULT_CHARS]
 
 
 Confirm = Callable[[ActionCall], bool]
@@ -340,7 +381,7 @@ class Agent:
         confirmations go one at a time; the actions that pass them then run
         together. `done` counts the tool calls of earlier turns."""
         answers: list[str] = []
-        runs: list[tuple[int, _Run]] = []
+        waiting: list[tuple[int, Union[_Run, _Batch]]] = []
         for index, tool_call in enumerate(tool_calls):
             if done + index >= self.max_actions:
                 answers.append(NOT_RUN_NOTE)
@@ -351,25 +392,30 @@ class Agent:
                 reply,
                 call_id=str(tool_call.id),
             )
-            if isinstance(answer, _Run):
-                runs.append((index, answer))
+            if not isinstance(answer, str):
+                waiting.append((index, answer))
                 answer = ""  # filled in once it has run
             answers.append(answer)
-        for index, answer in self._run_all(runs, reply):
-            answers[index] = answer
+        runs = [
+            run
+            for _, job in waiting
+            for run in (job.runs if isinstance(job, _Batch) else (job,))
+        ]
+        outcomes = iter(self._run_all(runs, reply))
+        for index, job in waiting:
+            if isinstance(job, _Batch):
+                answers[index] = job.summary([next(outcomes) for _ in job.runs])
+            else:
+                answers[index] = next(outcomes).text
         return answers
 
-    def _run_all(
-        self, runs: list[tuple[int, _Run]], reply: AgentReply
-    ) -> list[tuple[int, str]]:
+    def _run_all(self, runs: list[_Run], reply: AgentReply) -> list[_Outcome]:
         """Side by side when no two touch the same path, else in order."""
-        if len(runs) < 2 or self.parallel < 2 or _overlap([run for _, run in runs]):
-            return [(index, self._execute(run, reply)) for index, run in runs]
+        if len(runs) < 2 or self.parallel < 2 or _overlap(runs):
+            return [self._execute(run, reply) for run in runs]
         with ThreadPoolExecutor(max_workers=min(self.parallel, len(runs))) as pool:
-            futures = [
-                (index, pool.submit(self._execute, run, reply)) for index, run in runs
-            ]
-            return [(index, future.result()) for index, future in futures]
+            futures = [pool.submit(self._execute, run, reply) for run in runs]
+            return [future.result() for future in futures]
 
     def _limit_reached(self, turns: int, calls: int, tokens: int) -> str:
         if turns >= self.max_steps:
@@ -414,8 +460,8 @@ class Agent:
 
     def _tool(
         self, name: str, raw_arguments: str, reply: AgentReply, call_id: str = ""
-    ) -> Union[str, _Run]:
-        """The tool's answer, or an action that is ready to run."""
+    ) -> Union[str, _Run, _Batch]:
+        """The tool's answer, or the actions that are ready to run."""
         try:
             arguments = json.loads(raw_arguments or "{}")
         except json.JSONDecodeError:
@@ -431,6 +477,18 @@ class Agent:
             if not isinstance(given, Mapping):
                 return "Error: 'arguments' must be an object."
             queue = arguments.get("queue") is True
+            each = arguments.get("each")
+            if each is not None:
+                if not isinstance(each, list) or not each:
+                    return "Error: 'each' must be a list of file paths."
+                return self._run_each(
+                    str(arguments.get("action", "")),
+                    dict(given),
+                    [str(path) for path in each],
+                    reply,
+                    queue=queue,
+                    call_id=call_id,
+                )
             return self._run(
                 str(arguments.get("action", "")),
                 dict(given),
@@ -595,7 +653,7 @@ class Agent:
         resolved = tuple(self.scope.resolve(str(path)) for path in paths)
         return _Run(call, given, call_id, resolved)
 
-    def _execute(self, run: _Run, reply: AgentReply) -> str:
+    def _execute(self, run: _Run, reply: AgentReply) -> _Outcome:
         """Run a checked action; its result (or error) for the model. Called
         from a worker thread when actions run side by side."""
         from max_cli.core.catalog.runner import run_action
@@ -628,7 +686,7 @@ class Agent:
                     call_id=run.call_id,
                 ),
             )
-            return f"Error: {e}"
+            return _Outcome(f"Error: {e}", False)
         kind = StepKind.RAN if result.ok else StepKind.FAILED
         self._report(
             reply,
@@ -642,9 +700,130 @@ class Agent:
                 call_id=run.call_id,
             ),
         )
-        return json.dumps(result.to_dict(), ensure_ascii=False, default=str)[
-            :MAX_RESULT_CHARS
-        ]
+        text = json.dumps(result.to_dict(), ensure_ascii=False, default=str)
+        return _Outcome(text[:MAX_RESULT_CHARS], result.ok, result)
+
+    def _run_each(
+        self,
+        action_id: str,
+        given: dict[str, Any],
+        each: list[str],
+        reply: AgentReply,
+        queue: bool = False,
+        call_id: str = "",
+    ) -> Union[str, _Batch]:
+        """One action over several files: each file in turn fills the action's
+        file argument. Every file is checked first; then one question covers
+        the files that passed, and they run together."""
+        from max_cli.core.catalog.runner import coerce_args
+
+        try:
+            action = get_action(action_id)
+        except KeyError:
+            return f"Error: no action '{action_id}'. Call load_group to see them."
+        if Surface.AGENT not in action.surfaces:
+            return f"Error: {action_id} isn't available to the agent."
+        if action.group not in self.loaded:
+            return (
+                f"Error: call load_group('{action.group}') first to see its arguments."
+            )
+        param = _each_param(action)
+        if param is None:
+            return f"Error: {action_id} takes no file, so 'each' doesn't fit it."
+        if len(each) > MAX_EACH:
+            return f"Error: 'each' takes at most {MAX_EACH} files; split the list."
+        label = f"{action.group} {action.name}"
+        checked: list[tuple[str, ActionCall, dict[str, Any], tuple[Path, ...]]] = []
+        refused: list[tuple[str, str]] = []
+        for number, path in enumerate(each):
+            file_given = {**given, param.name: [path] if param.multiple else path}
+            try:
+                arguments = coerce_args(action, file_given)
+            except MaxError as e:
+                refused.append((Path(path).name, str(e)))
+                continue
+            paths = _paths(action, arguments)
+            outside = self.scope.outside(paths)
+            if outside:
+                refused.append(
+                    (
+                        Path(path).name,
+                        f"{', '.join(outside)} is outside the folders I may use",
+                    )
+                )
+                continue
+            resolved = tuple(self.scope.resolve(str(found)) for found in paths)
+            checked.append(
+                (
+                    f"{call_id}:{number}",
+                    ActionCall(action, arguments),
+                    file_given,
+                    resolved,
+                )
+            )
+        if not checked:
+            return "Error: no file passed the checks: " + json.dumps(
+                dict(refused), ensure_ascii=False
+            )
+        names = [Path(each_path).name for each_path in each]
+        whole = ActionCall(
+            action,
+            {**checked[0][1].arguments, param.name: _files_text(names, len(checked))},
+        )
+        if self.dry_run:
+            self._report(
+                reply,
+                Step(
+                    StepKind.PLANNED,
+                    action_id,
+                    f"Would run {whole.describe()}",
+                    arguments=whole.shown_arguments(),
+                    call_id=call_id,
+                ),
+            )
+            return "Dry run: checked, not run. Carry on as if it worked."
+        changes_files = action.danger in CONFIRM_DANGERS and not given.get("dry_run")
+        if changes_files and not self.confirm(whole):
+            self._report(
+                reply,
+                Step(
+                    StepKind.DECLINED,
+                    action_id,
+                    f"Skipped {whole.describe()}",
+                    arguments=whole.shown_arguments(),
+                    call_id=call_id,
+                ),
+            )
+            return DECLINED_NOTE
+        if queue and self.can_queue and action.queueable:
+            from max_cli.core.catalog.runner import enqueue_action
+
+            for each_id, call, file_given, _paths_found in checked:
+                enqueue_action(action, file_given)
+                self._report(
+                    reply,
+                    Step(
+                        StepKind.QUEUED,
+                        action_id,
+                        f"Queued {label}",
+                        arguments=call.shown_arguments(),
+                        call_id=each_id,
+                    ),
+                )
+            return json.dumps(
+                {
+                    "queued": len(checked),
+                    "failed": [{"file": n, "error": why} for n, why in refused],
+                    "note": "They run in the background; the user follows them "
+                    "in the Jobs window (J). Don't wait for them.",
+                },
+                ensure_ascii=False,
+            )
+        runs = tuple(
+            _Run(call, file_given, each_id, found)
+            for each_id, call, file_given, found in checked
+        )
+        return _Batch(label, runs, tuple(refused))
 
     def _report(self, reply: AgentReply, step: Step) -> None:
         # One at a time: actions running side by side report from their
@@ -677,6 +856,21 @@ def _tool_call_message(call: Any) -> dict[str, Any]:
     if isinstance(extra, Mapping):
         message["extra_content"] = dict(extra)
     return message
+
+
+def _each_param(action: Action) -> Optional[Any]:
+    """The argument `each` fills: the first input file, else the first folder."""
+    for kind in (ParamKind.FILE, ParamKind.FOLDER):
+        for param in action.params:
+            if param.kind == kind:
+                return param
+    return None
+
+
+def _files_text(names: list[str], count: int) -> str:
+    """`11 files (a.m4a, b.m4a, c.m4a ...)` for the one question a batch asks."""
+    shown = ", ".join(names[:3]) + (" ..." if len(names) > 3 else "")
+    return f"{count} file{'s' if count != 1 else ''} ({shown})"
 
 
 def _overlap(runs: list[_Run]) -> bool:
