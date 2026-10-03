@@ -267,10 +267,11 @@ class TestWizards:
             "openrouter",  # main AI
             "or-key",
             "openrouter/free",
+            "google/gemini-2.5-flash-image",
             "gemini",  # fallback
             "g-key",
-            "gemini-2.5-flash",
-            "gpt-image-1",
+            "gemini-flash-latest",
+            "gemini-3.1-flash-image",
         ]
         with (
             patch.object(wizard_module.Prompt, "ask", side_effect=answers),
@@ -285,12 +286,14 @@ class TestWizards:
         assert saved["OPENROUTER_API_KEY"] == "or-key"
         assert saved["AI_FALLBACK_PROVIDER"] == "gemini"
         assert saved["GEMINI_API_KEY"] == "g-key"
-        assert saved["GEMINI_MODEL"] == "gemini-2.5-flash"
+        assert saved["GEMINI_MODEL"] == "gemini-flash-latest"
+        assert saved["GEMINI_IMAGE_MODEL"] == "gemini-3.1-flash-image"
+        assert saved["OPENROUTER_IMAGE_MODEL"] == "google/gemini-2.5-flash-image"
         assert saved["GRAB_QUALITY"] == "s"  # the rest of the file stays
         assert "Configuration updated successfully!" in _plain(result)
 
     def test_setup_without_a_fallback(self, isolated_config: Path) -> None:
-        answers = ["gemini", "g-key", "gemini-2.5-flash", "none", "gpt-image-1"]
+        answers = ["gemini", "g-key", "gemini-flash-latest", "", "none"]
         with (
             patch.object(wizard_module.Prompt, "ask", side_effect=answers),
             patch(LIST_MODELS, return_value=[]),

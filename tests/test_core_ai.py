@@ -1,10 +1,11 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from max_cli.common.exceptions import MaxError
 from max_cli.config import settings
-from max_cli.core.engines.ai_engine import AIEngine
+from max_cli.core.engines.ai_engine import AIEngine, image_source, save_image
 
 
 class TestAIEngine:
@@ -108,89 +109,76 @@ class TestAIEngine:
 
         assert engine.categorize_files(["a.mp3", "b.jpg"]) == expected
 
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_generate_image(self, mock_settings, mock_openai):
-        """Test image generation."""
-        mock_settings.OPENAI_API_KEY = "test-key"
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_settings.OLLAMA_ENABLED = False
+    @staticmethod
+    def _image_setup(monkeypatch) -> MagicMock:
+        """Gemini as the main AI with an image model; its client is a mock
+        whose images endpoint sends back a base64 PNG."""
+        from max_cli.core.engines import ai_providers
 
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = "Test prompt\n![image](https://example.com/image.png)"
+        for name, value in {
+            "AI_PROVIDER": "gemini",
+            "AI_FALLBACK_PROVIDER": "",
+            "GEMINI_API_KEY": "g-key",
+            "GEMINI_MODEL": "gemini-flash-latest",
+            "GEMINI_IMAGE_MODEL": "gemini-3.1-flash-image",
+        }.items():
+            monkeypatch.setattr(settings, name, value)
+        client = MagicMock()
+        picture = SimpleNamespace(b64_json="aGVsbG8=", url=None, media_type="image/png")
+        client.images.generate.return_value = SimpleNamespace(data=[picture])
+        monkeypatch.setattr(ai_providers, "_openai_client", lambda *args: client)
+        return client
 
-        mock_client.chat.completions.create.return_value = mock_response
+    def test_generate_image_uses_the_main_ais_image_model(self, monkeypatch):
+        client = self._image_setup(monkeypatch)
 
-        mock_openai.return_value = mock_client
+        result = AIEngine().generate_image("A test image")
 
-        engine = AIEngine()
-        engine._client = mock_client
+        assert result == "data:image/png;base64,aGVsbG8="
+        sent = client.images.generate.call_args.kwargs
+        assert sent["model"] == "gemini-3.1-flash-image"
+        assert sent["prompt"] == "A test image"
 
-        result = engine.generate_image("A test image")
+    def test_a_named_model_wins(self, monkeypatch):
+        client = self._image_setup(monkeypatch)
 
-        assert "https://example.com/image.png" in result
+        AIEngine().generate_image("A test image", model="gemini-3-pro-image")
 
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_generate_image_no_client(self, mock_settings, mock_openai):
-        """Test image generation without client."""
-        mock_settings.OPENAI_API_KEY = None
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_settings.OLLAMA_ENABLED = False
-        mock_openai.return_value = None
+        sent = client.images.generate.call_args.kwargs
+        assert sent["model"] == "gemini-3-pro-image"
 
-        engine = AIEngine()
+    def test_without_an_image_model_says_so(self, monkeypatch):
+        self._image_setup(monkeypatch)
+        monkeypatch.setattr(settings, "GEMINI_IMAGE_MODEL", "")
 
-        with (
-            patch("max_cli.core.engines.ai_providers.make_client", return_value=None),
-            pytest.raises(MaxError, match="AI Client not configured"),
+        with pytest.raises(
+            MaxError, match="No image model is set up for Google Gemini"
         ):
-            engine.generate_image("A test image")
+            AIEngine().generate_image("A test image")
 
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_extract_image_url_markdown(self, mock_settings, mock_openai):
-        """Test extracting image URL from markdown."""
-        mock_settings.OPENAI_API_KEY = "test-key"
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
-        mock_settings.OLLAMA_ENABLED = False
+    def test_image_source_prefers_a_link_then_the_data(self):
+        link = SimpleNamespace(
+            data=[SimpleNamespace(url="https://x/y.png", b64_json=None)]
+        )
+        data = SimpleNamespace(
+            data=[SimpleNamespace(url=None, b64_json="aGk=", media_type="image/webp")]
+        )
 
-        mock_client = MagicMock()
+        assert image_source(link) == "https://x/y.png"
+        assert image_source(data) == "data:image/webp;base64,aGk="
+        with pytest.raises(MaxError, match="sent no image"):
+            image_source(SimpleNamespace(data=[]))
 
-        mock_openai.return_value = mock_client
+    def test_save_image_decodes_a_data_url(self, tmp_path):
+        target = tmp_path / "out.png"
 
-        engine = AIEngine()
+        save_image("data:image/png;base64,aGVsbG8=", target)
 
-        content = "Check this image: (https://example.com/img.png)"
-        mock_response = MagicMock()
+        assert target.read_bytes() == b"hello"
+        assert not list(tmp_path.glob(".*.part"))
 
-        result = engine._extract_image_url(content, mock_response)
+    def test_save_image_downloads_a_link(self, tmp_path):
+        with patch("max_cli.core.engines.ai_engine.download_image") as download:
+            save_image("https://x/y.png", tmp_path / "out.png")
 
-        assert result == "https://example.com/img.png"
-
-    @patch("openai.OpenAI")
-    @patch("max_cli.core.engines.ai_engine.settings")
-    def test_extract_image_url_not_found(self, mock_settings, mock_openai):
-        """Test error when no image URL found."""
-        mock_settings.OPENAI_API_KEY = "test-key"
-        mock_settings.OLLAMA_ENABLED = False
-
-        mock_openai.return_value = MagicMock()
-
-        engine = AIEngine()
-
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = {}
-
-        with pytest.raises(MaxError, match="no image URL was found"):
-            engine._extract_image_url("No URL here", mock_response)
+        download.assert_called_once_with("https://x/y.png", tmp_path / "out.png")

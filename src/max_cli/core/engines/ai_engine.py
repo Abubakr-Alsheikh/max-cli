@@ -12,6 +12,7 @@ from max_cli.config import settings
 # Text formats semantic_search can read; other files are skipped.
 SEARCHABLE_SUFFIXES = {".txt", ".md", ".py", ".json", ".yaml", ".yml"}
 DOWNLOAD_CHUNK_SIZE = 8192
+DEFAULT_IMAGE_TYPE = "image/png"
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,42 @@ def download_image(url: str, destination: Path) -> Path:
             with open(temp_path, "wb") as image_file:
                 for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                     image_file.write(chunk)
+        temp_path.replace(destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return destination
+
+
+def image_source(response: Any) -> str:
+    """Where an images-endpoint reply put the picture: a link, or the image
+    itself as a `data:` URL (the `b64_json` most providers send)."""
+    data = getattr(response, "data", None) or []
+    if not data:
+        raise MaxError("The AI answered, but sent no image.")
+    first = data[0]
+    if getattr(first, "url", None):
+        return str(first.url)
+    if getattr(first, "b64_json", None):
+        media = getattr(first, "media_type", None) or DEFAULT_IMAGE_TYPE
+        return f"data:{media};base64,{first.b64_json}"
+    raise MaxError("The AI answered, but sent no image.")
+
+
+def save_image(source: str, destination: Path) -> Path:
+    """Write the image `generate_image` returned: download a link, or decode
+    a `data:` URL. Never leaves a partial file."""
+    import base64
+    import binascii
+
+    if not source.startswith("data:"):
+        return download_image(source, destination)
+    try:
+        raw = base64.b64decode(source.split(",", 1)[1], validate=True)
+    except (IndexError, binascii.Error) as e:
+        raise MaxError(f"The image the AI sent can't be read: {e}") from e
+    temp_path = destination.with_name(f".{destination.name}.part")
+    try:
+        temp_path.write_bytes(raw)
         temp_path.replace(destination)
     finally:
         temp_path.unlink(missing_ok=True)
@@ -219,78 +256,47 @@ class AIEngine:
         except Exception as e:
             raise MaxError(f"AI Vision Error: {str(e)}") from e
 
-    def generate_image(self, prompt: str, model: Optional[str] = None) -> str:
-        """
-        Generates an image. Uses the dedicated IMAGE_MODEL by default.
-        """
-        if not self.client:
-            raise MaxError("AI Client not configured.")
+    def _image_client(self, model: Optional[str]) -> Any:
+        """The main AI and its fallback with their image models (or `model`).
 
-        target_model = model or settings.AI_IMAGE_MODEL
+        Raises MaxError when neither has an image model set up.
+        """
+        from max_cli.core.engines.ai_providers import main_provider, make_client
 
-        try:
-            response = self.client.chat.completions.create(
-                model=target_model, messages=[{"role": "user", "content": prompt}]
+        client = make_client(image=True, model=model)
+        if client is None:
+            raise MaxError(
+                f"No image model is set up for {main_provider().label}. Pick one "
+                "on the dashboard's Settings page (,), or pass --model."
             )
+        return client
 
-            content = response.choices[0].message.content
-            return self._extract_image_url(content, response)
+    def generate_image(self, prompt: str, model: Optional[str] = None) -> str:
+        """An image from a prompt, made through the images endpoint by the main
+        AI's image model (the fallback's when it fails), or by `model`.
+
+        Returns a link, or a `data:` URL holding the image; `save_image`
+        writes either to a file.
+        """
+        client = self._image_client(model)
+        try:
+            response = client.images.generate(prompt=prompt, n=1)
         except Exception as e:
-            raise MaxError(f"Image Generation Failed using {target_model}: {e}") from e
+            raise MaxError(f"Image generation failed using {client.model}: {e}") from e
+        return image_source(response)
 
     def edit_image(
         self, image_path: Path, prompt: str, model: Optional[str] = None
     ) -> str:
-        """
-        Edits an image. Uses the dedicated IMAGE_MODEL by default.
-        """
-        if not self.client:
-            raise MaxError("AI Client not configured.")
-
-        target_model = model or settings.AI_IMAGE_MODEL
-        base64_img = encode_image_to_base64(image_path)
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"},
-                    },
-                ],
-            }
-        ]
-
+        """`image_path` changed as `prompt` asks, by the image model
+        `generate_image` uses."""
+        client = self._image_client(model)
         try:
-            response = self.client.chat.completions.create(
-                model=target_model, messages=messages
-            )
-            content = response.choices[0].message.content
-            return self._extract_image_url(content, response)
+            with open(image_path, "rb") as image_file:
+                response = client.images.edit(image=image_file, prompt=prompt, n=1)
         except Exception as e:
-            raise MaxError(f"Image Editing Failed using {target_model}: {e}") from e
-
-    def _extract_image_url(self, content: str, raw_response: Any) -> str:
-        """
-        Helper to find image URL in Nano Banana response.
-        """
-        import re
-
-        match = re.search(r"\((https?://[^\s)]+)\)", content)
-        if match:
-            return match.group(1)
-
-        url_match = re.search(r"https?://[^\s]+", content)
-        if url_match:
-            return url_match.group(0)
-
-        raw_dict = raw_response.model_dump()
-        if "images" in raw_dict and raw_dict["images"]:
-            return raw_dict["images"][0].get("url")
-
-        raise MaxError("AI generated a response, but no image URL was found.")
+            raise MaxError(f"Image editing failed using {client.model}: {e}") from e
+        return image_source(response)
 
     def semantic_search(self, query: str, files: list[Path]) -> list[dict[str, Any]]:
         """

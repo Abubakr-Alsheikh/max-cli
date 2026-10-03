@@ -149,10 +149,11 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
 - **AI:** two slots, **Main AI** and **Fallback**. In each, pick a provider (OpenAI or compatible, OpenRouter, Google Gemini, Ollama, or no fallback), and the slot shows only what that provider needs:
   - its **API key** (hidden; press Show), with where to get one; Ollama needs none;
   - a **URL** for an OpenAI-compatible service, or where Ollama runs;
-  - the **model**, picked from the list the provider offers your key (Reload list reads it again). Until the list loads, a few known models are offered. OpenRouter and Gemini start with no model: pick one.
+  - the **model**: type any name (suggestions from the provider's list complete as you type), or press **Browse...** for the provider's list, searchable: type part of a name ("flash", "5 mini"), move with the arrows, Enter picks. A name the list doesn't show can be typed and picked too. Until the list loads, a few known models are offered; for Gemini the `-latest` names (`gemini-flash-latest`, `gemini-pro-latest`) follow Google's newest release. OpenRouter and Gemini start with no model.
+  - the **image model** for `max ai create` and `edit`, picked the same way from the provider's image models (Gemini's Nano Banana `gemini-3.1-flash-image`, for example). Leave it empty and that provider makes no images. Ollama has none.
   - **Test** sends one tiny request with what's on screen, before you save, and says "✓ Works" or what's wrong ("no credit left (402)", "quota or rate limit reached (429)", "the API key is wrong (401)").
 
-  The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. The **image model** for `max ai create` and `edit` sits below.
+  The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. Images follow the same main AI and fallback: `max ai create` uses the main AI's image model, and the fallback's when the main one fails.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.

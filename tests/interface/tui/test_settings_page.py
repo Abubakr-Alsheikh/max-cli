@@ -43,7 +43,7 @@ def restore_settings(monkeypatch):
         setattr(settings, name, value)
 
 
-LISTED_MODELS = ["gpt-5-mini", "gpt-5-nano"]
+LISTED_MODELS = ["gpt-5-mini", "gpt-5-nano", "gpt-image-1", "text-embedding-3"]
 
 
 @pytest.fixture(autouse=True)
@@ -62,11 +62,14 @@ def known_ai(monkeypatch):
         "OPENROUTER_MODEL": "",
         "GEMINI_API_KEY": None,
         "GEMINI_MODEL": "",
+        "AI_IMAGE_MODEL": "gpt-image-1",
+        "GEMINI_IMAGE_MODEL": "",
+        "OPENROUTER_IMAGE_MODEL": "",
         "OLLAMA_ENABLED": False,
     }.items():
         monkeypatch.setattr(settings, name, value)
     monkeypatch.setattr(
-        ai_providers, "list_models", lambda provider, key=None, url=None: LISTED_MODELS
+        ai_providers, "all_models", lambda provider, key=None, url=None: LISTED_MODELS
     )
 
 
@@ -410,32 +413,41 @@ async def test_a_slot_shows_only_its_providers_fields(provider, key_shown, url_s
 
 
 @pytest.mark.asyncio
-async def test_the_model_is_picked_from_the_providers_list():
+async def test_browse_searches_the_providers_models_and_picks_one():
+    from max_cli.interface.tui.widgets.model_picker import ModelPicker
+
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
-        model = app.query_one("#slot-main-model", Select)
-        await wait_until(pilot, lambda: len(model._options) > len(LISTED_MODELS))
-        model.value = "gpt-5-mini"
+        app.query_one("#slot-main-browse", Button).press()
+        await wait_until(pilot, lambda: isinstance(app.screen, ModelPicker))
+        picker = app.screen
+        await wait_until(pilot, lambda: bool(picker.query("#mp-list")))
+        picker.query_one("#mp-search", Input).value = "5 mini"
+        options = picker.query_one("#mp-list")
+        await wait_until(pilot, lambda: options.option_count == 1)
+        await pilot.press("enter")
+        await wait_until(pilot, lambda: not isinstance(app.screen, ModelPicker))
         await pilot.pause()
+        model = app.query_one("#slot-main-model", Input).value
         pending = app.query_one(SettingsPanel).changes()
 
+    assert model == "gpt-5-mini"
     assert pending == {"AI_MODEL": "gpt-5-mini"}
 
 
 @pytest.mark.asyncio
-async def test_a_fallback_with_its_key_and_model_is_saved():
+async def test_a_fallback_with_its_key_and_models_is_saved():
     app = SettingsApp()
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
         app.query_one("#slot-fallback-provider", Select).value = "gemini"
         await _settle(app, pilot)
         app.query_one("#slot-fallback-key", Input).value = "g-key"
-        model = app.query_one("#slot-fallback-model", Select)
-        await wait_until(pilot, lambda: ("gpt-5-mini", "gpt-5-mini") in model._options)
-        model.value = "gpt-5-mini"
+        app.query_one("#slot-fallback-model", Input).value = "gemini-flash-latest"
+        app.query_one("#slot-fallback-image", Input).value = "gemini-3.1-flash-image"
         panel = app.query_one(SettingsPanel)
-        await wait_until(pilot, lambda: "GEMINI_MODEL" in panel.changes())
+        await wait_until(pilot, lambda: "GEMINI_IMAGE_MODEL" in panel.changes())
         save = app.query_one("#btn-save-settings", Button)
         save.press()
         await _settle(app, pilot)
@@ -443,7 +455,8 @@ async def test_a_fallback_with_its_key_and_model_is_saved():
     saved = read_settings_file()
     assert saved["AI_FALLBACK_PROVIDER"] == "gemini"
     assert saved["GEMINI_API_KEY"] == "g-key"
-    assert saved["GEMINI_MODEL"] == "gpt-5-mini"
+    assert saved["GEMINI_MODEL"] == "gemini-flash-latest"
+    assert saved["GEMINI_IMAGE_MODEL"] == "gemini-3.1-flash-image"
     assert "OPENAI_API_KEY" not in saved  # the main AI didn't change
     assert settings.AI_FALLBACK_PROVIDER == "gemini"
 
@@ -561,3 +574,51 @@ async def test_a_provider_without_a_model_asks_for_one():
         status = str(app.query_one("#slot-main-status", Static).content)
 
     assert "Pick a model" in status or "models available" in status
+
+
+@pytest.mark.asyncio
+async def test_a_model_the_list_lacks_can_be_typed_in_the_picker():
+    from max_cli.interface.tui.widgets.model_picker import ModelPicker
+
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-browse", Button).press()
+        await wait_until(pilot, lambda: isinstance(app.screen, ModelPicker))
+        picker = app.screen
+        await wait_until(pilot, lambda: bool(picker.query("#mp-search")))
+        picker.query_one("#mp-search", Input).value = "my-own-model"
+        hint = picker.query_one("#mp-hint", Static)
+        await wait_until(pilot, lambda: "No match" in str(hint.content))
+        await pilot.press("enter")
+        await wait_until(pilot, lambda: not isinstance(app.screen, ModelPicker))
+        await pilot.pause()
+
+        assert app.query_one("#slot-main-model", Input).value == "my-own-model"
+
+
+@pytest.mark.asyncio
+async def test_the_image_picker_lists_image_models_only():
+    from max_cli.interface.tui.widgets.model_picker import ModelPicker
+
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        slot = app.query_one("#ai-slot-main")
+        await wait_until(pilot, lambda: slot._drafts["openai"].listed)
+        app.query_one("#slot-main-image-browse", Button).press()
+        await wait_until(pilot, lambda: isinstance(app.screen, ModelPicker))
+        names = app.screen._models
+
+    assert names == ["gpt-image-1"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_has_no_image_model():
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        app.query_one("#slot-main-provider", Select).value = "ollama"
+        await _settle(app, pilot)
+
+        assert not app.query_one("#ai-slot-main .slot-image").display

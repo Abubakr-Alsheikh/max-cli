@@ -15,9 +15,9 @@ GLOBAL_CONFIG_PATH = Path.home() / ".max_config.env"
 
 # Per provider: the model to suggest.
 DEFAULT_MODELS = {
-    "openai": "gpt-5-nano",
+    "openai": "gpt-6-luna",
     "openrouter": "openrouter/free",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-flash-latest",  # follows Google's newest Flash
     "ollama": "llama3.1",
 }
 NO_FALLBACK = "none"
@@ -26,7 +26,7 @@ MODELS_SHOWN = 15  # model names the wizard lists before asking
 
 def _ask_provider(changes: dict[str, Optional[str]], name: str) -> None:
     """A provider's key (or Ollama's URL) and model, into `changes`."""
-    from max_cli.core.engines.ai_providers import PROVIDERS
+    from max_cli.core.engines.ai_providers import PROVIDERS, SUGGESTED_IMAGE_MODELS
 
     provider = PROVIDERS[name]
     if name == "ollama":
@@ -55,6 +55,17 @@ def _ask_provider(changes: dict[str, Optional[str]], name: str) -> None:
     changes[provider.model_setting] = Prompt.ask(
         f"{provider.label} model", default=default or DEFAULT_MODELS[name]
     )
+    if provider.image_setting:
+        known = ", ".join(SUGGESTED_IMAGE_MODELS.get(name, ()))
+        if known:
+            console.print(f"[dim]Image models: {known}[/dim]")
+        changes[provider.image_setting] = (
+            Prompt.ask(
+                f"{provider.label} image model for max ai create (empty: none)",
+                default=provider.image_model(),
+            ).strip()
+            or None
+        )
 
 
 def _show_models(provider: Any, key: Optional[str], url: Optional[str]) -> None:
@@ -116,9 +127,6 @@ def setup_config():
     if fallback != NO_FALLBACK:
         _ask_provider(changes, fallback)
 
-    changes["AI_IMAGE_MODEL"] = Prompt.ask(
-        "Image model (create and edit)", default=settings.AI_IMAGE_MODEL
-    )
     try:
         update_settings_file(changes, GLOBAL_CONFIG_PATH)
     except OSError as e:

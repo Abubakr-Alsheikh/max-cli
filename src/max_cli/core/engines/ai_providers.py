@@ -31,6 +31,9 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 OLLAMA_KEY = "ollama"  # Ollama ignores the key, but the client needs one
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 CHECK_PROMPT = "Reply with the word OK."
+CHAT_API = "chat.completions.create"
+IMAGES_GENERATE = "images.generate"
+IMAGES_EDIT = "images.edit"
 CHECK_MAX_TOKENS = 5
 
 
@@ -42,6 +45,7 @@ class Provider:
     model_setting: str
     url: str = ""  # a fixed endpoint; "" reads url_setting
     url_setting: str = ""
+    image_setting: str = ""  # the image model's setting; "" for no images
 
     def key(self) -> Optional[str]:
         if not self.key_setting:
@@ -66,6 +70,15 @@ class Provider:
     def model(self) -> str:
         return str(getattr(settings, self.model_setting) or "")
 
+    def image_model(self) -> str:
+        """The model `max ai create` and `edit` use; "" when none."""
+        if not self.image_setting:
+            return ""
+        return str(getattr(settings, self.image_setting) or "")
+
+    def model_for(self, image: bool) -> str:
+        return self.image_model() if image else self.model()
+
     def is_set_up(self) -> bool:
         """It has a key (Ollama needs none) and a model."""
         return bool(self.key()) and bool(self.model())
@@ -86,6 +99,7 @@ PROVIDERS: dict[str, Provider] = {
         "OPENAI_API_KEY",
         "AI_MODEL",
         url_setting="OPENAI_BASE_URL",
+        image_setting="AI_IMAGE_MODEL",
     ),
     OPENROUTER: Provider(
         OPENROUTER,
@@ -93,9 +107,15 @@ PROVIDERS: dict[str, Provider] = {
         "OPENROUTER_API_KEY",
         "OPENROUTER_MODEL",
         OPENROUTER_URL,
+        image_setting="OPENROUTER_IMAGE_MODEL",
     ),
     GEMINI: Provider(
-        GEMINI, "Google Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", GEMINI_URL
+        GEMINI,
+        "Google Gemini",
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL",
+        GEMINI_URL,
+        image_setting="GEMINI_IMAGE_MODEL",
     ),
     OLLAMA: Provider(
         OLLAMA,
@@ -106,14 +126,40 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }
 # Offered when a provider's own list can't be read (no key yet, offline).
+# Checked against the providers' docs on 2026-10-03; the live list wins.
 SUGGESTED_MODELS: dict[str, tuple[str, ...]] = {
-    OPENAI: ("gpt-5-nano", "gpt-5-mini", "gpt-5"),
+    OPENAI: ("gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"),
     OPENROUTER: ("openrouter/free", "openrouter/auto"),
-    GEMINI: ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"),
+    # The -latest aliases follow Google's newest release of each family.
+    GEMINI: (
+        "gemini-flash-latest",
+        "gemini-pro-latest",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+    ),
     OLLAMA: ("llama3.1", "qwen2.5", "mistral"),
 }
+SUGGESTED_IMAGE_MODELS: dict[str, tuple[str, ...]] = {
+    OPENAI: ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst"),
+    OPENROUTER: (
+        "google/gemini-2.5-flash-image",
+        "openai/gpt-image-2",
+        "black-forest-labs/flux.2-pro",
+    ),
+    # Nano Banana 2, its Lite, Nano Banana Pro, Nano Banana.
+    GEMINI: (
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image",
+        "gemini-2.5-flash-image",
+    ),
+    OLLAMA: (),
+}
+# Model ids that make images, for the image model list.
+IMAGE_WORDS = ("image", "imagen", "dall-e", "flux", "seedream")
 # Model ids that aren't chat models, left out of a provider's list.
 NOT_CHAT = (
+    *IMAGE_WORDS,
     "embedding",
     "embed",
     "tts",
@@ -122,11 +168,9 @@ NOT_CHAT = (
     "audio",
     "realtime",
     "moderation",
-    "dall-e",
-    "image",
-    "imagen",
     "aqa",
     "veo",
+    "lyria",
 )
 
 
@@ -145,11 +189,7 @@ def fallback_provider() -> Optional[Provider]:
 
 def provider_chain() -> list[Provider]:
     """The providers to try in order, those with a key only."""
-    chain = [main_provider()]
-    fallback = fallback_provider()
-    if fallback is not None:
-        chain.append(fallback)
-    return [provider for provider in chain if provider.is_set_up()]
+    return [provider for provider in _main_and_fallback() if provider.is_set_up()]
 
 
 def _openai_client(
@@ -161,18 +201,35 @@ def _openai_client(
     return OpenAI(api_key=key or provider.key(), base_url=provider.base_url(url))
 
 
-def list_models(
+def all_models(
     provider: Provider, key: Optional[str] = None, url: Optional[str] = None
 ) -> list[str]:
-    """The chat models the provider offers this key, sorted. Raises the
-    openai error when it can't list them."""
+    """Every model the provider offers this key, sorted ([] without a key).
+    Raises the openai error when it can't list them."""
     if provider.key_setting and not (key or provider.key()):
         return []
     found = _openai_client(provider, key, url).models.list()
-    names = {str(model.id).removeprefix("models/") for model in found}
-    return sorted(
-        name for name in names if not any(word in name.lower() for word in NOT_CHAT)
-    )
+    return sorted({str(model.id).removeprefix("models/") for model in found})
+
+
+def chat_models(names: list[str]) -> list[str]:
+    return [name for name in names if not any(w in name.lower() for w in NOT_CHAT)]
+
+
+def image_models(names: list[str]) -> list[str]:
+    return [name for name in names if any(w in name.lower() for w in IMAGE_WORDS)]
+
+
+def list_models(
+    provider: Provider,
+    key: Optional[str] = None,
+    url: Optional[str] = None,
+    image: bool = False,
+) -> list[str]:
+    """The chat models (or with `image`, the image models) the provider
+    offers this key, sorted."""
+    names = all_models(provider, key, url)
+    return image_models(names) if image else chat_models(names)
 
 
 class _Completions:
@@ -180,7 +237,7 @@ class _Completions:
         self._owner = owner
 
     def create(self, **request: Any) -> Any:
-        return self._owner.complete(**request)
+        return self._owner.call(CHAT_API, **request)
 
 
 class _Chat:
@@ -188,29 +245,59 @@ class _Chat:
         self.completions = _Completions(owner)
 
 
-class FallbackClient:
-    """`client.chat.completions.create(...)` across the main provider and
-    the fallback. Each provider uses its own model: the `model` a caller
-    passes is ignored. `last_provider` and `last_model` say who answered."""
+class _Images:
+    """The images endpoint: OpenAI, Gemini and OpenRouter all make images
+    there, not through chat."""
 
-    def __init__(self, providers: list[Provider]) -> None:
+    def __init__(self, owner: "FallbackClient") -> None:
+        self._owner = owner
+
+    def generate(self, **request: Any) -> Any:
+        return self._owner.call(IMAGES_GENERATE, **request)
+
+    def edit(self, **request: Any) -> Any:
+        return self._owner.call(IMAGES_EDIT, **request)
+
+
+class FallbackClient:
+    """`client.chat.completions.create(...)` and `client.images.generate(...)`
+    / `.edit(...)` across the main provider and the fallback. Each provider
+    uses its own model: the `model` a caller passes is ignored.
+    `last_provider` says who answered."""
+
+    def __init__(
+        self,
+        providers: list[Provider],
+        image: bool = False,
+        model: Optional[str] = None,
+    ) -> None:
+        """`image` sends each provider its image model; `model` names one
+        model for every provider (`max ai create -m`)."""
         self.providers = providers
+        self.image = image
+        self._model = model
         self._clients: dict[str, Any] = {}
         self._start = 0  # the provider that worked last
         self.last_provider: Provider = providers[0]
         self.chat = _Chat(self)
+        self.images = _Images(self)
+
+    def _model_of(self, provider: Provider) -> str:
+        return self._model or provider.model_for(self.image)
 
     @property
     def model(self) -> str:
         """The model the next request goes to."""
-        return self.providers[self._start].model()
+        return self._model_of(self.providers[self._start])
 
     def _client(self, provider: Provider) -> Any:
         if provider.name not in self._clients:
             self._clients[provider.name] = _openai_client(provider)
         return self._clients[provider.name]
 
-    def complete(self, **request: Any) -> Any:
+    def call(self, api: str, **request: Any) -> Any:
+        """`api` ("chat.completions.create", "images.generate" ...) on the
+        provider that worked last, then on the next ones when it fails."""
         from openai import APIError
 
         request.pop("model", None)
@@ -218,9 +305,10 @@ class FallbackClient:
         for index in tries:
             provider = self.providers[index]
             try:
-                response = self._client(provider).chat.completions.create(
-                    model=provider.model(), **request
-                )
+                method = self._client(provider)
+                for part in api.split("."):
+                    method = getattr(method, part)
+                response = method(model=self._model_of(provider), **request)
             except APIError as e:
                 if index == tries[-1]:
                     raise  # the last provider failed too
@@ -243,11 +331,26 @@ class FallbackClient:
         return self.last_provider.name != self.providers[0].name
 
 
-def make_client() -> Optional[FallbackClient]:
+def make_client(
+    image: bool = False, model: Optional[str] = None
+) -> Optional[FallbackClient]:
     """A client over the main provider and the fallback; None when neither
-    has a key."""
-    chain = provider_chain()
-    return FallbackClient(chain) if chain else None
+    is set up. `image` uses their image models (only providers that have
+    one); `model` names a model for every provider."""
+    if not image:
+        chain = provider_chain()
+    else:
+        chain = [
+            provider
+            for provider in _main_and_fallback()
+            if provider.key() and (model or provider.image_model())
+        ]
+    return FallbackClient(chain, image=image, model=model) if chain else None
+
+
+def _main_and_fallback() -> list[Provider]:
+    fallback = fallback_provider()
+    return [main_provider(), *([fallback] if fallback is not None else [])]
 
 
 def chat_model() -> str:

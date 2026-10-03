@@ -259,24 +259,23 @@ def edit_image(
             log_error(str(e))
 
 
-def _handle_image_result(url: str, output_path: Optional[Path], default_name: str):
-    """Helper to display URL and download image."""
+def _handle_image_result(source: str, output_path: Optional[Path], default_name: str):
+    """Save the image the AI made: a link is downloaded, a `data:` URL
+    (most providers send the image itself) is decoded."""
     import requests
 
-    from max_cli.core.engines.ai_engine import download_image
+    from max_cli.core.engines.ai_engine import save_image
 
     console.print("\n[green]Image Ready![/green]")
-    console.print(f"🔗 [link={url}]View Online[/link]")
-
-    # Auto-download
+    if not source.startswith("data:"):
+        console.print(f"🔗 [link={source}]View Online[/link]")
     final_path = output_path or Path.cwd() / default_name
-
     try:
-        with console.status(f"[dim]Downloading to {final_path.name}...[/dim]"):
-            download_image(url, final_path)
+        with console.status(f"[dim]Saving {final_path.name}...[/dim]"):
+            save_image(source, final_path)
         log_success(f"Saved to: [bold]{final_path}[/bold]")
-    except (requests.RequestException, OSError) as e:
-        console.print(f"[yellow]Could not auto-download: {e}[/yellow]")
+    except (requests.RequestException, OSError, MaxError) as e:
+        console.print(f"[yellow]Could not save the image: {e}[/yellow]")
 
 
 @app.command("chat")

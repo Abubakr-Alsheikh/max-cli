@@ -45,19 +45,8 @@ class SettingField:
 
 
 CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
-    (
-        "AI",
-        "settings-ai",
-        (
-            SettingField(
-                "AI_IMAGE_MODEL",
-                "Image model",
-                "text",
-                "For max ai create and edit: an image model of the main AI.",
-                wide=True,
-            ),
-        ),
-    ),
+    # The AI card holds the two AI slots (widgets/ai_slot.py), no fields.
+    ("AI", "settings-ai", ()),
     (
         "DOWNLOADS",
         "settings-downloads",
@@ -286,9 +275,10 @@ class SettingsPanel(Vertical):
                 if card_id == "settings-ai":
                     yield AISlot(MAIN, id="ai-slot-main")
                     yield AISlot(FALLBACK, id="ai-slot-fallback")
-                with Grid(classes="settings-grid"):
-                    for field in fields:
-                        yield self._field(field)
+                if fields:
+                    with Grid(classes="settings-grid"):
+                        for field in fields:
+                            yield self._field(field)
         with Horizontal(id="settings-bar"):
             yield Button("Save changes", id="btn-save-settings", variant="success")
             yield Button("Discard", id="btn-discard-settings")

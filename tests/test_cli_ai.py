@@ -247,7 +247,7 @@ class TestCreateAndEdit:
             )
 
         assert result.exit_code == 0, result.output
-        assert "Could not auto-download: disk full" in _plain(result)
+        assert "Could not save the image: disk full" in _plain(result)
 
     def test_create_engine_error_is_reported(self) -> None:
         engine = MagicMock()

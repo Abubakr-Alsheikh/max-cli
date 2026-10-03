@@ -227,3 +227,35 @@ def test_check_says_what_works(monkeypatch, error, expected):
 
 def test_check_without_a_key_says_so():
     assert check(ai_providers.PROVIDERS["openrouter"]) == "no API key"
+
+
+def test_image_requests_use_each_providers_image_model(monkeypatch):
+    main, fallback = (
+        FakeProvider(_api_error(openai.APIStatusError, "x", 429)),
+        FakeProvider("img"),
+    )
+    monkeypatch.setattr(settings, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "gemini")
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "or-key")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "g-key")
+    monkeypatch.setattr(
+        settings, "OPENROUTER_IMAGE_MODEL", "google/gemini-2.5-flash-image"
+    )
+    monkeypatch.setattr(settings, "GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+    fakes = {"openrouter": main, "gemini": fallback}
+    monkeypatch.setattr(ai_providers, "_openai_client", lambda p: fakes[p.name])
+
+    client = make_client(image=True)
+
+    assert client.chat.completions.create(messages=[]) == "img"
+    assert main.models == ["google/gemini-2.5-flash-image"]
+    assert fallback.models == ["gemini-3.1-flash-image"]
+
+
+def test_a_provider_without_an_image_model_is_left_out_of_images(monkeypatch):
+    monkeypatch.setattr(settings, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "g-key")
+    monkeypatch.setattr(settings, "GEMINI_IMAGE_MODEL", "")
+
+    assert make_client(image=True) is None
+    assert make_client(image=True, model="gemini-3-pro-image") is not None

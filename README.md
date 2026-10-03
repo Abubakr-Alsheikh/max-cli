@@ -670,7 +670,7 @@ GEMINI_MODEL=gemini-2.5-flash
 
 # OpenAI, or any URL that speaks its API
 OPENAI_API_KEY=sk-...
-AI_MODEL=gpt-5-nano
+AI_MODEL=gpt-6-luna
 
 # Default settings
 DEFAULT_QUALITY=80

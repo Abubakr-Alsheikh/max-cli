@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
     # Models
-    AI_MODEL: str = "gpt-5-nano"  # For 'ask', 'chat', 'analyze'
-    AI_IMAGE_MODEL: str = "gpt-image-1"  # For 'create', 'edit'
+    # OpenAI's (or OPENAI_BASE_URL's) chat and image models
+    AI_MODEL: str = "gpt-6-luna"
+    AI_IMAGE_MODEL: str = "gpt-image-2.5-flare"
 
     # Main provider and fallback: openai, openrouter, gemini or ollama
     # (core/engines/ai_providers.py). An empty AI_PROVIDER keeps what older
@@ -52,6 +53,9 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = ""  # picked on the Settings page
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = ""
+    # Image models per provider (OpenAI's is AI_IMAGE_MODEL); "" for none.
+    OPENROUTER_IMAGE_MODEL: str = ""
+    GEMINI_IMAGE_MODEL: str = ""
 
     # Ollama Configuration
     OLLAMA_ENABLED: bool = False
@@ -67,7 +71,9 @@ class Settings(BaseSettings):
     # New: Default path and type for downloads
     GRAB_DEFAULT_PATH: Path = Path.home() / "Max Downloads"
     GRAB_DEFAULT_TYPE: str = "video"  # "video" or "audio"
-    GRAB_MAX_CONCURRENT: int = Field(default=3, ge=1, le=8)  # dashboard downloads at once
+    GRAB_MAX_CONCURRENT: int = Field(
+        default=3, ge=1, le=8
+    )  # dashboard downloads at once
 
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]

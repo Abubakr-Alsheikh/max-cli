@@ -2,7 +2,9 @@
 
 Pick a provider, and the slot shows only what that provider needs: its API
 key (none for Ollama), a URL (a custom OpenAI-compatible service, or where
-Ollama runs) and the model, picked from the list the provider offers that
+Ollama runs), the model, and the image model `max ai create` and `edit`
+use. A model is typed (with suggestions from the provider's list) or
+picked with Browse..., a searchable list of what the provider offers that
 key. The slot keeps what you type per provider, so switching to another
 provider and back loses nothing, and it saves only the chosen provider's
 settings. Test sends one tiny request with the values on screen, before
@@ -17,6 +19,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.message import Message
+from textual.suggester import SuggestFromList
 from textual.timer import Timer
 from textual.widgets import Button, Input, Label, Select, Static
 
@@ -27,6 +30,7 @@ from max_cli.core.engines.ai_providers import (
     OPENROUTER,
     OPENROUTER_URL,
     PROVIDERS,
+    SUGGESTED_IMAGE_MODELS,
     SUGGESTED_MODELS,
     Provider,
 )
@@ -58,8 +62,19 @@ class Draft:
     key: str = ""
     url: str = ""
     model: str = ""
-    models: list[str] = field(default_factory=list)  # the provider's own list
-    listed: bool = False  # `models` came from the provider
+    image: str = ""  # the image model
+    models: list[str] = field(default_factory=list)  # the provider's chat models
+    image_models: list[str] = field(default_factory=list)
+    listed: bool = False  # the lists came from the provider
+
+    def choices(self, name: str, image: bool) -> list[str]:
+        """The provider's list, or known models until it's read; the current
+        one first when the list lacks it."""
+        known = SUGGESTED_IMAGE_MODELS if image else SUGGESTED_MODELS
+        listed = self.image_models if image else self.models
+        names = listed or list(known.get(name, ()))
+        current = self.image if image else self.model
+        return [current, *names] if current and current not in names else names
 
 
 def slot_settings() -> frozenset[str]:
@@ -67,7 +82,15 @@ def slot_settings() -> frozenset[str]:
     names = set(ROLE_SETTINGS.values())
     for provider in PROVIDERS.values():
         names |= {provider.model_setting}
-        names |= {name for name in (provider.key_setting, provider.url_setting) if name}
+        names |= {
+            name
+            for name in (
+                provider.key_setting,
+                provider.url_setting,
+                provider.image_setting,
+            )
+            if name
+        }
     return frozenset(names)
 
 
@@ -87,7 +110,12 @@ def saved_draft(provider: Provider) -> Draft:
     from max_cli.config import settings
 
     key = getattr(settings, provider.key_setting) if provider.key_setting else ""
-    return Draft(key=key or "", url=provider.saved_url(), model=provider.model())
+    return Draft(
+        key=key or "",
+        url=provider.saved_url(),
+        model=provider.model(),
+        image=provider.image_model(),
+    )
 
 
 class AISlot(Vertical):
@@ -130,7 +158,8 @@ class AISlot(Vertical):
         width: 1fr;
         padding: 1 1 0 1;
     }
-    AISlot .slot-fields.-hidden, AISlot .slot-key.-hidden, AISlot .slot-url.-hidden {
+    AISlot .slot-fields.-hidden, AISlot .slot-key.-hidden,
+    AISlot .slot-url.-hidden, AISlot .slot-image.-hidden {
         display: none;
     }
     """
@@ -177,13 +206,22 @@ class AISlot(Vertical):
                 yield Input(id=self._part_id("url"))
             yield Label("MODEL", classes="slot-label")
             with Horizontal(classes="slot-row"):
-                yield Select(
-                    [],
-                    prompt="Pick a model",
-                    allow_blank=True,
+                yield Input(
+                    placeholder="Type a model name, or Browse...",
                     id=self._part_id("model"),
                 )
-                yield Button("Reload list", id=self._part_id("reload"))
+                yield Button("Browse...", id=self._part_id("browse"))
+            with Vertical(classes="slot-image"):
+                yield Label(
+                    "IMAGE MODEL (FOR MAX AI CREATE AND EDIT; OPTIONAL)",
+                    classes="slot-label",
+                )
+                with Horizontal(classes="slot-row"):
+                    yield Input(
+                        placeholder="Empty: no images from this provider",
+                        id=self._part_id("image"),
+                    )
+                    yield Button("Browse...", id=self._part_id("image-browse"))
             with Horizontal(classes="slot-row"):
                 yield Static("", classes="slot-status", id=self._part_id("status"))
                 yield Button("Test", id=self._part_id("test"))
@@ -239,6 +277,8 @@ class AISlot(Vertical):
             needs_url = bool(provider.url_setting)
             self.query_one(".slot-key").set_class(not needs_key, "-hidden")
             self.query_one(".slot-url").set_class(not needs_url, "-hidden")
+            hidden = not provider.image_setting
+            self.query_one(".slot-image").set_class(hidden, "-hidden")
             key = self._part("key", Input)
             key.value = draft.key
             key.placeholder = KEY_HINTS.get(name, "")
@@ -250,16 +290,18 @@ class AISlot(Vertical):
         self._status_for(provider)
 
     def _show_models(self, name: str) -> None:
+        """The model boxes: the draft's names, suggestions from the lists."""
         draft = self._drafts[name]
-        names = draft.models or list(SUGGESTED_MODELS.get(name, ()))
-        if draft.model and draft.model not in names:
-            names = [draft.model, *names]
-        select = self._part("model", Select)
-        select.set_options([(model, model) for model in names])
-        if draft.model:
-            select.value = draft.model
-        else:
-            select.clear()
+        for part, value, image in (
+            ("model", draft.model, False),
+            ("image", draft.image, True),
+        ):
+            box = self._part(part, Input)
+            box.suggester = SuggestFromList(
+                draft.choices(name, image), case_sensitive=False
+            )
+            if box.value != value:
+                box.value = value
 
     def _status_for(self, provider: Optional[Provider]) -> None:
         if provider is None:
@@ -271,7 +313,10 @@ class AISlot(Vertical):
         elif not draft.model:
             self._status("Pick a model.", "$warning")
         elif draft.listed:
-            self._status(f"{len(draft.models)} models available.", "$text-muted")
+            self._status(
+                f"{len(draft.models)} models available: Browse... to search them.",
+                "$text-muted",
+            )
         else:
             self._status("Test checks the key and model.", "$text-muted")
 
@@ -292,6 +337,7 @@ class AISlot(Vertical):
             (provider.key_setting, draft.key, saved.key),
             (provider.url_setting, draft.url, saved.url),
             (provider.model_setting, draft.model, saved.model),
+            (provider.image_setting, draft.image, saved.image),
         ):
             if setting and value.strip() != before:
                 found[setting] = value.strip() or None
@@ -316,25 +362,27 @@ class AISlot(Vertical):
             self._show_provider(value)
             self.post_message(self.ProviderChanged(self, value))
             self._list_soon()
-        elif event.select.id == self._part_id("model") and self.provider is not None:
-            draft = self._drafts[self.provider_name]
-            if value and value != draft.model:
-                draft.model = value
-                self._status_for(self.provider)
 
     @on(Input.Changed)
     def _on_input(self, event: Input.Changed) -> None:
         if not self._drafts or self.provider is None:
             return
         draft = self._drafts[self.provider_name]
-        if event.input.id == self._part_id("key") and event.value != draft.key:
+        which = event.input.id
+        if which == self._part_id("model") and event.value != draft.model:
+            draft.model = event.value.strip()
+        elif which == self._part_id("image") and event.value != draft.image:
+            draft.image = event.value.strip()
+        elif which == self._part_id("key") and event.value != draft.key:
             draft.key = event.value
-        elif event.input.id == self._part_id("url") and event.value != draft.url:
+            draft.listed = False
+            self._list_soon()
+        elif which == self._part_id("url") and event.value != draft.url:
             draft.url = event.value
+            draft.listed = False
+            self._list_soon()
         else:
             return
-        draft.listed = False
-        self._list_soon()
         self._status_for(self.provider)
 
     def _adopt_custom_key(self, name: str) -> None:
@@ -354,14 +402,40 @@ class AISlot(Vertical):
             key = self._part("key", Input)
             key.password = not key.password
             event.button.label = "Show" if key.password else "Hide"
-        elif button_id == self._part_id("reload"):
+        elif button_id in (self._part_id("browse"), self._part_id("image-browse")):
             event.stop()
-            self._list_models()
+            self._browse(image=button_id == self._part_id("image-browse"))
         elif button_id == self._part_id("test"):
             event.stop()
             self._test()
 
     # --- the provider's model list, and Test ------------------------------------
+
+    def _browse(self, image: bool) -> None:
+        """A searchable list of the provider's models; the pick fills the box."""
+        from max_cli.interface.tui.widgets.model_picker import ModelPicker
+
+        provider = self.provider
+        if provider is None:
+            return
+        draft = self._drafts[provider.name]
+        if not draft.listed:
+            self._list_models()  # Browse shows what's known meanwhile
+        box = self._part("image" if image else "model", Input)
+        kind = "image model" if image else "model"
+
+        def picked(name: Optional[str]) -> None:
+            if name:
+                box.value = name
+
+        self.app.push_screen(
+            ModelPicker(
+                f"{provider.label}: pick a {kind}",
+                draft.choices(provider.name, image),
+                box.value.strip(),
+            ),
+            picked,
+        )
 
     def refresh_models(self) -> None:
         """Read the chosen provider's model list (the page asks when shown)."""
@@ -393,21 +467,27 @@ class AISlot(Vertical):
     def _list_in_thread(self, name: str, key: Optional[str], url: str) -> None:
         from openai import APIError
 
-        from max_cli.core.engines.ai_providers import error_text, list_models
+        from max_cli.core.engines.ai_providers import (
+            all_models,
+            error_text,
+        )
 
         try:
-            models, problem = list_models(PROVIDERS[name], key, url), ""
+            names, problem = all_models(PROVIDERS[name], key, url), ""
         except APIError as e:
-            models, problem = [], error_text(e)
-        show_from_worker(self, self._show_listed, name, models, problem)
+            names, problem = [], error_text(e)
+        show_from_worker(self, self._show_listed, name, names, problem)
 
-    def _show_listed(self, name: str, models: list[str], problem: str) -> None:
+    def _show_listed(self, name: str, names: list[str], problem: str) -> None:
+        from max_cli.core.engines.ai_providers import chat_models, image_models
+
         draft = self._drafts[name]
         if problem:
             if name == self.provider_name:
                 self._status(f"Couldn't read the models: {problem}", "$warning")
             return
-        draft.models, draft.listed = models, True
+        draft.models, draft.image_models = chat_models(names), image_models(names)
+        draft.listed = True
         if name == self.provider_name:
             self._show_models(name)
             self._status_for(self.provider)
