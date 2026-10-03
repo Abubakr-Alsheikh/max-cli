@@ -244,14 +244,19 @@ class AgentTurn(Vertical):
             lookups.update("· " + "  ·  ".join(self._lookups))
             lookups.display = True
             return
-        card = self._cards.get(step.action_id)
+        # By tool call: actions run side by side and finish in any order.
+        key = step.call_id or step.action_id
+        card = self._cards.get(key)
         if kind == "started" or card is None or card.state != "-running":
             card = ToolCard(step)
-            self._cards[step.action_id] = card
+            self._cards[key] = card
             self.query_one(".turn-tools").mount(card)
         else:
             card.show(step)
-        self._doing = f"Running {step.label}" if kind == "started" else "Thinking"
+        running = sum(card.state == "-running" for card in self._cards.values())
+        self._doing = {0: "Thinking", 1: f"Running {step.label}"}.get(
+            running, f"Running {running} actions"
+        )
 
     def _stop(self, summary: Content) -> None:
         if self._timer is not None:

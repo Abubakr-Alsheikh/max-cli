@@ -5,18 +5,23 @@ Rules from PLANS/active/dashboard-first-ai-agent.md (D4, step 4):
 - Every path argument must sit under the allowed folders (`scope`).
 - Actions that move, overwrite or delete files need `confirm` to say yes,
   whatever CONFIRM_DESTRUCTIVE says.
-- A request stops after MAX_STEPS tool calls or TOKEN_LIMIT tokens.
+- A request stops after MAX_STEPS model turns, MAX_ACTIONS tool calls or
+  TOKEN_LIMIT tokens.
 - `dry_run` checks and reports each action without running it.
+- The actions the model asks for in one turn run at the same time (up to
+  PARALLEL_ACTIONS), unless their paths overlap.
 """
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 from max_cli.common.exceptions import AIError, ConfigurationError, MaxError
 from max_cli.core.agent import looks
@@ -42,12 +47,15 @@ from max_cli.core.operations.result import ActionResult
 logger = logging.getLogger(__name__)
 
 CONFIRM_DANGERS = frozenset({Danger.MOVES, Danger.OVERWRITES, Danger.DELETES})
-MAX_STEPS = 12  # tool calls per request
+MAX_STEPS = 12  # model turns per request
+MAX_ACTIONS = 40  # tool calls per request
+PARALLEL_ACTIONS = 4  # actions from one turn that run at the same time
 TOKEN_LIMIT = 60_000  # tokens per request, prompts and answers together
 MAX_RESULT_CHARS = 4_000  # of an action's result sent back to the model
 DECLINED_NOTE = (
     "The user said no, so it didn't run. Don't run it again unless they ask."
 )
+NOT_RUN_NOTE = "Not run: the action limit for this request was reached."
 
 SYSTEM_PROMPT = """You are Max, an assistant that does file and media work on \
 the user's computer by running Max's actions. You can only act through the \
@@ -66,8 +74,13 @@ run_action(action, arguments). Never invent an action or an argument.
 need a folder outside them, ask the user to name it.
 - Act; don't ask for permission. Max itself asks the user before an action \
 moves, overwrites or deletes files. If they say no, don't retry.
-- Run several actions when a request needs them. When you're done, say in one \
-or two short sentences what you did and where the results are.
+- Run several actions when a request needs them. When one action applies to \
+several files, call run_action for each file in the same reply: Max runs them \
+at the same time. If the action takes several files or a folder, one call is \
+enough.
+- Once an action has done the job, don't run it again on the same files. \
+When you're done, say in one or two short sentences what you did and where \
+the results are.
 - If no action fits, say so and suggest what Max can do instead."""
 
 
@@ -132,6 +145,9 @@ class Step:
     result: Optional[ActionResult] = None
     arguments: dict[str, str] = field(default_factory=dict)
     seconds: float = 0.0
+    # The model's tool call id: actions run side by side, so their RAN and
+    # FAILED steps can come in any order.
+    call_id: str = ""
 
     @property
     def label(self) -> str:
@@ -164,6 +180,24 @@ class AgentReply:
         return " · ".join(parts)
 
 
+@dataclass(frozen=True)
+class _Run:
+    """An action that passed its checks and the user's yes, waiting to run."""
+
+    call: ActionCall
+    given: dict[str, Any]  # the model's arguments, for run_action
+    call_id: str
+    paths: tuple[Path, ...]  # what it reads or writes, resolved
+
+    @property
+    def action_id(self) -> str:
+        return self.call.action.id
+
+    @property
+    def label(self) -> str:
+        return f"{self.call.action.group} {self.call.action.name}"
+
+
 Confirm = Callable[[ActionCall], bool]
 OnStep = Callable[[Step], None]
 
@@ -186,11 +220,15 @@ class Agent:
         cwd: Optional[Path] = None,
         dry_run: bool = False,
         max_steps: int = MAX_STEPS,
+        max_actions: int = MAX_ACTIONS,
+        parallel: int = PARALLEL_ACTIONS,
         token_limit: int = TOKEN_LIMIT,
         can_queue: bool = False,
     ) -> None:
         """`can_queue` lets the model queue long jobs: only where something
-        runs the queue (the dashboard); the CLI waits for each action."""
+        runs the queue (the dashboard); the CLI waits for each action.
+        `on_step` may be called from several threads at once, never two
+        calls at the same time."""
         self.client = client
         self.can_queue = can_queue
         self.model = model
@@ -198,7 +236,10 @@ class Agent:
         self.on_step = on_step or _ignore_step
         self.dry_run = dry_run
         self.max_steps = max_steps
+        self.max_actions = max_actions
+        self.parallel = max(1, parallel)
         self.token_limit = token_limit
+        self._report_lock = threading.Lock()
         self.scope = PathScope(cwd or Path.cwd())
         self.scope.allow(_download_folder())
         self.loaded: set[str] = set()
@@ -267,9 +308,10 @@ class Agent:
         self.scope.add_from(request)
         self.messages.append({"role": "user", "content": request})
         reply = AgentReply("")
-        calls = 0
+        turns = calls = 0
         while True:
             response = self._complete()
+            turns += 1
             usage = getattr(response, "usage", None)
             reply.tokens += int(getattr(usage, "total_tokens", 0) or 0)
             message = response.choices[0].message
@@ -281,27 +323,63 @@ class Agent:
                 self.messages.append({"role": "assistant", "content": reply.text})
                 return reply
             self.messages.append(_assistant_message(message.content, tool_calls))
-            for tool_call in tool_calls:
-                calls += 1
-                if calls > self.max_steps:
-                    content = "Not run: the step limit for this request was reached."
-                else:
-                    content = self._tool(
-                        tool_call.function.name, tool_call.function.arguments, reply
-                    )
+            answers = self._tools(tool_calls, reply, calls)
+            calls += len(tool_calls)
+            for tool_call, content in zip(tool_calls, answers):
                 self.messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": content}
                 )
-            limit = self._limit_reached(calls, reply.tokens)
+            limit = self._limit_reached(turns, calls, reply.tokens)
             if limit:
                 reply.text = limit
                 self.messages.append({"role": "assistant", "content": limit})
                 return reply
 
-    def _limit_reached(self, calls: int, tokens: int) -> str:
-        if calls >= self.max_steps:
+    def _tools(self, tool_calls: list[Any], reply: AgentReply, done: int) -> list[str]:
+        """An answer per tool call, in their order. Looks, checks and
+        confirmations go one at a time; the actions that pass them then run
+        together. `done` counts the tool calls of earlier turns."""
+        answers: list[str] = []
+        runs: list[tuple[int, _Run]] = []
+        for index, tool_call in enumerate(tool_calls):
+            if done + index >= self.max_actions:
+                answers.append(NOT_RUN_NOTE)
+                continue
+            answer = self._tool(
+                tool_call.function.name,
+                tool_call.function.arguments,
+                reply,
+                call_id=str(tool_call.id),
+            )
+            if isinstance(answer, _Run):
+                runs.append((index, answer))
+                answer = ""  # filled in once it has run
+            answers.append(answer)
+        for index, answer in self._run_all(runs, reply):
+            answers[index] = answer
+        return answers
+
+    def _run_all(
+        self, runs: list[tuple[int, _Run]], reply: AgentReply
+    ) -> list[tuple[int, str]]:
+        """Side by side when no two touch the same path, else in order."""
+        if len(runs) < 2 or self.parallel < 2 or _overlap([run for _, run in runs]):
+            return [(index, self._execute(run, reply)) for index, run in runs]
+        with ThreadPoolExecutor(max_workers=min(self.parallel, len(runs))) as pool:
+            futures = [
+                (index, pool.submit(self._execute, run, reply)) for index, run in runs
+            ]
+            return [(index, future.result()) for index, future in futures]
+
+    def _limit_reached(self, turns: int, calls: int, tokens: int) -> str:
+        if turns >= self.max_steps:
             return (
                 f"I stopped after {self.max_steps} steps, the limit for one "
+                "request. Ask me to go on if there's more to do."
+            )
+        if calls >= self.max_actions:
+            return (
+                f"I stopped after {self.max_actions} actions, the limit for one "
                 "request. Ask me to go on if there's more to do."
             )
         if tokens >= self.token_limit:
@@ -334,7 +412,10 @@ class Agent:
 
     # --- tools --------------------------------------------------------------
 
-    def _tool(self, name: str, raw_arguments: str, reply: AgentReply) -> str:
+    def _tool(
+        self, name: str, raw_arguments: str, reply: AgentReply, call_id: str = ""
+    ) -> Union[str, _Run]:
+        """The tool's answer, or an action that is ready to run."""
         try:
             arguments = json.loads(raw_arguments or "{}")
         except json.JSONDecodeError:
@@ -351,7 +432,11 @@ class Agent:
                 return "Error: 'arguments' must be an object."
             queue = arguments.get("queue") is True
             return self._run(
-                str(arguments.get("action", "")), dict(given), reply, queue=queue
+                str(arguments.get("action", "")),
+                dict(given),
+                reply,
+                queue=queue,
+                call_id=call_id,
             )
         return f"Error: there is no tool '{name}'. Tools: {', '.join(TOOL_NAMES)}."
 
@@ -408,8 +493,11 @@ class Agent:
         given: dict[str, Any],
         reply: AgentReply,
         queue: bool = False,
-    ) -> str:
-        from max_cli.core.catalog.runner import coerce_args, enqueue_action, run_action
+        call_id: str = "",
+    ) -> Union[str, _Run]:
+        """Check an action and ask the user when it changes files. Queued
+        and dry-run actions end here; the rest come back as a `_Run`."""
+        from max_cli.core.catalog.runner import coerce_args, enqueue_action
 
         try:
             action = get_action(action_id)
@@ -428,19 +516,27 @@ class Agent:
             self._report(
                 reply,
                 Step(
-                    StepKind.FAILED, action_id, f"{label}: {e}", arguments=_shown(given)
+                    StepKind.FAILED,
+                    action_id,
+                    f"{label}: {e}",
+                    arguments=_shown(given),
+                    call_id=call_id,
                 ),
             )
             return f"Error: {e}"
 
         call = ActionCall(action, arguments)
         shown = call.shown_arguments()
-        outside = self.scope.outside(_paths(action, arguments))
+        paths = _paths(action, arguments)
+        outside = self.scope.outside(paths)
         if outside:
             allowed = "; ".join(str(root) for root in self.scope.roots)
             text = f"{', '.join(outside)} is outside the folders I may use"
             self._report(
-                reply, Step(StepKind.REFUSED, action_id, text, arguments=shown)
+                reply,
+                Step(
+                    StepKind.REFUSED, action_id, text, arguments=shown, call_id=call_id
+                ),
             )
             return (
                 f"Error: {text} ({allowed}). Ask the user to name that folder "
@@ -454,6 +550,7 @@ class Agent:
                     action_id,
                     f"Would run {call.describe()}",
                     arguments=shown,
+                    call_id=call_id,
                 ),
             )
             return "Dry run: checked, not run. Carry on as if it worked."
@@ -470,6 +567,7 @@ class Agent:
                     action_id,
                     f"Skipped {call.describe()}",
                     arguments=shown,
+                    call_id=call_id,
                 ),
             )
             return DECLINED_NOTE
@@ -478,7 +576,13 @@ class Agent:
             task = enqueue_action(action, given)
             self._report(
                 reply,
-                Step(StepKind.QUEUED, action_id, f"Queued {label}", arguments=shown),
+                Step(
+                    StepKind.QUEUED,
+                    action_id,
+                    f"Queued {label}",
+                    arguments=shown,
+                    call_id=call_id,
+                ),
             )
             return json.dumps(
                 {
@@ -488,25 +592,40 @@ class Agent:
                     "the Jobs window (J). Don't wait for it.",
                 }
             )
+        resolved = tuple(self.scope.resolve(str(path)) for path in paths)
+        return _Run(call, given, call_id, resolved)
 
+    def _execute(self, run: _Run, reply: AgentReply) -> str:
+        """Run a checked action; its result (or error) for the model. Called
+        from a worker thread when actions run side by side."""
+        from max_cli.core.catalog.runner import run_action
+
+        shown = run.call.shown_arguments()
         self._report(
             reply,
-            Step(StepKind.STARTED, action_id, f"Running {label}", arguments=shown),
+            Step(
+                StepKind.STARTED,
+                run.action_id,
+                f"Running {run.label}",
+                arguments=shown,
+                call_id=run.call_id,
+            ),
         )
         started = time.monotonic()
         try:
-            result = run_action(action, given)
+            result = run_action(run.call.action, run.given)
         except Exception as e:  # noqa: BLE001 - the model hears about any failure
             if not isinstance(e, MaxError):
-                logger.warning("Agent action %s failed", action_id, exc_info=True)
+                logger.warning("Agent action %s failed", run.action_id, exc_info=True)
             self._report(
                 reply,
                 Step(
                     StepKind.FAILED,
-                    action_id,
-                    f"{label}: {e}",
+                    run.action_id,
+                    f"{run.label}: {e}",
                     arguments=shown,
                     seconds=time.monotonic() - started,
+                    call_id=run.call_id,
                 ),
             )
             return f"Error: {e}"
@@ -515,11 +634,12 @@ class Agent:
             reply,
             Step(
                 kind,
-                action_id,
-                f"{label}: {result.message}",
+                run.action_id,
+                f"{run.label}: {result.message}",
                 result,
                 arguments=shown,
                 seconds=time.monotonic() - started,
+                call_id=run.call_id,
             ),
         )
         return json.dumps(result.to_dict(), ensure_ascii=False, default=str)[
@@ -527,10 +647,13 @@ class Agent:
         ]
 
     def _report(self, reply: AgentReply, step: Step) -> None:
-        reply.steps.append(step)
-        if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED):
-            _log_action(step)
-        self.on_step(step)
+        # One at a time: actions running side by side report from their
+        # threads, and the activity log is read, changed and saved whole.
+        with self._report_lock:
+            reply.steps.append(step)
+            if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED):
+                _log_action(step)
+            self.on_step(step)
 
 
 def _assistant_message(content: Optional[str], tool_calls: list[Any]) -> dict[str, Any]:
@@ -538,18 +661,38 @@ def _assistant_message(content: Optional[str], tool_calls: list[Any]) -> dict[st
     return {
         "role": "assistant",
         "content": content or "",
-        "tool_calls": [
-            {
-                "id": call.id,
-                "type": "function",
-                "function": {
-                    "name": call.function.name,
-                    "arguments": call.function.arguments,
-                },
-            }
-            for call in tool_calls
-        ],
+        "tool_calls": [_tool_call_message(call) for call in tool_calls],
     }
+
+
+def _tool_call_message(call: Any) -> dict[str, Any]:
+    """One tool call as sent back. Gemini adds `extra_content` (its thought
+    signature) and refuses the next request without it."""
+    message: dict[str, Any] = {
+        "id": call.id,
+        "type": "function",
+        "function": {"name": call.function.name, "arguments": call.function.arguments},
+    }
+    extra = getattr(call, "extra_content", None)
+    if isinstance(extra, Mapping):
+        message["extra_content"] = dict(extra)
+    return message
+
+
+def _overlap(runs: list[_Run]) -> bool:
+    """True when two actions name the same path, or one names a folder the
+    other's path sits in: those run one after the other, in order."""
+    for index, run in enumerate(runs):
+        for other in runs[index + 1 :]:
+            for path in run.paths:
+                for other_path in other.paths:
+                    if (
+                        path == other_path
+                        or path in other_path.parents
+                        or other_path in path.parents
+                    ):
+                        return True
+    return False
 
 
 def _log_action(step: Step) -> None:

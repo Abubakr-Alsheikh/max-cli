@@ -531,3 +531,35 @@ def test_search_warns_about_extensions_it_cannot_read(tmp_path: Path) -> None:
     assert "Skipping pdf" in _plain(result)
     searched = engine.semantic_search.call_args.args[1]
     assert [p.name for p in searched] == ["notes.txt"]
+
+
+def test_a_result_after_another_actions_lines_names_its_action_again():
+    from max_cli.common.logger import console
+    from max_cli.core.agent.agent import Step, StepKind
+    from max_cli.core.operations.result import ActionResult
+
+    def step(kind: StepKind, call_id: str, target: str) -> Step:
+        result = (
+            ActionResult(True, f"Compressed {target}") if kind != "started" else None
+        )
+        return Step(
+            kind,
+            "audio.compress",
+            "",
+            result,
+            arguments={"target": target},
+            call_id=call_id,
+        )
+
+    show = cli_ai._StepPrinter()
+    with console.capture() as captured:
+        show(step(StepKind.STARTED, "a", "one.m4a"))
+        show(step(StepKind.STARTED, "b", "two.m4a"))
+        show(step(StepKind.RAN, "a", "one.m4a"))  # after b's lines
+        show(step(StepKind.RAN, "a", "one.m4a"))  # right after its own
+
+    lines = ANSI_ESCAPE.sub("", captured.get()).splitlines()
+    assert sum("audio compress  one.m4a" in line for line in lines) == 1
+    assert lines.index("  ⚙ audio compress  one.m4a") < lines.index(
+        "      ✓ Compressed one.m4a"
+    )

@@ -346,15 +346,18 @@ class AISlot(Vertical):
     # --- events ---------------------------------------------------------------
 
     # Change events arrive after the code that set a control has finished,
-    # so each handler compares with what the slot shows: setting a control
-    # from code (load, switching provider) is never taken for an edit.
+    # so each handler compares the control's value now (never the event's,
+    # which may be stale) with what the slot shows: setting a control from
+    # code (load, switching provider) is never taken for an edit. Acting on
+    # a stale value would set the control back and post another event,
+    # forever.
 
     @on(Select.Changed)
     def _on_select(self, event: Select.Changed) -> None:
         # Selects fire once when they mount, before load() fills the drafts.
         if not self._drafts:
             return
-        value = "" if event.select.is_blank() else str(event.value)
+        value = "" if event.select.is_blank() else str(event.select.value)
         if event.select.id == self._part_id("provider"):
             if value == self._shown:
                 return
@@ -369,16 +372,17 @@ class AISlot(Vertical):
             return
         draft = self._drafts[self.provider_name]
         which = event.input.id
-        if which == self._part_id("model") and event.value != draft.model:
-            draft.model = event.value.strip()
-        elif which == self._part_id("image") and event.value != draft.image:
-            draft.image = event.value.strip()
-        elif which == self._part_id("key") and event.value != draft.key:
-            draft.key = event.value
+        value = event.input.value
+        if which == self._part_id("model") and value != draft.model:
+            draft.model = value.strip()
+        elif which == self._part_id("image") and value != draft.image:
+            draft.image = value.strip()
+        elif which == self._part_id("key") and value != draft.key:
+            draft.key = value
             draft.listed = False
             self._list_soon()
-        elif which == self._part_id("url") and event.value != draft.url:
-            draft.url = event.value
+        elif which == self._part_id("url") and value != draft.url:
+            draft.url = value
             draft.listed = False
             self._list_soon()
         else:

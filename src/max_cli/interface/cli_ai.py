@@ -69,41 +69,61 @@ def _show_arguments(step: "Step") -> None:
         )
 
 
-def _show_step(step: "Step") -> None:
-    """One step as it happens: an action's name and arguments when it starts,
-    its result (and the files it made) indented under it when it ends."""
-    kind = step.kind.value
-    mark, style = STEP_STYLES.get(kind, ("·", "dim"))
-    if kind in ("started", "planned", "refused", "declined", "queued"):
-        title = {
-            "started": step.label,
-            "planned": f"Would run {step.label}",
-            "declined": f"Skipped {step.label}",
-            "queued": f"Queued {step.label}",
-        }.get(kind, step.text)
-        console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
-        _show_arguments(step)
-        return
-    if kind in ("ran", "failed") and (step.result is not None or step.seconds):
-        message = step.result.message if step.result is not None else step.text
-        took = (
-            f"  [dim]{step.seconds:.1f}s[/dim]"
-            if step.seconds >= MIN_SHOWN_SECONDS
-            else ""
-        )
-        console.print(
-            f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
-        )
-        for path in step.result.output_files if step.result is not None else []:
-            console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
-        return
-    console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
+class _StepPrinter:
+    """Prints each step as it happens: an action's name and arguments when
+    it starts, its result (and the files it made) indented under it when it
+    ends. Actions run side by side, so when another action printed in
+    between, the result gets its action's name again first."""
+
+    def __init__(self) -> None:
+        self.last_call = ""  # the tool call whose lines printed last
+
+    def __call__(self, step: "Step") -> None:
+        kind = step.kind.value
+        mark, style = STEP_STYLES.get(kind, ("·", "dim"))
+        if kind in ("started", "planned", "refused", "declined", "queued"):
+            title = {
+                "started": step.label,
+                "planned": f"Would run {step.label}",
+                "declined": f"Skipped {step.label}",
+                "queued": f"Queued {step.label}",
+            }.get(kind, step.text)
+            console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
+            _show_arguments(step)
+            self.last_call = step.call_id
+            return
+        if kind in ("ran", "failed") and (step.result is not None or step.seconds):
+            if step.call_id != self.last_call:
+                self._name_again(step)
+            message = step.result.message if step.result is not None else step.text
+            took = (
+                f"  [dim]{step.seconds:.1f}s[/dim]"
+                if step.seconds >= MIN_SHOWN_SECONDS
+                else ""
+            )
+            console.print(
+                f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
+            )
+            for path in step.result.output_files if step.result is not None else []:
+                console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
+            self.last_call = step.call_id
+            return
+        console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
+
+    @staticmethod
+    def _name_again(step: "Step") -> None:
+        """`⚙ audio compress  song.m4a` above a result that lost its header."""
+        first = next(iter(step.arguments.values()), "")
+        name = Path(first).name if first else ""
+        console.print(f"  [dim]⚙ {escape(step.label)}  {escape(name)}[/dim]")
 
 
 def _make_agent(dry_run: bool = False) -> "Agent":
     from max_cli.core.agent.agent import Agent
 
-    return Agent.from_settings(confirm=_confirm, on_step=_show_step, dry_run=dry_run)
+    return Agent.from_settings(
+        confirm=_confirm, on_step=_StepPrinter(), dry_run=dry_run
+    )
 
 
 def _show_reply(reply: "AgentReply") -> None:

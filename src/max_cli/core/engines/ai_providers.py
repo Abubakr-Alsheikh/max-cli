@@ -32,6 +32,10 @@ OLLAMA_KEY = "ollama"  # Ollama ignores the key, but the client needs one
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 CHECK_PROMPT = "Reply with the word OK."
 CHAT_API = "chat.completions.create"
+# Google's documented stand-in for a tool call Gemini didn't make (another
+# provider made it before a fallback): Gemini refuses tool calls without a
+# thought signature. https://ai.google.dev/gemini-api/docs/thought-signatures
+GEMINI_SKIP_SIGNATURE = "skip_thought_signature_validator"
 IMAGES_GENERATE = "images.generate"
 IMAGES_EDIT = "images.edit"
 CHECK_MAX_TOKENS = 5
@@ -308,7 +312,10 @@ class FallbackClient:
                 method = self._client(provider)
                 for part in api.split("."):
                     method = getattr(method, part)
-                response = method(model=self._model_of(provider), **request)
+                sent = dict(request)
+                if "messages" in sent:
+                    sent["messages"] = messages_for(provider, sent["messages"])
+                response = method(model=self._model_of(provider), **sent)
             except APIError as e:
                 if index == tries[-1]:
                     raise  # the last provider failed too
@@ -329,6 +336,34 @@ class FallbackClient:
     @property
     def used_fallback(self) -> bool:
         return self.last_provider.name != self.providers[0].name
+
+
+def messages_for(provider: Provider, messages: list[Any]) -> list[Any]:
+    """A conversation as `provider` takes it. Gemini needs a thought
+    signature on the first tool call of each of its tool-call turns; for a
+    turn another provider made, it gets Google's stand-in. The others get no
+    `extra_content` (Gemini's field) at all."""
+    adjusted: list[Any] = []
+    for message in messages:
+        calls = message.get("tool_calls") if isinstance(message, dict) else None
+        if not calls:
+            adjusted.append(message)
+            continue
+        calls = [dict(call) for call in calls]
+        if provider.name != GEMINI:
+            for call in calls:
+                call.pop("extra_content", None)
+        elif not any(_signature(call) for call in calls):
+            calls[0]["extra_content"] = {
+                "google": {"thought_signature": GEMINI_SKIP_SIGNATURE}
+            }
+        adjusted.append({**message, "tool_calls": calls})
+    return adjusted
+
+
+def _signature(call: dict[str, Any]) -> Any:
+    google = (call.get("extra_content") or {}).get("google") or {}
+    return google.get("thought_signature")
 
 
 def make_client(

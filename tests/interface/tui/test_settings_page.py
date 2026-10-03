@@ -479,6 +479,43 @@ async def test_the_fallback_cannot_be_the_main_ai():
 
 
 @pytest.mark.asyncio
+async def test_the_slots_settle_when_both_providers_are_set(monkeypatch):
+    # Gemini main and OpenRouter fallback once made the fallback's provider
+    # list bounce between two values forever, holding a CPU core and
+    # starving every worker thread.
+    from max_cli.interface.tui.widgets.ai_slot import AISlot
+
+    for name, value in {
+        "AI_PROVIDER": "gemini",
+        "AI_FALLBACK_PROVIDER": "openrouter",
+        "GEMINI_API_KEY": "g-key",
+        "GEMINI_MODEL": "gemini-flash-latest",
+        "OPENROUTER_API_KEY": "or-key",
+        "OPENROUTER_MODEL": "openrouter/free",
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    shown: list[str] = []
+    show = AISlot._show_provider
+
+    def counted(slot: AISlot, name: str) -> None:
+        shown.append(name)
+        show(slot, name)
+
+    monkeypatch.setattr(AISlot, "_show_provider", counted)
+    app = SettingsApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(app, pilot)
+        settled = len(shown)
+        for _ in range(10):
+            await pilot.pause(0.05)
+        fallback = app.query_one("#slot-fallback-provider", Select).value
+        key = app.query_one("#slot-fallback-key", Input).value
+
+    assert len(shown) == settled
+    assert fallback == "openrouter" and key == "or-key"
+
+
+@pytest.mark.asyncio
 async def test_switching_to_openrouter_reuses_the_key_set_for_its_url(monkeypatch):
     monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
     app = SettingsApp()

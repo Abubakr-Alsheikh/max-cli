@@ -6,6 +6,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,6 +25,9 @@ DOWNLOAD_CHUNK_SIZE = 8192
 
 MAX_CLI_BIN_DIR = Path.home() / ".max_cli" / "bin"
 RESOLUTION_CACHE_FILE = Path.home() / ".max_cli" / ".ffmpeg_resolved_path"
+# The agent runs actions side by side: one of them downloads FFmpeg, the
+# others wait for it.
+_resolve_lock = threading.Lock()
 
 FFMPEG_DOWNLOADS: dict[str, dict[str, object]] = {
     "Windows": {
@@ -250,13 +254,14 @@ def resolve_ffmpeg(
     confirm_download: Optional[ConfirmDownload] = None,
     on_progress: Optional[DownloadProgress] = None,
 ) -> Path:
-    cached = FFmpegResolver.get_cached_resolution()
-    if cached:
-        return cached
+    with _resolve_lock:
+        cached = FFmpegResolver.get_cached_resolution()
+        if cached:
+            return cached
 
-    resolver = FFmpegResolver()
-    return resolver.resolve(
-        auto_download=auto_download,
-        confirm_download=confirm_download,
-        on_progress=on_progress,
-    )
+        resolver = FFmpegResolver()
+        return resolver.resolve(
+            auto_download=auto_download,
+            confirm_download=confirm_download,
+            on_progress=on_progress,
+        )

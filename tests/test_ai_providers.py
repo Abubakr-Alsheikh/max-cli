@@ -49,10 +49,12 @@ class FakeProvider:
     def __init__(self, answer: Any) -> None:
         self.answer = answer
         self.models: list[str] = []
+        self.sent: list[Any] = []  # the messages of each request
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **request: Any) -> Any:
         self.models.append(request["model"])
+        self.sent.append(request.get("messages"))
         if isinstance(self.answer, Exception):
             raise self.answer
         return self.answer
@@ -160,6 +162,47 @@ def test_a_working_main_provider_never_touches_the_fallback(monkeypatch):
     assert client.chat.completions.create(messages=[]) == "main answer"
     assert fallback.models == []
     assert not client.used_fallback
+
+
+def _tool_turn(**extra: Any) -> dict[str, Any]:
+    """An assistant turn with one tool call, as the agent sends it back."""
+    call = {
+        "id": "call-1",
+        "type": "function",
+        "function": {"name": "list_folder", "arguments": "{}"},
+        **extra,
+    }
+    return {"role": "assistant", "content": "", "tool_calls": [call]}
+
+
+def test_gemini_gets_a_stand_in_signature_for_calls_it_did_not_make(monkeypatch):
+    # OpenRouter made the tool call, ran out of credit, and Gemini takes over.
+    main = FakeProvider(_api_error(openai.APIStatusError, "Payment required", 402))
+    fallback = FakeProvider("answer")
+    client = _two_providers(monkeypatch, main, fallback)
+    messages = [{"role": "user", "content": "hi"}, _tool_turn()]
+
+    client.chat.completions.create(messages=messages)
+
+    assert main.sent[0][1]["tool_calls"][0].get("extra_content") is None
+    call = fallback.sent[0][1]["tool_calls"][0]
+    assert call["extra_content"] == {
+        "google": {"thought_signature": ai_providers.GEMINI_SKIP_SIGNATURE}
+    }
+    assert "extra_content" not in messages[1]["tool_calls"][0]  # not changed
+
+
+def test_gemini_keeps_its_own_signature_and_others_never_see_it(monkeypatch):
+    signed = {"google": {"thought_signature": "c2lnbg=="}}
+    messages = [_tool_turn(extra_content=signed)]
+    gemini = ai_providers.PROVIDERS["gemini"]
+    openrouter = ai_providers.PROVIDERS["openrouter"]
+
+    to_gemini = ai_providers.messages_for(gemini, messages)
+    to_openrouter = ai_providers.messages_for(openrouter, messages)
+
+    assert to_gemini[0]["tool_calls"][0]["extra_content"] == signed
+    assert "extra_content" not in to_openrouter[0]["tool_calls"][0]
 
 
 def test_a_provider_without_a_model_is_not_set_up(monkeypatch):
