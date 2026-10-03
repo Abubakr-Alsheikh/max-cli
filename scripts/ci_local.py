@@ -57,8 +57,10 @@ PYTEST_ARGS = (
     f"faulthandler_timeout={HANG_REPORT_SECONDS}",
 )
 COVERAGE_ARGS = ("--cov=max_cli", "--cov-report=", f"--cov-fail-under={COVERAGE_MIN}")
-# One suite takes about a minute (two with coverage). Past this, it hangs.
-STEP_TIMEOUT_SECONDS = 600
+# With four Pythons side by side, one suite takes 5 to 8 minutes and the
+# coverage run (TYPECHECK_PYTHON) about 10 (2026-10-02, 1,450 tests): 600
+# stopped it at 99%. Past this, it hangs; faulthandler_timeout reports where.
+STEP_TIMEOUT_SECONDS = 1200
 # Tests that measure time. --full runs them alone after the parallel suites,
 # where two suites at once made the startup budget fail on a busy machine.
 TIMING_MARKER = "timing"

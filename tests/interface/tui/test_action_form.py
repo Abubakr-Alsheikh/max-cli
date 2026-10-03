@@ -15,12 +15,12 @@ from textual.widgets import (
     Switch,
 )
 
+from max_cli.common.activity_log import ActivityLog
 from max_cli.core.catalog import actions_for, get_action, group_names
 from max_cli.core.catalog.spec import Action, Danger, Param, ParamKind, Surface
 from max_cli.core.engines.task_manager import get_task_manager
 from max_cli.core.engines.task_queue import TaskType
 from max_cli.core.operations.result import ActionResult
-from max_cli.interface.tui.activity_log import ActivityLog
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 from max_cli.interface.tui.widgets.path_picker import PathPicker

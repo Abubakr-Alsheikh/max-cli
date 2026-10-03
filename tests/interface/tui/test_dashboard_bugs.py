@@ -1,16 +1,12 @@
 """Regression tests for the dashboard P0 bugs (tui-bugfix-and-ux-improvements.md)."""
 
-import threading
-from unittest.mock import patch
 
 import pytest
-from textual.app import App, ComposeResult
-from textual.widgets import Input
 
 
 def test_grab_activity_counts_as_download():
     """Downloads log as "grab", but the Home card and History filter read "download"."""
-    from max_cli.interface.tui.activity_log import ActivityLog
+    from max_cli.common.activity_log import ActivityLog
 
     log = ActivityLog()
     log.add_entry(category="grab", action="download", status="success")
@@ -22,7 +18,7 @@ def test_grab_activity_counts_as_download():
 def test_old_grab_entries_on_disk_count_as_download():
     import json
 
-    from max_cli.interface.tui.activity_log import ActivityLog
+    from max_cli.common.activity_log import ActivityLog
 
     ActivityLog.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     ActivityLog.LOG_FILE.write_text(
@@ -31,42 +27,6 @@ def test_old_grab_entries_on_disk_count_as_download():
     )
 
     assert ActivityLog().get_stats()["download"] == 1
-
-
-@pytest.mark.asyncio
-async def test_chat_calls_the_ai_off_the_ui_thread():
-    """Chat called the AI on the UI thread, so the screen froze until it replied."""
-    from max_cli.interface.tui.widgets.chat_panel import ChatPanel
-
-    ai_threads: list[threading.Thread] = []
-
-    def fake_interpret(self, prompt, app_instance, explain=False):
-        ai_threads.append(threading.current_thread())
-        return {"thought": "Sure, here you go", "command": None}
-
-    class TestApp(App):
-        def compose(self) -> ComposeResult:
-            yield ChatPanel()
-
-    with (
-        patch(
-            "max_cli.core.engines.ai_engine.AIEngine.interpret_intent",
-            fake_interpret,
-        ),
-        patch("max_cli.core.cli.registry.build_full_app", return_value=None),
-    ):
-        async with TestApp().run_test() as pilot:
-            pilot.app.query_one("#chat-input", Input).value = "hello"
-            pilot.app.query_one(ChatPanel)._on_send()
-            await pilot.app.workers.wait_for_complete()
-            await pilot.pause()
-
-            messages = [str(m.content) for m in pilot.app.query(".chat-msg")]
-
-    assert ai_threads
-    assert ai_threads[0] is not threading.main_thread()
-    assert any("Sure, here you go" in m for m in messages)
-    assert not any("Thinking..." in m for m in messages)
 
 
 DASHBOARD_SECTIONS = [
@@ -79,8 +39,9 @@ DASHBOARD_SECTIONS = [
     "files",
     "audio",
     "settings",
-    "chat",
 ]
+# The AI page scrolls its conversation instead of the page:
+# test_ai_page.test_a_short_terminal_keeps_the_input_in_view.
 
 
 @pytest.mark.asyncio

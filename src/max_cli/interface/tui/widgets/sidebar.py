@@ -32,7 +32,7 @@ SECTIONS = [
     ("images", "\U0001f4f7", "Images"),
     ("pdf", "\U0001f4c4", "PDF"),
     ("files", "\U0001f4c1", "Files"),
-    ("chat", "\U0001f4ac", "Chat"),
+    ("ai", "\U0001f916", "AI"),
     ("activity", "\U0001f4cb", "Activity"),
     ("extras", "\U0001f9f0", "Extras"),
     ("settings", "\U0001f527", "Settings"),
@@ -40,7 +40,7 @@ SECTIONS = [
 SECTION_GROUPS = (
     (
         "DO",
-        ("home", "download", "video", "audio", "images", "pdf", "files", "chat"),
+        ("home", "download", "video", "audio", "images", "pdf", "files", "ai"),
     ),
     ("TRACK", ("activity",)),
     # Extras and Settings share a group: one more group header pushed

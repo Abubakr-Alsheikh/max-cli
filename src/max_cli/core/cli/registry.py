@@ -1,14 +1,9 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from max_cli.core.cli.lazy_group import LAZY_GROUPS, LazyGroupSpec, lazy_group
 
 if TYPE_CHECKING:
     from typer import Typer
-
-
-def _link_ai_to_full_app(cli_ai_module: Any) -> None:
-    """`max ai ask` builds its command list from a fully registered app."""
-    cli_ai_module.MAIN_APP_REF = build_full_app()
 
 
 # Name -> where the group lives. Order is the order `max --help` lists them.
@@ -37,8 +32,7 @@ _GROUPS = {
     ),
     "ai": LazyGroupSpec(
         "max_cli.interface.cli_ai",
-        "Ask AI to run commands.",
-        on_load=_link_ai_to_full_app,
+        "Ask the AI agent to do it; analyze and create images.",
     ),
     "tools": LazyGroupSpec(
         "max_cli.interface.cli_tools", "System utilities (Clipboard, QR)."
@@ -72,28 +66,6 @@ def register(app: "Typer") -> None:
     plugin_commands.register(app)
 
 
-def build_full_app() -> "Typer":
-    """A Typer app with every built-in group imported and registered.
-
-    Only for code that walks the whole command tree (the AI schema); normal
-    runs load one group.
-    """
-    import importlib
-
-    import typer
-
-    full_app = typer.Typer()
-    for name, spec in _GROUPS.items():
-        module = importlib.import_module(spec.module)
-        full_app.add_typer(
-            getattr(module, spec.attribute),
-            name=name,
-            help=spec.help or None,
-            hidden=spec.hidden,
-        )
-    return full_app
-
-
 def init_plugins(app: "Typer") -> None:
     """Initialize and load plugins."""
     from max_cli.core.cli.plugins import init_plugins as _init_plugins
@@ -101,4 +73,4 @@ def init_plugins(app: "Typer") -> None:
     _init_plugins(app)
 
 
-__all__ = ["LAZY_GROUPS", "build_full_app", "init_plugins", "register"]
+__all__ = ["LAZY_GROUPS", "init_plugins", "register"]

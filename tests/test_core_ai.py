@@ -1,10 +1,9 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from max_cli.common.exceptions import MaxError
-from max_cli.core.engines.ai_engine import AIEngine
+from max_cli.core.engines.ai_engine import AIEngine, chat_model, make_client
 
 
 class TestAIEngine:
@@ -39,56 +38,28 @@ class TestAIEngine:
         assert engine._client is None
         assert engine.client is None
 
-    def test_get_local_context(self, tmp_path, monkeypatch):
-        """Context lists the folder and its visible files."""
-        for name in ["file1.txt", "file2.txt", "file3.py", ".secret"]:
-            (tmp_path / name).write_text("x", encoding="utf-8")
-        monkeypatch.chdir(tmp_path)
+    @patch("openai.OpenAI")
+    @patch("max_cli.core.engines.ai_engine.settings")
+    def test_make_client_prefers_ollama(self, mock_settings, mock_openai):
+        mock_settings.OLLAMA_ENABLED = True
+        mock_settings.OLLAMA_BASE_URL = "http://localhost:11434"
+        mock_settings.OLLAMA_MODEL = "llama3.1"
 
-        context = AIEngine()._get_local_context()
+        make_client()
 
-        assert str(tmp_path) in context
-        assert "file1.txt" in context and "file3.py" in context
-        assert ".secret" not in context
-
-    def test_get_local_context_caps_file_list(self, tmp_path, monkeypatch):
-        for index in range(35):
-            (tmp_path / f"f{index:02d}.txt").write_text("x", encoding="utf-8")
-        monkeypatch.chdir(tmp_path)
-
-        context = AIEngine()._get_local_context()
-
-        assert "f29.txt" in context
-        assert "f30.txt" not in context
-        assert "and 5 more files" in context
-
-    def test_get_local_context_with_error(self, tmp_path, monkeypatch):
-        """An unreadable folder yields no context instead of an error."""
-        monkeypatch.chdir(tmp_path)
-
-        def denied(self):
-            raise PermissionError("Permission denied")
-
-        monkeypatch.setattr(Path, "iterdir", denied)
-
-        assert AIEngine()._get_local_context() == ""
+        mock_openai.assert_called_once_with(
+            api_key="ollama", base_url="http://localhost:11434/v1"
+        )
+        assert chat_model() == "llama3.1"
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
-    def test_interpret_intent_no_client(self, mock_settings, mock_openai):
-        """Test interpret intent without client."""
-        mock_settings.OPENAI_API_KEY = None
-        mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
-        mock_settings.AI_MODEL = "gpt-4"
-        mock_settings.AI_IMAGE_MODEL = "dall-e-3"
+    def test_make_client_without_a_key_is_none(self, mock_settings, mock_openai):
         mock_settings.OLLAMA_ENABLED = False
-        mock_openai.return_value = None
+        mock_settings.OPENAI_API_KEY = None
 
-        engine = AIEngine()
-        mock_app = MagicMock()
-
-        with pytest.raises(MaxError, match="Missing AI"):
-            engine.interpret_intent("test prompt", mock_app)
+        assert make_client() is None
+        mock_openai.assert_not_called()
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")
@@ -144,7 +115,33 @@ class TestAIEngine:
 
         result = engine.categorize_files(["file1.txt", "file2.txt"])
 
-        assert result == {"file1.txt": "Other", "file2.txt": "Other"}
+        # By kind when the AI can't answer: .txt is a document.
+        assert result == {"file1.txt": "Documents", "file2.txt": "Documents"}
+
+    @pytest.mark.parametrize(
+        "reply, expected",
+        [
+            (
+                'Here you go:\n```json\n{"a.mp3": "Chill"}\n```',
+                {"a.mp3": "Chill", "b.jpg": "Images"},
+            ),
+            ("", {"a.mp3": "Music", "b.jpg": "Images"}),
+        ],
+    )
+    @patch("max_cli.core.engines.ai_engine.get_default_cache")
+    def test_categorize_reads_fenced_json_and_falls_back_by_kind(
+        self, mock_cache, reply, expected
+    ):
+        """A free model wrapped its JSON in a fence, or sent nothing at all."""
+        mock_cache.return_value.get.return_value = None
+        engine = AIEngine()
+        engine._client = MagicMock()
+        engine._client.chat.completions.create.return_value.choices = [MagicMock()]
+        engine._client.chat.completions.create.return_value.choices[
+            0
+        ].message.content = reply
+
+        assert engine.categorize_files(["a.mp3", "b.jpg"]) == expected
 
     @patch("openai.OpenAI")
     @patch("max_cli.core.engines.ai_engine.settings")

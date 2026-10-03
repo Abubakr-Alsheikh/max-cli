@@ -1,18 +1,50 @@
-import shlex
-import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from max_cli.common.atomic import atomic_write_json
+from max_cli.common.exceptions import MaxError
 from max_cli.common.logger import console, log_error, log_success
+
+if TYPE_CHECKING:
+    from max_cli.core.agent.agent import ActionCall, Agent, AgentReply, Step
 
 app = typer.Typer()
 
-MAIN_APP_REF: Optional[typer.Typer] = None
+# Earlier conversation turns a chat session starts from.
+CHAT_MEMORY_TURNS = 20
+EXIT_WORDS = ("exit", "quit")
+DANGER_NOTES = {
+    "moves": "moves or renames files",
+    "overwrites": "overwrites files in place",
+    "deletes": "deletes files",
+}
+STEP_STYLES = {
+    "loaded": ("·", "dim"),
+    "looked": ("·", "dim"),
+    "started": ("⚙", "bold cyan"),
+    "ran": ("✓", "green"),
+    "failed": ("✗", "red"),
+    "refused": ("!", "yellow"),
+    "declined": ("-", "dim"),
+    "planned": ("→", "cyan"),
+    "queued": ("⧗", "cyan"),
+}
+# Quicker actions don't show how long they took.
+MIN_SHOWN_SECONDS = 0.1
+# A finished action's lines sit under its "⚙ name" line.
+RESULT_INDENT = "      "
+ARGUMENT_INDENT = "      "
+EXAMPLES = (
+    "shrink every video in this folder",
+    "merge the PDFs in Downloads into one file",
+    "sort my Music folder into Artist/Album folders",
+    "find duplicate files here",
+)
 
 
 def _get_engine():
@@ -21,78 +53,124 @@ def _get_engine():
     return AIEngine()
 
 
-@app.command("ask")
-@app.command("a", hidden=True)
-def ask_ai(
-    prompt: str = typer.Argument(..., help="What do you want to do?"),
-    explain: bool = typer.Option(
-        False, "--explain", "-e", help="Explain the command logic."
-    ),
-):
-    """
-    Natural Language Interface.
-    Example: max ai ask "Compress all PDFs in Documents folder"
-    """
-    if MAIN_APP_REF is None:
-        log_error("Internal Error: Main App reference not linked.")
-        raise typer.Exit(1)
+def _confirm(call: "ActionCall") -> bool:
+    """The agent asks before it moves, overwrites or deletes files."""
+    note = DANGER_NOTES.get(call.action.danger.value, "changes files")
+    return Confirm.ask(
+        f"[yellow]Run [bold]{escape(call.describe())}[/bold]? It {note}.[/yellow]"
+    )
 
-    console.print(f"[dim]Analyzing request: '{prompt}'...[/dim]")
 
-    with console.status("[bold cyan]Consulting AI...[/bold cyan]"):
-        try:
-            eng = _get_engine()
-            result = eng.interpret_intent(prompt, MAIN_APP_REF)
-        except Exception as e:
-            log_error(str(e))
-            raise typer.Exit(1) from None
-
-    # Handle AI Rejection
-    if "error" in result:
+def _show_arguments(step: "Step") -> None:
+    width = max((len(name) for name in step.arguments), default=0)
+    for name, value in step.arguments.items():
         console.print(
-            Panel(result["error"], title="[red]AI Error[/red]", border_style="red")
+            f"{ARGUMENT_INDENT}[dim]{escape(name.ljust(width))}[/dim]  {escape(value)}"
         )
+
+
+def _show_step(step: "Step") -> None:
+    """One step as it happens: an action's name and arguments when it starts,
+    its result (and the files it made) indented under it when it ends."""
+    kind = step.kind.value
+    mark, style = STEP_STYLES.get(kind, ("·", "dim"))
+    if kind in ("started", "planned", "refused", "declined", "queued"):
+        title = {
+            "started": step.label,
+            "planned": f"Would run {step.label}",
+            "declined": f"Skipped {step.label}",
+            "queued": f"Queued {step.label}",
+        }.get(kind, step.text)
+        console.print(f"  [{style}]{mark} {escape(title)}[/{style}]")
+        _show_arguments(step)
         return
+    if kind in ("ran", "failed") and (step.result is not None or step.seconds):
+        message = step.result.message if step.result is not None else step.text
+        took = (
+            f"  [dim]{step.seconds:.1f}s[/dim]"
+            if step.seconds >= MIN_SHOWN_SECONDS
+            else ""
+        )
+        console.print(
+            f"{RESULT_INDENT}[{style}]{mark} {escape(message)}[/{style}]{took}"
+        )
+        for path in step.result.output_files if step.result is not None else []:
+            console.print(f"{RESULT_INDENT}  [dim]→[/dim] {escape(str(path))}")
+        return
+    console.print(f"  [{style}]{mark} {escape(step.text)}[/{style}]")
 
-    # Handle Success
-    cmd_str = result.get("command", "")
-    reason = result.get("thought", "")
-    is_dangerous = result.get("dangerous", False)
 
-    # Display Proposal
+def _make_agent(dry_run: bool = False) -> "Agent":
+    from max_cli.core.agent.agent import Agent
+
+    return Agent.from_settings(confirm=_confirm, on_step=_show_step, dry_run=dry_run)
+
+
+def _show_reply(reply: "AgentReply") -> None:
+    """The answer as Markdown in a panel; the footer counts actions and tokens."""
+    from rich.markdown import Markdown
+
+    actions = sum(1 for step in reply.steps if step.kind.value in ("ran", "failed"))
+    facts = []
+    if actions:
+        facts.append(f"{actions} action{'s' if actions != 1 else ''}")
+    if reply.tokens:
+        facts.append(f"{reply.tokens:,} tokens")
+    console.print()
     console.print(
         Panel(
-            f"[dim]{reason}[/dim]\n\n[bold green]> {cmd_str}[/bold green]",
-            title="[cyan]Max Suggests[/cyan]",
-            border_style="green" if not is_dangerous else "yellow",
+            Markdown(reply.text),
+            title="[bold cyan]Max[/bold cyan]",
+            title_align="left",
+            subtitle=f"[dim]{' · '.join(facts)}[/dim]" if facts else None,
+            subtitle_align="right",
+            border_style="cyan",
+            padding=(1, 2),
         )
     )
 
-    if explain and result.get("explanation"):
-        console.print(
-            Panel(
-                result["explanation"],
-                title="[dim]How it works[/dim]",
-                border_style="blue",
-            )
-        )
 
-    # Confirmation
-    msg = "Run this command?"
-    if is_dangerous:
-        msg = "[bold red]⚠ This command modifies files. Proceed?[/bold red]"
+@app.command("ask")
+@app.command("a", hidden=True)
+def ask_ai(
+    prompt: str = typer.Argument(..., help="What do you want done?"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what the agent would run, and run nothing."
+    ),
+    explain: bool = typer.Option(
+        False, "--explain", "-e", hidden=True, help="No longer used."
+    ),
+):
+    """
+    Ask the AI agent to do something; it runs Max's own commands.
+    Example: max ai ask "Compress all PDFs in Documents folder"
 
-    if Confirm.ask(msg):
-        console.print("\n[dim]Executing...[/dim]")
-        # Execute safely using subprocess
-        # We split the string safely to handle quotes properly
+    It asks before it moves, overwrites or deletes files, works only in this
+    folder and folders you name, and never runs other programs.
+    """
+    try:
+        agent = _make_agent(dry_run)
+        with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
+            # The agent may ask a question; the spinner would draw over it.
+            agent.confirm = _paused(status, _confirm)
+            reply = agent.ask(prompt)
+    except MaxError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    _show_reply(reply)
+
+
+def _paused(status: Any, confirm: Any) -> Any:
+    """`confirm` with the spinner stopped while it asks."""
+
+    def ask(call: "ActionCall") -> bool:
+        status.stop()
         try:
-            args = shlex.split(cmd_str)
-            subprocess.run(args, check=True)
-        except Exception as e:
-            log_error(f"Execution failed: {e}")
-    else:
-        console.print("[yellow]Aborted.[/yellow]")
+            return bool(confirm(call))
+        finally:
+            status.start()
+
+    return ask
 
 
 @app.command("analyze")
@@ -218,7 +296,8 @@ def chat_session(
     ),
 ):
     """
-    Start an interactive session with Max. He remembers what you said.
+    Talk with the AI agent: each request runs Max's commands, and it
+    remembers the conversation.
 
     Use --clear to reset history, --export to save, --import to load previous chats.
     """
@@ -245,61 +324,46 @@ def chat_session(
 
     console.print(
         Panel(
-            "[bold cyan]Max Interactive Session[/bold cyan]\nType 'exit' to quit, 'help' for suggestions.",
+            "[bold cyan]Max Interactive Session[/bold cyan]\n"
+            "Ask for what you want done. Type 'help' for examples, 'exit' to quit.",
             border_style="cyan",
         )
     )
 
     eng = _get_engine()
-    if eng.history:
-        console.print(
-            f"[dim]Loaded {len(eng.history)} messages from previous session[/dim]"
-        )
+    try:
+        agent = _make_agent()
+    except MaxError as e:
+        log_error(escape(str(e)))
+        raise typer.Exit(1) from None
+    earlier = eng.history[-CHAT_MEMORY_TURNS:]
+    agent.messages.extend(earlier)
+    if earlier:
+        console.print(f"[dim]Remembering {len(earlier)} earlier messages[/dim]")
 
     while True:
-        suggestions = eng.get_suggestions()
-        user_input = Prompt.ask(
-            "[bold green]User[/bold green]",
-            choices=suggestions + ["help", "exit", "quit"],
-            show_choices=False,
-        )
-        if user_input.lower() in ["exit", "quit"]:
-            eng._save_history()
+        user_input = Prompt.ask("[bold green]You[/bold green]").strip()
+        if user_input.lower() in EXIT_WORDS:
             break
-        if user_input.lower() == "help":
-            console.print("[bold cyan]Suggestions:[/bold cyan]")
-            for i, s in enumerate(suggestions, 1):
-                console.print(f"  {i}. {s}")
-            console.print("  [dim]Or type your own command[/dim]")
+        if not user_input:
             continue
-
-        with console.status("[dim]Thinking...[/dim]"):
-            try:
-                result = eng.interpret_intent(user_input, MAIN_APP_REF)
-
-                if "error" in result:
-                    console.print(f"[red]Max:[/red] {result['error']}")
-                    continue
-
-                thought = result.get("thought")
-                cmd = result.get("command")
-
-                if thought and not cmd:
-                    console.print(f"[cyan]Max:[/cyan] {thought}")
-
-                elif cmd:
-                    console.print(
-                        f"[cyan]Max Suggests:[/cyan] [bold white]{cmd}[/bold white]"
-                    )
-                    if thought:
-                        console.print(f"[dim]Reason: {thought}[/dim]")
-
-                    if Confirm.ask("Execute?"):
-                        args = shlex.split(cmd)
-                        subprocess.run(args)
-
-            except Exception as e:
-                log_error(str(e))
+        if user_input.lower() == "help":
+            console.print("[bold cyan]For example:[/bold cyan]")
+            for example in EXAMPLES:
+                console.print(f"  {example}")
+            continue
+        try:
+            with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
+                agent.confirm = _paused(status, _confirm)
+                reply = agent.ask(user_input)
+        except MaxError as e:
+            log_error(escape(str(e)))
+            continue
+        _show_reply(reply)
+        eng.history += [
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": reply.text},
+        ]
 
     eng._save_history()
     console.print("[cyan]Goodbye![/cyan]")
@@ -330,7 +394,9 @@ def semantic_search_cmd(
     )
 
     requested = [ext.strip().lower().lstrip(".") for ext in extensions.split(",")]
-    unreadable = [ext for ext in requested if ext and f".{ext}" not in SEARCHABLE_SUFFIXES]
+    unreadable = [
+        ext for ext in requested if ext and f".{ext}" not in SEARCHABLE_SUFFIXES
+    ]
     if unreadable:
         readable = ", ".join(sorted(s.lstrip(".") for s in SEARCHABLE_SUFFIXES))
         console.print(

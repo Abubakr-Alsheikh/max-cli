@@ -77,13 +77,28 @@ def test_running_a_group_loads_it_on_demand():
     assert "Queue Statistics" in result.output
 
 
-def test_ai_group_gets_the_full_app_for_its_command_list(monkeypatch):
-    from max_cli.interface import cli_ai
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        (["shrink every video in Downloads"], ["shrink every video in Downloads"]),
+        (["shrink", "every", "video"], ["shrink every video"]),
+        (["shrink", "it", "--dry-run"], ["shrink it", "--dry-run"]),
+    ],
+)
+def test_text_that_isnt_a_command_goes_to_the_agent(args, expected):
+    """D1: `max "<request>"` and `max <words>` run `max ai ask`."""
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
 
-    monkeypatch.setattr(cli_ai, "MAIN_APP_REF", None)
-    registry.register(typer.Typer(cls=LazyTyperGroup))
+    assert group.route(args) == ["ai", "ask", *expected]
 
-    load_group("ai")
 
-    group_names = {group.name for group in cli_ai.MAIN_APP_REF.registered_groups}
-    assert {"video", "pdf", "grab", "queue"} <= group_names
+@pytest.mark.parametrize(
+    "args",
+    [["video", "--help"], ["--help"], ["queue", "stats"]],
+)
+def test_commands_and_options_are_not_requests(args):
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
+
+    assert not group._is_request(args[0])

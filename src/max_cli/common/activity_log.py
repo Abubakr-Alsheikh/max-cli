@@ -1,10 +1,35 @@
 import json
+import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
+from max_cli.common.retry import retry
+
+logger = logging.getLogger(__name__)
+
+# Windows refuses to read a file another thread is replacing, and to replace
+# one another thread is reading: the AI page's worker logs while the app's
+# badge refresh reads. A short wait clears it.
+FILE_ATTEMPTS = 5
+FILE_RETRY_SECONDS = 0.05
+
+
+@retry(
+    max_attempts=FILE_ATTEMPTS, delay=FILE_RETRY_SECONDS, exceptions=(PermissionError,)
+)
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+@retry(
+    max_attempts=FILE_ATTEMPTS, delay=FILE_RETRY_SECONDS, exceptions=(PermissionError,)
+)
+def _write_json(path: Path, data: Any) -> None:
+    atomic_write_json(path, data)
+
 
 # `max grab` downloads log under the command group name "grab", while the
 # Home card, the History filter and get_stats() count them as "download".
@@ -60,6 +85,9 @@ class ActivityLog:
 
     def __init__(self):
         self._entries: list[ActivityEntry] = []
+        # A log that couldn't be read must never save: it would write its
+        # empty list over the whole history.
+        self._readable = True
         self._load()
 
     def _ensure_dir(self) -> None:
@@ -69,15 +97,25 @@ class ActivityLog:
         if not self.LOG_FILE.exists():
             return
         try:
-            data = json.loads(self.LOG_FILE.read_text(encoding="utf-8"))
+            data = json.loads(_read_text(self.LOG_FILE))
             self._entries = [ActivityEntry.from_dict(e) for e in data]
         except (json.JSONDecodeError, KeyError, TypeError):
             self._entries = []
+        except PermissionError:
+            logger.warning("Activity log locked; this change won't be logged")
+            self._readable = False
 
     def _save(self) -> None:
+        """Write the log. Skipped when the file stays locked: the log is a
+        record, and failing here stopped the work that was being logged."""
+        if not self._readable:
+            return
         self._ensure_dir()
         data = [e.to_dict() for e in self._entries[: self.MAX_ENTRIES]]
-        atomic_write_json(self.LOG_FILE, data)
+        try:
+            _write_json(self.LOG_FILE, data)
+        except PermissionError:
+            logger.warning("Activity log locked; this change wasn't saved")
 
     def start_entry(
         self,

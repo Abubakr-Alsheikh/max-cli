@@ -322,6 +322,10 @@ def compress(
 MISSING_TAGS_NOTE = "{count} without title or artist: batch or set can fill them."
 
 
+# How many artists and albums a folder's facts name.
+TOP_NAMES = 10
+
+
 @dataclass
 class AudioFacts:
     """What an audio file, or a folder of them, holds, for the Audio page."""
@@ -341,6 +345,9 @@ class AudioFacts:
     total_duration: float = 0.0
     formats: dict[str, int] = field(default_factory=dict)
     untagged: int = 0  # files with no title or no artist
+    # the most common artists and albums, with their track counts
+    artists: dict[str, int] = field(default_factory=dict)
+    albums: dict[str, int] = field(default_factory=dict)
     note: str = ""
 
 
@@ -363,6 +370,8 @@ def describe(
         files = find_audio_files(target)
         total = 0.0
         untagged = 0
+        artists: Counter[str] = Counter()
+        albums: Counter[str] = Counter()
         for path in files:
             try:
                 metadata = tag_engine.get_metadata(path)
@@ -371,6 +380,10 @@ def describe(
             total += float(metadata.get("duration") or 0)
             if not (metadata.get("title") and metadata.get("artist")):
                 untagged += 1
+            if metadata.get("artist"):
+                artists[str(metadata["artist"])] += 1
+            if metadata.get("album"):
+                albums[str(metadata["album"])] += 1
         return AudioFacts(
             path=target,
             size_bytes=sum(path.stat().st_size for path in files),
@@ -381,6 +394,8 @@ def describe(
                 Counter(path.suffix.lstrip(".").upper() for path in files).most_common()
             ),
             untagged=untagged,
+            artists=dict(artists.most_common(TOP_NAMES)),
+            albums=dict(albums.most_common(TOP_NAMES)),
             note=MISSING_TAGS_NOTE.format(count=untagged) if untagged else "",
         )
     _require_audio(target)

@@ -27,7 +27,7 @@ The sidebar on the left lists eleven sections in three groups, each with its nam
 | `5` | **Images** | Pick an image or a folder, see its size in pixels, format, date and camera (or how many images a folder holds), and run any `max images` action on it |
 | `6` | **PDF** | Pick a PDF, see its pages, paper size and whether it's locked or scanned, and run any `max pdf` action on it |
 | `7` | **Files** | Pick a folder or a file, see what it holds, and sort, clean, back up or undo with any `max files` action |
-| `8` | **Chat** | AI chat with command suggestions |
+| `8` | **AI** | Tell the AI agent what you want done; it runs Max's actions, shows each step and asks before it moves, overwrites or deletes files |
 | | **Track** | |
 | `9` | **Activity** | Three tabs: Queue (running, waiting and finished tasks), History (every action, with filters) and Undo (put back what Max moved, renamed or deleted) |
 | | **More** | |
@@ -113,6 +113,22 @@ Every action you ran from the dashboard, newest first, 10 at a time with Prev an
 ### Undo
 
 The file changes Max recorded (organize, order, smart-sort and duplicates --delete), newest first, with the folder each one changed. **Undo** puts back the newest change that isn't undone yet, after one confirmation; press it again to step further back. Folders that a change created, such as organize's Artist/Album folders, go too when they're empty again.
+
+## AI page
+
+The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, such as "shrink every video in this folder", or press one of the examples. The conversation scrolls on its own, so the input below it stays in view; up and down in the input bring back earlier requests.
+
+- Each answer starts with a status line: a spinner and what Max is doing ("Thinking", "Running files order", "Waiting for your answer"), then how many actions it ran and the tokens it used.
+- Every action gets a card: running, then `✓` with its result and how long it took, `✗` with the error, or a note when a path was refused, you said no, or it was a dry run. Click a card to see the arguments it ran with and the files it made.
+- Long jobs (compressing or cleaning up a video, downloads) can go to the queue: the card says `⧗ queued`, you keep talking, and the Jobs window (`J`) shows their progress. Only the dashboard queues; `max "<request>"` in a terminal waits for each action.
+- The line under the status names what it looked at first: folders it listed or searched, files it inspected, links it checked.
+- The reply itself is rendered as Markdown: lists, tables, code and links.
+- Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
+- **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
+- **Dry run** shows the steps and changes nothing. **New chat** starts over. The line beside them shows the model and the tokens the chat used.
+- With no API key and Ollama off, the page says so and links to Settings.
+
+Each request and each action the agent runs shows on Activity's History tab.
 
 ## Extras page
 
