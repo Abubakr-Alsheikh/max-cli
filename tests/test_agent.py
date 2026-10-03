@@ -821,3 +821,60 @@ def test_find_files_missing_lists_only_the_work_left(tmp_path):
     assert [item["path"] for item in found["files"]] == ["todo.m4a"]
     assert found["already_done"]["count"] == 1
     assert found["already_done"]["files"] == ["done.m4a"]
+
+
+def _music_folder(folder: Path) -> Path:
+    for name in ("done.m4a", "done.mp3", "new.m4a"):
+        (folder / name).write_bytes(b"\0")
+    return folder
+
+
+def _convert(arguments: dict, each: Optional[list] = None) -> tuple:
+    call: dict[str, Any] = {"action": "video.audio-convert", "arguments": arguments}
+    if each is not None:
+        call["each"] = each
+    return (
+        _answer(calls=(_call("load_group", {"name": "video"}),)),
+        _answer(calls=(_call("run_action", call, "batch"),)),
+        _answer("Done."),
+    )
+
+
+def test_a_folder_as_the_file_runs_the_files_left(tmp_path, monkeypatch):
+    seen = _track_runs(monkeypatch)
+    folder = _music_folder(tmp_path)
+    model = ScriptedModel(*_convert({"target": str(folder), "format": "mp3"}))
+
+    reply = _agent(model, tmp_path).ask("convert the m4a files to mp3")
+
+    ran = [step.text for step in reply.steps if step.kind == StepKind.RAN]
+    assert ran == ["video audio-convert: Read new.m4a"]
+    summary = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert summary["done_already"] == ["done.m4a"]
+    assert "skipped them" in summary["note"]
+    assert seen["most"] == 1
+
+
+def test_each_takes_a_pattern(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    _music_folder(tmp_path)
+    model = ScriptedModel(*_convert({"format": "mp3"}, each=[str(tmp_path / "*.m4a")]))
+
+    reply = _agent(model, tmp_path).ask("convert them")
+
+    ran = [step.text for step in reply.steps if step.kind == StepKind.RAN]
+    assert ran == ["video audio-convert: Read new.m4a"]
+
+
+def test_nothing_left_to_do_runs_nothing(tmp_path, monkeypatch):
+    seen = _track_runs(monkeypatch)
+    for name in ("a.m4a", "a.mp3"):
+        (tmp_path / name).write_bytes(b"\0")
+    model = ScriptedModel(*_convert({"target": str(tmp_path), "format": "mp3"}))
+
+    _agent(model, tmp_path).ask("convert them")
+
+    summary = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert summary["files"] == 0
+    assert summary["done_already"] == ["a.m4a"]
+    assert seen["most"] == 0
