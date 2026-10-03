@@ -8,7 +8,7 @@ from textual.widget import Widget
 from textual.widgets import Footer
 
 from max_cli.interface.tui.commands import GROUP_PAGES, ActionCommands
-from max_cli.interface.tui.messages import OpenFile, OpenPage
+from max_cli.interface.tui.messages import AskAI, OpenFile, OpenPage
 from max_cli.interface.tui.theme import MAX_CYBER, THEME_NAME
 from max_cli.interface.tui.tool_pages import TOOL_PAGES
 from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
@@ -419,6 +419,11 @@ class MaxDashboardApp(App):
         page = self.query_one(f"#{message.page_id}-panel", ToolPage)
         self.navigate(message.page_id)
         page.open_file(message.path)
+
+    def on_ask_ai(self, message: AskAI) -> None:
+        """Home's ask bar: open the AI page with the request."""
+        self.navigate("ai")
+        self.query_one(AIPanel).ask_from(message.text)
 
     def on_open_page(self, message: OpenPage) -> None:
         self.navigate(message.section_id)

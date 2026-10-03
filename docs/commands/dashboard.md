@@ -20,7 +20,7 @@ The sidebar on the left lists eleven sections in three groups, each with its nam
 | Key | Section | What it does |
 |-----|---------|--------------|
 | | **Do** | |
-| `1` | **Home** | Command center: live CPU, memory and disk, your download and action counts, activity over the last 14 days, a breakdown by type, quick launch and recent activity |
+| `1` | **Home** | Launchpad and command center: ask Max in plain words, open any page, pick up the actions you use most, and see your week, your activity by type and what ran lately |
 | `2` | **Download** | Download form with progress and recent downloads |
 | `3` | **Video** | Pick a video or audio file, see its length, size and codecs, and run any `max video` action on it |
 | `4` | **Audio** | Pick a song or a folder of music, see its tags, length and bitrate (or how many tracks lack tags), edit tags, sort music into folders, compress or clean it |
@@ -37,6 +37,21 @@ The sidebar on the left lists eleven sections in three groups, each with its nam
 Badges next to a section show what needs a look: a green `2` on Download means two downloads are running. On Activity, a red `!1` means one action failed since you last opened Activity; otherwise a yellow `3` means three tasks are waiting or running.
 
 The dashboard remembers whether you left the sidebar open or folded. In a window narrower than 100 columns it always shows icons only.
+
+The sidebar shows emoji icons, which work in any terminal. With a Nerd Font as your terminal's font (for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases), pick **Page icons: Nerd Font** on the Settings page for crisp one-colour icons in the dashboard's colours. Without a Nerd Font they show as boxes.
+
+## Home page
+
+Home is the first page you see:
+
+- **Ask Max:** type what you want done and press `Enter`; the AI page opens and runs it. Without an AI set up, `Enter` opens Settings.
+- **Launchpad:** a tile for each page with its key and what it's for. **Pick up again** lists the actions you run most; click one to open its form.
+- **This week, Success %, Space saved, Queue:** what you did in the last 7 days next to the week before, how many actions worked, the bytes your compress and optimize runs took off, and the queue right now (click it to open the queue).
+- **Activity and By type:** the last 14 days, each day's bar split by kind in the same colours as By type. AI counts your requests; what the agent ran counts in its own kind.
+- **Recent:** the latest actions: when, whether they worked, what ran on what, what came out (a file, `-70%`, the error), how long it took, and `AI` when the agent ran it. Click the card for the full history.
+- **System:** CPU (with the last two minutes), memory and disk.
+
+Every number on Home counts finished actions from the same activity log over the same days, so the cards agree with each other. In a window narrower than about 86 columns, the cards stack.
 
 The Activity page's Queue tab reads the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 

@@ -37,6 +37,23 @@ SECTIONS = [
     ("extras", "\U0001f9f0", "Extras"),
     ("settings", "\U0001f527", "Settings"),
 ]
+# The same pages in Nerd Font icons (Material Design glyphs): one colour,
+# one column wide. DASHBOARD_ICONS picks them; they need a Nerd Font.
+NERD_ICONS = {
+    "home": "\U000f02dc",
+    "download": "\U000f01da",
+    "video": "\U000f0567",
+    "audio": "\U000f0387",
+    "images": "\U000f02e9",
+    "pdf": "\U000f0226",
+    "files": "\U000f024b",
+    "ai": "\U000f06a9",
+    "activity": "\U000f02da",
+    "extras": "\U000f09ac",
+    "settings": "\U000f0493",
+}
+EMOJI_ICONS = {section_id: icon for section_id, icon, _label in SECTIONS}
+NERD_STYLE = "nerd"
 SECTION_GROUPS = (
     (
         "DO",
@@ -59,6 +76,19 @@ SECTION_KEYS = {
     )
 }
 SECTION_KEYS["settings"] = SETTINGS_KEY
+
+
+def page_icon(section_id: str) -> Content:
+    """A page's icon in the style DASHBOARD_ICONS picks, two columns wide
+    either way, so labels line up: an emoji is two columns, a Nerd Font
+    glyph one, coloured like the theme's live values."""
+    from max_cli.config import settings
+
+    if settings.DASHBOARD_ICONS == NERD_STYLE and section_id in NERD_ICONS:
+        return Content.assemble((NERD_ICONS[section_id], "$primary"), " ")
+    return Content(EMOJI_ICONS.get(section_id, "  "))
+
+
 EXPAND_LABEL = "»"
 COLLAPSE_LABEL = "«"
 
@@ -112,10 +142,10 @@ class NavItem(Widget, can_focus=True):
 
     BINDINGS = [("enter", "open", "Open"), ("space", "open", "Open")]
 
-    def __init__(self, section_id: str, icon: str, label: str) -> None:
+    def __init__(self, section_id: str, label: str) -> None:
         super().__init__(id=f"nav-{section_id}")
         self.section_id = section_id
-        self.icon = icon
+        self.icon = page_icon(section_id)
         self.label = label
         self.compact = False
         self.badge: Optional[Badge] = None
@@ -133,7 +163,9 @@ class NavItem(Widget, can_focus=True):
             indent = max(0, (self.content_size.width - icon.cell_length) // 2)
             return Content.assemble(" " * indent, icon)
         name = Content.assemble(
-            (f"{SECTION_KEYS[self.section_id]}  ", "dim"), f"{self.icon}  {self.label}"
+            (f"{SECTION_KEYS[self.section_id]}  ", "dim"),
+            self.icon,
+            f"  {self.label}",
         )
         # The badge sits against the right padding, so the right margin
         # matches the left one whatever the label's length.
@@ -273,14 +305,13 @@ class Sidebar(Vertical):
             yield Static(f"MAX {self.version}".rstrip(), id="sidebar-brand")
             yield Button(COLLAPSE_LABEL, id="sidebar-toggle")
         with VerticalScroll(id="sidebar-scroll"):
-            icons = {section_id: (icon, label) for section_id, icon, label in SECTIONS}
+            labels = {section_id: label for section_id, _icon, label in SECTIONS}
             for position, (group, section_ids) in enumerate(SECTION_GROUPS):
                 yield Static(group, classes="sidebar-group")
                 if position:
                     yield Static("───", classes="sidebar-divider")
                 for section_id in section_ids:
-                    icon, label = icons[section_id]
-                    yield NavItem(section_id, icon, label)
+                    yield NavItem(section_id, labels[section_id])
         yield Static(Content("? Help"), id="sidebar-help")
 
     def on_mount(self) -> None:

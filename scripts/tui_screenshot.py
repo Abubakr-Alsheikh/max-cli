@@ -60,26 +60,82 @@ def _seed_sample_data() -> None:
     import random
     from datetime import datetime, timedelta
 
+    from max_cli.common.activity_log import ActivityLog
     from max_cli.core.engines import task_manager
     from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
-    from max_cli.interface.tui.activity_log import ActivityLog
 
     rng = random.Random(7)
     log = ActivityLog()
     now = datetime.now()
-    kinds = ["download"] * 5 + ["command"] * 3 + ["file_op"] * 2 + ["ai"]
+    # Shaped like real entries: a command group, the action, its arguments,
+    # what it made, sizes before and after, how long it took.
+    samples = [
+        ("video", "compress", "trip.mp4", 812_000_000, 296_000_000),
+        ("video", "audio-convert", "lofi mix.m4a", 0, 0),
+        ("video", "to-audio", "lecture.mp4", 0, 0),
+        ("audio", "compress", "podcast 12.wav", 98_000_000, 31_000_000),
+        ("pdf", "compress", "scan 2026.pdf", 24_000_000, 6_100_000),
+        ("pdf", "merge", "invoices", 0, 0),
+        ("download", "download", "https://youtu.be/sample", 0, 0),
+        ("images", "compress", "holiday photos", 61_000_000, 19_000_000),
+        ("files", "smart-sort", "Downloads", 0, 0),
+    ]
+    weights = [5, 4, 3, 3, 2, 1, 6, 2, 1]
+    prompts = [
+        "convert every .m4a here to mp3",
+        "shrink the videos in this folder",
+        "which files take the most space?",
+    ]
     for day in range(SAMPLE_DAYS):
         for _ in range(rng.randint(0, 9)):
-            kind = rng.choice(kinds)
-            status = "failed" if rng.random() < 0.08 else "success"
+            stamp = (now - timedelta(days=day, minutes=rng.randint(0, 600))).isoformat()
+            status = "failed" if rng.random() < 0.06 else "success"
+            if rng.random() < 0.15:
+                entry = log.add_entry(
+                    "ai",
+                    "agent",
+                    status=status,
+                    details={
+                        "prompt": rng.choice(prompts),
+                        "tokens": rng.randint(3, 14) * 1000,
+                    },
+                    duration_ms=rng.randint(4, 90) * 1000,
+                )
+                entry.timestamp = stamp
+                continue
+            group, action, target, before, after = rng.choices(samples, weights)[0]
+            name = Path(target).name
+            details = {
+                "args": {"target": target},
+                "via": "ai" if rng.random() < 0.3 else "",
+                "ok": status == "success",
+                "message": "Done" if status == "success" else "Unsupported codec",
+                "output_files": [f"{Path(name).stem}_out{Path(name).suffix or '.pdf'}"],
+                "details": {"input_size": before, "output_size": after}
+                if before
+                else {},
+            }
+            if status == "failed":
+                details["error"] = "Unsupported codec in the input file"
             entry = log.add_entry(
-                kind, kind, status=status, details={"title": f"Sample {kind}"}
+                group,
+                action,
+                status=status,
+                details=details,
+                duration_ms=rng.randint(2, 400) * 1000,
             )
-            entry.timestamp = (
-                now - timedelta(days=day, minutes=rng.randint(0, 600))
-            ).isoformat()
+            entry.timestamp = stamp
     log.add_entry(
-        "download", "grab", status="success", details={"title": "Latest sample"}
+        "video",
+        "compress",
+        status="success",
+        details={
+            "args": {"target": "holiday.mp4"},
+            "via": "ai",
+            "output_files": ["holiday_compressed.mp4"],
+            "details": {"input_size": 1_400_000_000, "output_size": 420_000_000},
+        },
+        duration_ms=212_000,
     )
 
     task_manager.TaskManager.start_worker = lambda self: None  # show, don't run

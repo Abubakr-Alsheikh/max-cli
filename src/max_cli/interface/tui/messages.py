@@ -14,6 +14,14 @@ class OpenPage(Message):
         self.tab = tab  # a page with tabs (Activity) opens this one
 
 
+class AskAI(Message):
+    """Ask the app to show the AI page and send it `text` (Home's ask bar)."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.text = text
+
+
 class OpenFile(Message):
     """Ask the app to show a command-group page with `path` picked there."""
 
