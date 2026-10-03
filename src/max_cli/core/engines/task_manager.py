@@ -383,6 +383,7 @@ class TaskManager:
 
     # --- running tasks ------------------------------------------------------------
 
+    @property
     def is_worker_running(self) -> bool:
         """True while this process runs queued tasks (the dashboard is open)."""
         return self._running

@@ -28,7 +28,7 @@ max grab download
 | `--no-playlist` | | Download one video, not the playlist |
 | `--no-meta` | `--nom` | Skip embedded metadata and thumbnails |
 | `--output` | `-o` | Output folder |
-| `--queue` | `-Q` | Add to the queue instead of downloading now |
+| `--queue` | `-Q` | Add to the queue and download in the background (`max queue status` follows it) |
 | `--no-process` | | Add to the queue without processing it |
 | `--progress` / `--no-progress` | | Show or hide the progress bar (default: show) |
 | `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |

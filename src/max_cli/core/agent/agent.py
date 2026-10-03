@@ -84,8 +84,9 @@ moves, overwrites or deletes files. If they say no, don't retry.
 
 QUEUE_RULE = """
 - Long jobs (video compress or denoise, downloads) can run in the \
-background: run_action with queue true. Say they're queued and that the Jobs \
-window (J) shows them."""
+background: run_action with queue true. Say they're queued and that {jobs} \
+shows them."""
+JOBS_WINDOW = "the Jobs window (J)"  # where the dashboard shows queued jobs
 # The find_files arguments besides `path`.
 FIND_FILTERS = (
     "kind",
@@ -265,13 +266,16 @@ class Agent:
         parallel: int = PARALLEL_ACTIONS,
         token_limit: int = TOKEN_LIMIT,
         can_queue: bool = False,
+        jobs_hint: str = JOBS_WINDOW,
     ) -> None:
-        """`can_queue` lets the model queue long jobs: only where something
-        runs the queue (the dashboard); the CLI waits for each action.
-        `on_step` may be called from several threads at once, never two
-        calls at the same time."""
+        """`can_queue` lets the model queue long jobs, which the caller must
+        then run: the dashboard's worker, or the background worker the CLI
+        starts. `jobs_hint` names where the user follows them. `on_step`
+        may be called from several threads at once, never two calls at the
+        same time."""
         self.client = client
         self.can_queue = can_queue
+        self.jobs_hint = jobs_hint
         self.model = model
         self.confirm = confirm
         self.on_step = on_step or _ignore_step
@@ -311,7 +315,7 @@ class Agent:
         return SYSTEM_PROMPT.format(
             groups=group_lines(),
             cwd=self.scope.cwd,
-            queue_rule=QUEUE_RULE if self.can_queue else "",
+            queue_rule=QUEUE_RULE.format(jobs=self.jobs_hint) if self.can_queue else "",
         )
 
     # --- the loop -----------------------------------------------------------
@@ -646,8 +650,8 @@ class Agent:
                 {
                     "queued": True,
                     "task_id": task.id,
-                    "note": "It runs in the background; the user follows it in "
-                    "the Jobs window (J). Don't wait for it.",
+                    "note": "It runs in the background; the user follows it "
+                    f"with {self.jobs_hint}. Don't wait for it.",
                 }
             )
         resolved = tuple(self.scope.resolve(str(path)) for path in paths)
@@ -814,8 +818,8 @@ class Agent:
                 {
                     "queued": len(checked),
                     "failed": [{"file": n, "error": why} for n, why in refused],
-                    "note": "They run in the background; the user follows them "
-                    "in the Jobs window (J). Don't wait for them.",
+                    "note": "They run in the background; the user follows "
+                    f"them with {self.jobs_hint}. Don't wait for them.",
                 },
                 ensure_ascii=False,
             )

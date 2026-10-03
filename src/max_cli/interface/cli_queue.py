@@ -15,6 +15,20 @@ def _get_engine():
     return get_task_manager()
 
 
+def _show_worker(manager) -> None:
+    """Whether a process runs the queue now, and how to start one."""
+    if manager.worker_alive():
+        console.print(
+            "[green]A worker is running the queue[/green] "
+            "[dim](the dashboard or the background worker)[/dim]"
+        )
+    elif manager.get_pending():
+        console.print(
+            "[yellow]No worker is running.[/yellow] "
+            "[dim]Run 'max queue start' to run the queue in the background.[/dim]"
+        )
+
+
 @app.command("status")
 @app.command("s", hidden=True)
 def queue_status() -> None:
@@ -65,6 +79,7 @@ def queue_status() -> None:
     summary.append(f"Running: {stats['running']}  ", style="blue")
     summary.append(f"Failed: {stats['failed']}  ", style="red")
     console.print(summary)
+    _show_worker(manager)
 
 
 @app.command("history")
@@ -143,9 +158,7 @@ def queue_retry(
 def queue_clear(
     all_tasks: bool = typer.Option(False, "--all", "-a", help="Clear all tasks"),
     # No -f short flag: everywhere else -f means --force.
-    failed_only: bool = typer.Option(
-        False, "--failed", help="Clear failed tasks only"
-    ),
+    failed_only: bool = typer.Option(False, "--failed", help="Clear failed tasks only"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ) -> None:
     """Remove pending tasks (or all, or only failed ones) from the queue."""
@@ -176,9 +189,44 @@ def queue_process(
     ),
 ) -> None:
     """Run pending tasks now, in this terminal."""
+    from max_cli.core.engines.task_manager import TaskManagerError
+
     console.print("[bold]Processing queue...[/bold]")
-    count = _get_engine().process_now(max_tasks=max_tasks)
+    try:
+        count = _get_engine().process_now(max_tasks=max_tasks)
+    except TaskManagerError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        return
     console.print(f"[green]Processed {count} tasks[/green]")
+
+
+@app.command("start")
+def queue_start() -> None:
+    """Run the queue in the background; closing the terminal doesn't stop it."""
+    from max_cli.core.engines.background_worker import (
+        start_background_worker,
+        worker_log_path,
+    )
+
+    if start_background_worker():
+        console.print("[green]Started the background worker.[/green]")
+        console.print(
+            f"[dim]'max queue status' shows the tasks; its log: {worker_log_path()}[/dim]"
+        )
+    else:
+        console.print("[dim]A worker is already running the queue.[/dim]")
+
+
+@app.command("worker", hidden=True)
+def queue_worker() -> None:
+    """The background worker itself: runs the queue until it stays empty."""
+    from max_cli.core.engines.task_manager import WORKER_IDLE_EXIT_SECONDS
+
+    ran = _get_engine().run_until_idle(idle_seconds=WORKER_IDLE_EXIT_SECONDS)
+    if ran is None:
+        console.print("Another worker is running the queue.")
+    else:
+        console.print(f"Ran {ran} tasks.")
 
 
 @app.command("stats")

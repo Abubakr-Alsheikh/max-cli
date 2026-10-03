@@ -73,8 +73,13 @@ def _queue(action_name: str, **values: Any) -> None:
     except ValidationError as e:
         log_error(str(e))
         raise typer.Exit(1) from None
+    from max_cli.core.engines.background_worker import start_background_worker
+
+    start_background_worker()
     console.print(f"[green]Queued:[/green] {values['target'].name} (ID: {task.id})")
-    console.print("[dim]Run 'max queue status' to monitor.[/dim]")
+    console.print(
+        "[dim]It runs in the background. 'max queue status' shows progress.[/dim]"
+    )
 
 
 def _report(result: Optional["ActionResult"]) -> None:

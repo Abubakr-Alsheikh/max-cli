@@ -364,5 +364,27 @@ async def test_in_the_dashboard_the_queue_light_shows_the_worker():
     assert light == "● RUNNING QUEUE"
 
 
+@pytest.mark.asyncio
+async def test_the_queue_light_shows_a_worker_in_another_process():
+    """The page alone runs no worker; the background worker holds the lock."""
+    from max_cli.core.engines.task_manager import TaskManager
+
+    background = TaskManager()  # stands in for `max queue worker`
+    app = QueueApp()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.pause()
+        stopped = str(app.query_one("#queue-worker", Static).content)
+        assert background._worker_lock.acquire(timeout=0)
+        try:
+            app.query_one(QueuePanel).refresh_data()
+            await pilot.pause()
+            running = str(app.query_one("#queue-worker", Static).content)
+        finally:
+            background._worker_lock.release()
+
+    assert stopped == "● QUEUE STOPPED"
+    assert running == "● RUNNING QUEUE"
+
+
 def test_finished_count_is_limited():
     assert queue_panel.FINISHED_SHOWN == 8

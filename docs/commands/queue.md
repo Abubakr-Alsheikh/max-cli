@@ -1,6 +1,6 @@
 # Queue Commands
 
-The `max queue` group manages background tasks. You add a task with the `--queue` flag on a heavy command, then process it when you're ready.
+The `max queue` group manages background tasks. You add a task with the `--queue` flag on a heavy command, or the AI agent queues a long job for you. Max then runs it in the background: the command returns at once, and closing the terminal doesn't stop the job.
 
 A task that fails goes back in line and runs again, up to `MAX_RETRIES` more times (2 unless you change it in `max config` or on the dashboard's Settings page). After that it moves to history as failed.
 
@@ -17,14 +17,15 @@ These commands can queue work:
 max video compress movie.mp4 --queue
 max video denoise lecture.mp4 --queue
 
-# Check the queue, then run everything
+# Both run in the background; see how they're doing
 max queue status
-max queue process
 ```
 
 Max stores tasks in `~/.max_cli/tasks/`: pending tasks in `queue.json` and finished ones in `history.json`. `max grab queue`, `max grab history` and the dashboard read the same store, so a download you queue with `max grab` shows up here too.
 
-While the dashboard is open, it runs queued tasks one after another, including tasks left from earlier runs. Press `J` in the dashboard to watch them. Outside the dashboard, `max queue process` runs them.
+One process at a time runs the queue: the dashboard while it's open, or else the background worker that a queued job starts. The worker runs every waiting task, waits 30 seconds for more, then exits; its log is `~/.max_cli/tasks/worker.log`. Press `J` in the dashboard to watch the tasks, whichever process runs them. If a worker stops in the middle of a task (the computer sleeps, you end the process), the next worker runs that task again.
+
+Every process that changes the queue (the dashboard, a terminal, the worker) reads it, changes it and saves it in one locked step, so a task you add from a terminal while the dashboard runs a job is never lost.
 
 ## status
 
@@ -34,9 +35,19 @@ List every task in the queue with its ID, type, status and progress.
 max queue status
 ```
 
+## start
+
+Start the background worker yourself, for tasks you queued with `--no-process`
+or left from earlier. It does nothing when a worker already runs.
+
+```bash
+max queue start
+```
+
 ## process
 
-Run pending tasks now.
+Run pending tasks now, in this terminal. When the dashboard or the background
+worker already runs the queue, Max says so and leaves the tasks to it.
 
 ```bash
 max queue process [--max N]
@@ -77,7 +88,7 @@ max queue history --type video_compress -n 5
 
 ## cancel
 
-Cancel a task. Copy the ID from `max queue status`. Max removes a pending or paused task at once. It marks a running task as cancelled and moves it to history when the running job returns.
+Cancel a task. Copy the ID from `max queue status`. Max removes a pending or paused task at once. It marks a running task as cancelled; the process running it sees that within 2 seconds, even from another terminal, and moves it to history when the job stops. Downloads stop at once; other jobs finish the file they're on.
 
 ```bash
 max queue cancel TASK_ID
@@ -85,7 +96,7 @@ max queue cancel TASK_ID
 
 ## retry
 
-Reset a task to pending so the next `max queue process` runs it again. This works for failed tasks and for finished tasks in history. A running task is left alone.
+Reset a task to pending so the queue runs it again. This works for failed tasks and for finished tasks in history. A running task is left alone.
 
 ```bash
 max queue retry TASK_ID

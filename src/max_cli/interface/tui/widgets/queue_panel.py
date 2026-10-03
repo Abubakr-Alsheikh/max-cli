@@ -482,7 +482,8 @@ class QueuePanel(Vertical):
         finished = list(manager.get_history(limit=FINISHED_SHOWN))
         today = self._finished_today(manager)
         with self.app.batch_update():
-            self._show_worker(bool(manager.is_worker_running))
+            # This dashboard's worker, or the background worker.
+            self._show_worker(manager.worker_alive())
             self._show_tiles(running, waiting, today)
             self._sync("#queue-running", running)
             self._sync("#queue-waiting", waiting)

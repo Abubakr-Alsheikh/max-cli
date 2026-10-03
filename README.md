@@ -619,13 +619,16 @@ max tools paste screenshot.png
 Heavy commands can add a job to a queue instead of running it now. `max video compress` and `max video denoise` take `--queue` (`-q`); `max grab download` takes `--queue` (`-Q`).
 
 ```bash
-# Queue a job
+# Queue a job: it runs in the background, even after you close the terminal
 max video compress movie.mp4 --queue
 
-# See what's waiting
+# See what's waiting and running
 max queue status
 
-# Run pending jobs (--max N to stop after N)
+# Start the background worker for tasks left from earlier
+max queue start
+
+# Run pending jobs in this terminal instead (--max N to stop after N)
 max queue process
 
 # Counts by status and type

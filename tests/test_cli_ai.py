@@ -56,9 +56,11 @@ class ScriptedModel:
 
     def __init__(self, *responses: Any) -> None:
         self._responses = list(responses)
+        self.requests: list[dict[str, Any]] = []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **request: Any) -> Any:
+        self.requests.append(request)
         answer = self._responses.pop(0)
         if isinstance(answer, Exception):
             raise answer
@@ -563,3 +565,38 @@ def test_a_result_after_another_actions_lines_names_its_action_again():
     assert lines.index("  ⚙ audio compress  one.m4a") < lines.index(
         "      ✓ Compressed one.m4a"
     )
+
+
+def test_a_queued_job_runs_in_the_background(
+    dummy_video, monkeypatch, no_background_worker
+) -> None:
+    monkeypatch.chdir(dummy_video.parent)
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "video"}),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "video.compress",
+                        "arguments": {"target": str(dummy_video)},
+                        "queue": True,
+                    },
+                    "call-2",
+                ),
+            )
+        ),
+        _answer("Queued it."),
+    )
+
+    with patch(CLIENT_PATH, return_value=model):
+        result = runner.invoke(ai_app, ["ask", "compress it in the background"])
+
+    assert result.exit_code == 0, result.output
+    assert len(no_background_worker) == 1
+    output = _plain(result)
+    assert "1 job running in the background" in output
+    assert "max queue status" in output
+    # The model heard where the user follows the job.
+    system = model.requests[0]["messages"][0]["content"]
+    assert "'max queue status'" in system

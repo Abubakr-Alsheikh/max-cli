@@ -107,13 +107,16 @@ class TestCompress:
         assert "Video saved:" in result.output
         assert "test_compressed.mp4" in result.output
 
-    def test_queue_adds_task_without_encoding(self, mock_engine, dummy_video):
+    def test_queue_adds_task_without_encoding(
+        self, mock_engine, dummy_video, no_background_worker
+    ):
         result = runner.invoke(
             media_app, ["compress", str(dummy_video), "--queue", "--level", "max"]
         )
 
         assert result.exit_code == 0, result.output
         assert "Queued: test.mp4" in result.output
+        assert len(no_background_worker) == 1  # the queue runs in the background
         mock_engine.compress_video.assert_not_called()
         [task] = get_task_manager().get_all()
         assert task.type == TaskType.ACTION
