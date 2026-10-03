@@ -178,15 +178,16 @@ class TestTaskManagerCancelAndExecution:
         assert self.dm.get_history() == [task]
 
     def test_cancelled_task_is_not_rerun(self, monkeypatch):
-        task = self.dm.add(TaskItem(type=TaskType.CUSTOM, title="skip me"))
+        self.dm.add(TaskItem(type=TaskType.CUSTOM, title="skip me"))
         calls = []
         self._use_executor(monkeypatch, lambda t: calls.append(t) or {})
-        task.status = TaskStatus.CANCELLED  # cancelled after being picked up
+        picked = self.dm.get_pending()[0]
+        self.dm.cancel(picked.id)  # cancelled after being picked up
 
-        self.dm._execute_task(task)
+        assert self.dm._execute_task(picked) is False
 
         assert calls == []
-        assert task.status == TaskStatus.CANCELLED
+        assert picked.status == TaskStatus.CANCELLED
 
     def test_queue_saves_happen_under_lock(self, monkeypatch):
         self.dm.add(TaskItem(type=TaskType.CUSTOM, title="locked"))
@@ -231,7 +232,7 @@ class TestTaskManagerCancelAndExecution:
 def test_retry_leaves_a_running_task_alone(isolated_manager):
     """retry used to reset a running task to pending, so it could run twice."""
     task = isolated_manager.add(TaskItem(type=TaskType.CUSTOM, title="busy"))
-    task.status = TaskStatus.RUNNING
+    isolated_manager._claim(task.id)  # a worker took it
 
     assert isolated_manager.retry(task.id) is None
     assert task.status == TaskStatus.RUNNING

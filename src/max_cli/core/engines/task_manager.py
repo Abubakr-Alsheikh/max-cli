@@ -2,12 +2,15 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
 from max_cli.common.exceptions import MaxError
+from max_cli.common.file_lock import FileLock, is_locked
 from max_cli.config import settings
 from max_cli.core.engines import task_migration
 from max_cli.core.engines.task_queue import (
@@ -23,6 +26,16 @@ HISTORY_LIMIT = 200
 IDLE_POLL_SECONDS = 2
 BETWEEN_TASKS_SECONDS = 1
 WORKER_STOP_TIMEOUT_SECONDS = 5
+STORE_LOCK_NAME = "queue.lock"  # held while a process reads, changes, saves
+WORKER_LOCK_NAME = "worker.lock"  # held by the one process running tasks
+STORE_LOCK_TIMEOUT_SECONDS = 30
+PROGRESS_SAVE_SECONDS = 2  # a running task's progress reaches the file
+WORKER_IDLE_EXIT_SECONDS = 30  # the background worker stops after this
+WORKER_BUSY = (
+    "Another Max process is running the queue (the dashboard or the "
+    "background worker); it will run these tasks."
+)
+INTERRUPTED_NOTE = "Interrupted: the worker running it stopped. It runs again."
 
 
 class TaskManagerError(MaxError):
@@ -30,11 +43,18 @@ class TaskManagerError(MaxError):
 
 
 class TaskManager:
-    """Persistent task queue and history, run by an in-process worker thread.
+    """Persistent task queue and history, shared by every Max process.
 
-    The worker is a daemon thread: it stops when the CLI process exits, and
-    pending tasks wait in queue.json until `max queue process` or another
-    command runs them.
+    The dashboard, CLI commands and the background worker (`max queue
+    worker`) each run in their own process. Every change is one step under
+    queue.lock: reload from disk, change, save, so no process saves over
+    another's work. A reload updates the task objects this process already
+    holds, by id, instead of replacing them.
+
+    Only the process holding worker.lock runs tasks: the dashboard's worker
+    thread, `max queue process` or the background worker, whichever got it
+    first. While a task runs, its progress is saved every few seconds, and a
+    cancel saved by another process reaches it on the next save.
     """
 
     QUEUE_DIR = Path.home() / ".max_cli" / "tasks"
@@ -49,22 +69,76 @@ class TaskManager:
         self._lock = threading.Lock()
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
-        # The task an executor is running now; refresh() waits while it's set.
-        self._executing: Optional[str] = None
+        # The task this process runs now: a reload keeps this object.
+        self._running_task: Optional[TaskItem] = None
+        self._worker_lock = FileLock(self.QUEUE_DIR / WORKER_LOCK_NAME)
         self._ensure_dirs()
-        self._load_queue()
-        self._load_history()
+        self.refresh()
         self._migrate_legacy_stores()
 
     def _ensure_dirs(self) -> None:
         self.QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # --- the shared store -----------------------------------------------------
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        """This process's lock, then the one every Max process shares."""
+        with self._lock:
+            store_lock = FileLock(self.QUEUE_DIR / STORE_LOCK_NAME)
+            if not store_lock.acquire(timeout=STORE_LOCK_TIMEOUT_SECONDS):
+                raise TaskManagerError(
+                    "Another Max process is holding the task queue; try again."
+                )
+            try:
+                yield
+            finally:
+                store_lock.release()
+
+    @contextmanager
+    def _store(self, history: bool = True) -> Iterator[None]:
+        """Read the store, let the caller change it, save it: one step that
+        no other process can split. `history` False saves the queue only."""
+        with self._locked():
+            self._reload()
+            yield
+            self._save_queue()
+            if history:
+                self._save_history()
+
+    def refresh(self) -> None:
+        """Reload queue and history from disk to see other processes' changes."""
+        with self._locked():
+            self._reload()
+
+    def _reload(self) -> None:
+        """Take the stores on disk. Caller holds the locks.
+
+        A task this process already holds keeps its object and takes the
+        saved fields; the task running here keeps its own progress and
+        takes only a cancel. A read that fails keeps the current lists (see
+        _read_tasks).
+        """
+        queue = self._read_tasks(self.QUEUE_FILE)
+        if queue is not None:
+            known = {item.id: item for item in self._queue}
+            merged = [
+                _merge(known.get(item.id), item, self._running_task) for item in queue
+            ]
+            running = self._running_task
+            if running is not None and all(item is not running for item in merged):
+                merged.append(running)
+            self._queue = merged
+        history = self._read_tasks(self.HISTORY_FILE)
+        if history is not None:
+            self._history = history
 
     @staticmethod
     def _read_tasks(path: Path) -> Optional[list[TaskItem]]:
         """The tasks stored in `path`; None when the file can't be read.
 
         None means "keep what you have": on Windows a read fails while
-        another thread replaces the file, and treating that as an empty
+        another process replaces the file, and treating that as an empty
         store wiped the history. A single bad entry is skipped, not the file.
         """
         if not path.exists():
@@ -85,11 +159,6 @@ class TaskManager:
                 logger.warning("Skipping an unreadable task in %s: %s", path, exc)
         return tasks
 
-    def _load_queue(self) -> None:
-        tasks = self._read_tasks(self.QUEUE_FILE)
-        if tasks is not None:
-            self._queue = tasks
-
     def _save_queue(self) -> None:
         self._ensure_dirs()
         try:
@@ -97,11 +166,6 @@ class TaskManager:
             atomic_write_json(self.QUEUE_FILE, data, default=str)
         except OSError:
             logger.exception("Failed to save task queue %s", self.QUEUE_FILE)
-
-    def _load_history(self) -> None:
-        tasks = self._read_tasks(self.HISTORY_FILE)
-        if tasks is not None:
-            self._history = tasks
 
     def _save_history(self) -> None:
         self._ensure_dirs()
@@ -111,22 +175,8 @@ class TaskManager:
         except OSError:
             logger.exception("Failed to save task history %s", self.HISTORY_FILE)
 
-    def refresh(self) -> None:
-        """Reload queue and history from disk to see other processes' changes.
-
-        Skipped while this instance runs a task, because reloading would
-        replace the task object the worker is updating.
-        """
-        with self._lock:
-            # A cancelled task is no longer RUNNING but its executor may still
-            # be finishing; reloading then would swap its object out.
-            if self._executing or any(
-                item.status == TaskStatus.RUNNING for item in self._queue
-            ):
-                return
-            # A load that fails keeps the current list (see _read_tasks).
-            self._load_queue()
-            self._load_history()
+    def _find(self, task_id: str) -> Optional[TaskItem]:
+        return next((item for item in self._queue if item.id == task_id), None)
 
     def _migrate_legacy_stores(self) -> None:
         """Fold the old grab and download history files into this store once."""
@@ -158,106 +208,133 @@ class TaskManager:
                 logger.warning("Could not migrate %s; left it in place", legacy_file)
         if not migrated_queue and not migrated_history:
             return
-        with self._lock:
+        with self._store():
             known_ids = {task.id for task in self._queue + self._history}
             self._queue.extend(t for t in migrated_queue if t.id not in known_ids)
             self._history.extend(t for t in migrated_history if t.id not in known_ids)
             self._history.sort(key=_finished_at, reverse=True)
             del self._history[HISTORY_LIMIT:]
-            self._save_queue()
-            self._save_history()
+
+    # --- changes ----------------------------------------------------------------
 
     def add(self, task: TaskItem) -> TaskItem:
-        with self._lock:
+        with self._store(history=False):
             self._queue.append(task)
-            self._save_queue()
         return task
 
     def remove(self, task_id: str) -> bool:
-        with self._lock:
-            for i, item in enumerate(self._queue):
-                if item.id == task_id:
-                    if item.status == TaskStatus.RUNNING:
-                        return False
-                    self._queue.pop(i)
-                    self._save_queue()
-                    return True
-        return False
+        with self._store(history=False):
+            item = self._find(task_id)
+            if item is None or item.status == TaskStatus.RUNNING:
+                return False
+            self._queue.remove(item)
+            return True
 
     def cancel(self, task_id: str) -> bool:
         """Cancel a queued task.
 
         Pending/paused tasks leave the queue immediately. A running task is
-        marked CANCELLED; _execute_task archives it when its executor returns.
+        marked CANCELLED; the process running it sees that on its next save
+        and archives it when its executor returns.
         """
-        with self._lock:
-            for item in self._queue:
-                if item.id != task_id:
-                    continue
-                if item.status == TaskStatus.RUNNING:
-                    item.status = TaskStatus.CANCELLED
-                elif item.status in (TaskStatus.PENDING, TaskStatus.PAUSED):
-                    item.status = TaskStatus.CANCELLED
-                    self._queue.remove(item)
-                else:
-                    return False
-                self._save_queue()
-                return True
-        return False
+        with self._store(history=False):
+            item = self._find(task_id)
+            if item is None:
+                return False
+            if item.status == TaskStatus.RUNNING:
+                item.status = TaskStatus.CANCELLED
+            elif item.status in (TaskStatus.PENDING, TaskStatus.PAUSED):
+                item.status = TaskStatus.CANCELLED
+                self._queue.remove(item)
+            else:
+                return False
+            return True
 
     def pause(self, task_id: str) -> bool:
-        with self._lock:
-            for item in self._queue:
-                if item.id == task_id and item.status == TaskStatus.PENDING:
-                    item.status = TaskStatus.PAUSED
-                    self._save_queue()
-                    return True
-        return False
+        with self._store(history=False):
+            item = self._find(task_id)
+            if item is None or item.status != TaskStatus.PENDING:
+                return False
+            item.status = TaskStatus.PAUSED
+            return True
 
     def resume(self, task_id: str) -> bool:
-        with self._lock:
-            for item in self._queue:
-                if item.id == task_id and item.status == TaskStatus.PAUSED:
-                    item.status = TaskStatus.PENDING
-                    self._save_queue()
-                    return True
-        return False
+        with self._store(history=False):
+            item = self._find(task_id)
+            if item is None or item.status != TaskStatus.PAUSED:
+                return False
+            item.status = TaskStatus.PENDING
+            return True
 
     def retry(self, task_id: str) -> Optional[TaskItem]:
         """Reset a task to pending. Running tasks are left alone (returns None)."""
-        with self._lock:
-            for item in self._queue:
-                if item.id == task_id:
-                    if item.status == TaskStatus.RUNNING:
-                        return None
-                    item.status = TaskStatus.PENDING
-                    item.error = ""
-                    item.progress = 0.0
-                    item.retry_count = 0
-                    self._save_queue()
-                    return item
+        with self._store():
+            item = self._find(task_id)
+            if item is not None:
+                if item.status == TaskStatus.RUNNING:
+                    return None
+                _reset(item)
+                return item
             for item in self._history:
                 if item.id == task_id:
-                    item.status = TaskStatus.PENDING
-                    item.error = ""
-                    item.progress = 0.0
-                    item.retry_count = 0
+                    _reset(item)
                     self._queue.append(item)
                     self._history.remove(item)
-                    self._save_queue()
-                    self._save_history()
                     return item
         return None
 
+    def record(self, task: TaskItem) -> TaskItem:
+        """Add a task that already finished outside the queue to history."""
+        with self._store():
+            if task.completed_at is None:
+                task.completed_at = datetime.now().isoformat()
+            self._archive(task)
+        return task
+
+    def clear(
+        self,
+        status: Optional[TaskStatus] = None,
+        task_type: Optional[TaskType] = None,
+    ) -> int:
+        """Remove queued tasks with `status` (default: all but running ones)."""
+
+        def removable(item: TaskItem) -> bool:
+            if task_type is not None and item.type != task_type:
+                return False
+            if status:
+                return item.status == status
+            return item.status != TaskStatus.RUNNING
+
+        with self._store(history=False):
+            before = len(self._queue)
+            self._queue = [i for i in self._queue if not removable(i)]
+            return before - len(self._queue)
+
+    def clear_history(
+        self,
+        limit: Optional[int] = None,
+        task_type: Optional[TaskType] = None,
+    ) -> int:
+        with self._store():
+            count = len(self._history)
+            if task_type is not None:
+                self._history = [i for i in self._history if i.type != task_type]
+                count -= len(self._history)
+            elif limit:
+                self._history = self._history[:limit]
+                count = count - limit
+            else:
+                self._history = []
+            return count
+
+    # --- reading (what this process loaded last; refresh() to update) ----------
+
     def get(self, task_id: str) -> Optional[TaskItem]:
         with self._lock:
-            for item in self._queue:
-                if item.id == task_id:
-                    return item
-            for item in self._history:
-                if item.id == task_id:
-                    return item
-        return None
+            found = self._find(task_id)
+            if found is not None:
+                return found
+            return next((i for i in self._history if i.id == task_id), None)
 
     def get_all(self, status: Optional[TaskStatus] = None) -> list[TaskItem]:
         with self._lock:
@@ -265,15 +342,6 @@ class TaskManager:
             if status:
                 items = [i for i in items if i.status == status]
             return items
-
-    def record(self, task: TaskItem) -> TaskItem:
-        """Add a task that already finished outside the queue to history."""
-        with self._lock:
-            if task.completed_at is None:
-                task.completed_at = datetime.now().isoformat()
-            self._archive(task)
-            self._save_history()
-        return task
 
     def get_pending(self, task_type: Optional[TaskType] = None) -> list[TaskItem]:
         with self._lock:
@@ -295,45 +363,6 @@ class TaskManager:
                 items = [i for i in items if i.type == task_type]
             return items[:limit] if limit > 0 else items
 
-    def clear(
-        self,
-        status: Optional[TaskStatus] = None,
-        task_type: Optional[TaskType] = None,
-    ) -> int:
-        """Remove queued tasks with `status` (default: all but running ones)."""
-
-        def removable(item: TaskItem) -> bool:
-            if task_type is not None and item.type != task_type:
-                return False
-            if status:
-                return item.status == status
-            return item.status != TaskStatus.RUNNING
-
-        with self._lock:
-            before = len(self._queue)
-            self._queue = [i for i in self._queue if not removable(i)]
-            count = before - len(self._queue)
-            self._save_queue()
-            return count
-
-    def clear_history(
-        self,
-        limit: Optional[int] = None,
-        task_type: Optional[TaskType] = None,
-    ) -> int:
-        with self._lock:
-            count = len(self._history)
-            if task_type is not None:
-                self._history = [i for i in self._history if i.type != task_type]
-                count -= len(self._history)
-            elif limit:
-                self._history = self._history[:limit]
-                count = count - limit
-            else:
-                self._history = []
-            self._save_history()
-            return count
-
     def get_stats(self, task_type: Optional[TaskType] = None) -> dict[str, Any]:
         with self._lock:
             queue = [i for i in self._queue if task_type is None or i.type == task_type]
@@ -352,10 +381,15 @@ class TaskManager:
                 stats["by_type"][t] = stats["by_type"].get(t, 0) + 1
         return stats
 
-    @property
+    # --- running tasks ------------------------------------------------------------
+
     def is_worker_running(self) -> bool:
         """True while this process runs queued tasks (the dashboard is open)."""
         return self._running
+
+    def worker_alive(self) -> bool:
+        """True while some process (this one included) runs the queue."""
+        return is_locked(self.QUEUE_DIR / WORKER_LOCK_NAME)
 
     def start_worker(self) -> None:
         if self._running:
@@ -366,8 +400,8 @@ class TaskManager:
 
     def stop_worker(self, wait: bool = True) -> None:
         """Stop after the current task. `wait` False returns at once: the
-        daemon thread ends with the process, and a running task stays in the
-        queue as running work that `max queue` can retry."""
+        daemon thread ends with the process, and a running task goes back
+        to pending when the next worker starts."""
         self._running = False
         if self._worker_thread and wait:
             self._worker_thread.join(timeout=WORKER_STOP_TIMEOUT_SECONDS)
@@ -375,78 +409,151 @@ class TaskManager:
     def process_now(
         self, max_tasks: int = 0, task_type: Optional[TaskType] = None
     ) -> int:
-        """Run pending tasks (optionally of one type) in this thread."""
+        """Run pending tasks (optionally of one type) in this thread.
+
+        Raises TaskManagerError when another process runs the queue."""
+        took_lock = not self._worker_lock.held
+        if not self._worker_lock.acquire(timeout=0):
+            raise TaskManagerError(WORKER_BUSY)
+        try:
+            if took_lock:
+                self._recover_orphans()
+            processed = 0
+            while max_tasks <= 0 or processed < max_tasks:
+                if not self._process_next(task_type):
+                    break
+                processed += 1
+            return processed
+        finally:
+            if took_lock:
+                self._worker_lock.release()
+
+    def run_until_idle(
+        self, idle_seconds: float = WORKER_IDLE_EXIT_SECONDS
+    ) -> Optional[int]:
+        """Run queued tasks until none has come for `idle_seconds`; how many
+        ran. None when another process already runs the queue.
+
+        Before it stops it lets go of the queue, then looks once more: a
+        process that queued a task while this one held the queue saw a
+        live worker and started none, so this worker picks the task up.
+        """
         processed = 0
-        while max_tasks <= 0 or processed < max_tasks:
-            if not self._process_next(task_type):
-                break
-            processed += 1
-        return processed
+        while self._worker_lock.acquire(timeout=0):
+            try:
+                self._recover_orphans()
+                idle_since = time.monotonic()
+                while time.monotonic() - idle_since < idle_seconds:
+                    if self._process_next():
+                        processed += 1
+                        idle_since = time.monotonic()
+                    else:
+                        time.sleep(IDLE_POLL_SECONDS)
+            finally:
+                self._worker_lock.release()
+            self.refresh()
+            if not self.get_pending():
+                return processed
+        return processed or None
 
     def _process_loop(self) -> None:
         while self._running:
+            if not self._worker_lock.held:
+                if not self._worker_lock.acquire(timeout=0):
+                    time.sleep(IDLE_POLL_SECONDS)  # another process runs it
+                    continue
+                self._recover_orphans()
             if self._process_next():
                 time.sleep(BETWEEN_TASKS_SECONDS)
             else:
                 time.sleep(IDLE_POLL_SECONDS)
+        self._worker_lock.release()
+
+    def _recover_orphans(self) -> None:
+        """Tasks marked running that no worker runs (the one that ran them
+        stopped or crashed) go back to pending; cancelled ones are archived.
+        Only the worker-lock holder calls this, so nobody else runs them."""
+        with self._store():
+            for item in list(self._queue):
+                if item is self._running_task:
+                    continue
+                if item.status == TaskStatus.RUNNING:
+                    item.status = TaskStatus.PENDING
+                    item.error = INTERRUPTED_NOTE
+                elif item.status == TaskStatus.CANCELLED:
+                    item.completed_at = datetime.now().isoformat()
+                    self._archive(item)
 
     def _process_next(self, task_type: Optional[TaskType] = None) -> bool:
-        """Run the oldest pending task. Returns False when nothing is pending."""
-        pending = self.get_pending(task_type)
-        if not pending:
-            return False
-        task = pending[0]
-        try:
-            self._execute_task(task)
-        except Exception as exc:  # noqa: BLE001 - worker must survive and record it
-            logger.exception("Task %s failed outside its executor", task.id)
-            with self._lock:
-                task.status = TaskStatus.FAILED
-                task.error = f"Internal error: {exc}"
-                task.completed_at = datetime.now().isoformat()
-                self._archive(task)
-                self._save_queue()
-                self._save_history()
-        return True
+        """Run the oldest pending task. Returns False when nothing ran."""
+        self.refresh()
+        for task in self.get_pending(task_type):
+            try:
+                if self._execute_task(task):
+                    return True
+            except Exception as exc:  # noqa: BLE001 - worker must survive and record it
+                logger.exception("Task %s failed outside its executor", task.id)
+                with self._store():
+                    failed = self._find(task.id) or task
+                    failed.status = TaskStatus.FAILED
+                    failed.error = f"Internal error: {exc}"
+                    failed.completed_at = datetime.now().isoformat()
+                    self._archive(failed)
+                return True
+        return False
 
     def _archive(self, task: TaskItem) -> None:
-        """Move a finished task from the queue to history. Caller holds _lock."""
-        # By id: a refresh can hold an equal-looking copy, and == compares
+        """Move a finished task from the queue to history. Caller holds the locks."""
+        # By id: a reload can hold an equal-looking copy, and == compares
         # every field, so the stale copy stayed queued forever.
         self._queue = [item for item in self._queue if item.id != task.id]
         self._history.insert(0, task)
         del self._history[HISTORY_LIMIT:]
 
-    def _execute_task(self, task: TaskItem) -> None:
-        self._executing = task.id
+    def _execute_task(self, task: TaskItem) -> bool:
+        """Claim `task` and run it; False when it isn't pending any more
+        (cancelled, paused, or another worker took it)."""
+        claimed = self._claim(task.id)
+        if claimed is None:
+            return False
         try:
-            self._run_task(task)
+            self._run_task(claimed)
         finally:
-            self._executing = None
+            self._running_task = None
+        return True
+
+    def _claim(self, task_id: str) -> Optional[TaskItem]:
+        """Mark a pending task running, as saved: one step, so two workers
+        can never both take it."""
+        with self._store(history=False):
+            item = self._find(task_id)
+            if item is None or item.status != TaskStatus.PENDING:
+                return None
+            item.status = TaskStatus.RUNNING
+            item.started_at = datetime.now().isoformat()
+            item.retry_count += 1
+            self._running_task = item
+            return item
 
     def _run_task(self, task: TaskItem) -> None:
-        with self._lock:
-            if task.status != TaskStatus.PENDING:
-                return  # cancelled or paused after it was picked
-            if not any(item is task for item in self._queue):
-                return  # refresh() replaced it; the fresh copy runs instead
-            task.status = TaskStatus.RUNNING
-            task.started_at = datetime.now().isoformat()
-            task.retry_count += 1
-            self._save_queue()
-
         executor = get_executor(task.type)
         if executor is None:
-            with self._lock:
+            with self._store(history=False):
                 task.status = TaskStatus.FAILED
                 task.error = f"No executor registered for task type: {task.type.value}"
-                self._save_queue()
             return
 
+        stop_watching = threading.Event()
+        watcher = threading.Thread(
+            target=self._watch, args=(stop_watching,), daemon=True
+        )
+        watcher.start()
         try:
-            result = executor(task)  # long-running: never hold _lock here
+            result = executor(task)  # long-running: never hold the locks here
         except Exception as e:  # noqa: BLE001 - executor errors become task state
-            with self._lock:
+            stop_watching.set()
+            watcher.join()
+            with self._store():
                 if task.status == TaskStatus.CANCELLED:
                     task.completed_at = datetime.now().isoformat()
                     self._archive(task)
@@ -458,11 +565,10 @@ class TaskManager:
                     task.error = str(e)
                     task.completed_at = datetime.now().isoformat()
                     self._archive(task)
-                self._save_queue()
-                self._save_history()
             return
-
-        with self._lock:
+        stop_watching.set()
+        watcher.join()
+        with self._store():
             task.completed_at = datetime.now().isoformat()
             if task.status != TaskStatus.CANCELLED:
                 task.status = TaskStatus.COMPLETED
@@ -471,8 +577,39 @@ class TaskManager:
                 task.output_files = result.get("output_files", [])
                 task.output_path = result.get("output_path")
             self._archive(task)
-            self._save_queue()
-            self._save_history()
+
+    def _watch(self, stop: threading.Event) -> None:
+        """While a task runs: save its progress for other processes to show,
+        and pick up a cancel they saved (the reload takes it)."""
+        while not stop.wait(PROGRESS_SAVE_SECONDS):
+            try:
+                with self._store(history=False):
+                    pass
+            except TaskManagerError:
+                continue  # the store stayed busy; save on the next round
+
+
+def _merge(
+    held: Optional[TaskItem], saved: TaskItem, running: Optional[TaskItem]
+) -> TaskItem:
+    """The task object to keep for `saved`: the one this process holds,
+    updated, or `saved` itself."""
+    if held is None:
+        return saved
+    if held is running:
+        if saved.status == TaskStatus.CANCELLED:
+            held.status = TaskStatus.CANCELLED
+        return held
+    for name in TaskItem.model_fields:
+        setattr(held, name, getattr(saved, name))
+    return held
+
+
+def _reset(item: TaskItem) -> None:
+    item.status = TaskStatus.PENDING
+    item.error = ""
+    item.progress = 0.0
+    item.retry_count = 0
 
 
 def _finished_at(task: TaskItem) -> str:

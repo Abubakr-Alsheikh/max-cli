@@ -242,23 +242,22 @@ class TestDownloadTasks:
         assert seen["playlist_items"] == "2"
 
 
-def test_task_replaced_by_refresh_is_not_run_twice(monkeypatch):
-    """refresh() swaps task objects; a stale pick must not run."""
-    manager = TaskManager()
+def test_a_task_two_workers_pick_runs_once(monkeypatch):
+    """Two processes can both see a task pending; the claim, saved under
+    the store lock, lets only one of them run it."""
     ran = []
     monkeypatch.setattr(
         task_manager_module,
         "get_executor",
         lambda task_type: lambda task: ran.append(task.id) or {},
     )
-    manager.add(TaskItem(type=TaskType.CUSTOM))
-    stale = manager.get_pending()[0]
-    manager.refresh()
+    first, second = TaskManager(), TaskManager()
+    first.add(TaskItem(type=TaskType.CUSTOM))
+    second.refresh()
+    stale = second.get_pending()[0]
 
-    manager._execute_task(stale)
-
-    assert ran == []
-    assert manager.process_now() == 1
+    assert first.process_now() == 1
+    assert second._execute_task(stale) is False
     assert len(ran) == 1
 
 
