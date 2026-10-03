@@ -154,7 +154,7 @@ def test_dashboard_concat_accepts_a_glob_like_the_cli(tmp_path):
 class TestQueue:
     def test_non_queueable_action_is_refused(self, dummy_video):
         with pytest.raises(ValidationError, match="can't be queued"):
-            enqueue_action(get_action("video.mute"), {"target": str(dummy_video)})
+            enqueue_action(get_action("video.snap"), {"target": str(dummy_video)})
 
     def test_bad_arguments_fail_before_queueing(self):
         with pytest.raises(ValidationError):
