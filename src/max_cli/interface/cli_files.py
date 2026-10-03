@@ -17,6 +17,10 @@ from rich.text import Text
 from max_cli.common.exceptions import MaxError, ResourceNotFoundError, ValidationError
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.core.operations import files as files_ops
+from max_cli.interface.batch_cli import (
+    RECURSIVE_OPTION,
+    run_batch,
+)
 from max_cli.interface.confirm import skip_confirmation
 
 app = typer.Typer()
@@ -325,16 +329,26 @@ def file_preview(
 
 @app.command("backup")
 def backup_file(
-    target: Path = typer.Argument(..., help="File to backup."),
+    target: list[Path] = typer.Argument(
+        ..., help="File to backup. Or several files, a folder, or a pattern."
+    ),
     label: str = typer.Option("manual", "-l", "--label", help="Label for this backup."),
+    recursive: bool = RECURSIVE_OPTION,
 ):
     """
     Create a backup of a file.
     """
+    if run_batch(
+        "files.backup",
+        {"target": target, "label": label},
+        recursive=recursive,
+    ):
+        return
+    source = target[0]
     result = _run(
         files_ops.backup,
         "Backup failed",
-        target=target,
+        target=source,
         label=label,
         organizer=_get_organizer(),
     )

@@ -19,7 +19,7 @@ from max_cli.core.presets import (
     DEFAULT_VIDEO_PRESET,
     crf_for_level,
 )
-from max_cli.interface import cli_media
+from max_cli.interface import batch_cli, cli_media
 from max_cli.interface.cli_media import app as media_app
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
@@ -45,6 +45,7 @@ def plain_console(monkeypatch):
     )
     monkeypatch.setattr(logger, "console", plain)
     monkeypatch.setattr(cli_media, "console", plain)
+    monkeypatch.setattr(batch_cli, "console", plain)
 
 
 @pytest.fixture
@@ -115,7 +116,7 @@ class TestCompress:
         )
 
         assert result.exit_code == 0, result.output
-        assert "Queued: test.mp4" in result.output
+        assert "Queued 1 job" in result.output
         assert len(no_background_worker) == 1  # the queue runs in the background
         mock_engine.compress_video.assert_not_called()
         [task] = get_task_manager().get_all()

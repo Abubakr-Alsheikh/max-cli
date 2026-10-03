@@ -123,7 +123,12 @@ GROUP = Group(
             summary="Save a copy of a file in ~/.max_cli/backups.",
             operation=f"{OPS}:backup",
             params=(
-                Param("target", ParamKind.FILE, "File to back up."),
+                Param(
+                    "target",
+                    ParamKind.FILE,
+                    "File to back up. Or several files, a folder, or a pattern such as *.docx.",
+                    each=True,
+                ),
                 Param(
                     "label",
                     ParamKind.TEXT,

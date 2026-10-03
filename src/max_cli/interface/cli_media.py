@@ -21,6 +21,12 @@ from max_cli.core.presets import (
     DEFAULT_VIDEO_LEVEL,
     DEFAULT_VIDEO_TO_AUDIO_QUALITY,
 )
+from max_cli.interface.batch_cli import (
+    QUEUE_OPTION,
+    RECURSIVE_OPTION,
+    REDO_OPTION,
+    run_batch,
+)
 
 if TYPE_CHECKING:
     from max_cli.core.operations.result import ActionResult
@@ -64,24 +70,6 @@ def _run(
         return None
 
 
-def _queue(action_name: str, **values: Any) -> None:
-    from max_cli.core.catalog import get_action
-    from max_cli.core.catalog.runner import enqueue_action
-
-    try:
-        task = enqueue_action(get_action(f"video.{action_name}"), values)
-    except ValidationError as e:
-        log_error(str(e))
-        raise typer.Exit(1) from None
-    from max_cli.core.engines.background_worker import start_background_worker
-
-    start_background_worker()
-    console.print(f"[green]Queued:[/green] {values['target'].name} (ID: {task.id})")
-    console.print(
-        "[dim]It runs in the background. 'max queue status' shows progress.[/dim]"
-    )
-
-
 def _report(result: Optional["ActionResult"]) -> None:
     if result:
         log_success(result.message)
@@ -90,20 +78,31 @@ def _report(result: Optional["ActionResult"]) -> None:
 @app.command("compress")
 @app.command("c", hidden=True)
 def compress_video(
-    target: Path = typer.Argument(..., help="Video file to compress."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file to compress. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output path."),
     level: str = typer.Option(
         DEFAULT_VIDEO_LEVEL, help="Quality: high, balanced, max (smaller size)."
     ),
     queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue"),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Compress video files to H.264 MP4.
     """
-    _get_engine()
-    if queue:
-        _queue("compress", target=target, output=output, level=level)
+    if run_batch(
+        "video.compress",
+        {"target": target, "output": output, "level": level},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
         return
+    source = target[0]
+    _get_engine()
 
     console.print(
         f"[cyan]Compressing video (Level: {level})... This may take time.[/cyan]"
@@ -112,7 +111,7 @@ def compress_video(
         video_ops.compress,
         "Compression failed",
         "[bold green]Encoding... (CPU working hard)[/bold green]",
-        target=target,
+        target=source,
         output=output,
         level=level,
     )
@@ -132,22 +131,39 @@ def compress_video(
 @app.command("convert")
 @app.command("cv", hidden=True)
 def convert_format(
-    target: Path = typer.Argument(..., help="Input video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Input video file. Or several files, a folder, or a pattern."
+    ),
     format: str = typer.Option(
         "mp4", "--format", "-f", help="Target format (mp4, mkv, avi)."
     ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Convert video containers (e.g., MKV -> MP4).
     """
-    console.print(f"[cyan]Converting {target.suffix} -> .{format}...[/cyan]")
-    _report(_run(video_ops.convert, "Conversion failed", target=target, format=format))
+    if run_batch(
+        "video.convert",
+        {"target": target, "format": format},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
+    console.print(f"[cyan]Converting {source.suffix} -> .{format}...[/cyan]")
+    _report(_run(video_ops.convert, "Conversion failed", target=source, format=format))
 
 
 @app.command("to-audio")
 @app.command("rip", hidden=True)
 def video_to_audio(
-    target: Path = typer.Argument(..., help="Source video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Source video file. Or several files, a folder, or a pattern."
+    ),
     format: str = typer.Option(
         "mp3", "--format", "-f", help="Target audio format: mp3, wav, flac, aac."
     ),
@@ -158,16 +174,29 @@ def video_to_audio(
         help="Quality: [s]mall (96k), [m]edium (128k), [h]igh (192k), [x]treme (320k).",
     ),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output path."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Convert a video file into a standalone audio file.
     """
+    if run_batch(
+        "video.to-audio",
+        {"target": target, "format": format, "quality": quality, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Converting video to {format.upper()}...[/cyan]")
     result = _run(
         video_ops.to_audio,
         "Conversion failed",
         "[bold green]Ripping audio track...[/bold green]",
-        target=target,
+        target=source,
         format=format,
         quality=quality,
         output=output,
@@ -181,21 +210,36 @@ def video_to_audio(
 
 @app.command("gif")
 def create_gif(
-    target: Path = typer.Argument(..., help="Input video."),
+    target: list[Path] = typer.Argument(
+        ..., help="Input video. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output GIF."),
     width: int = typer.Option(480, help="Width in pixels (Height auto-scaled)."),
     fps: int = typer.Option(15, help="Frames Per Second."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Convert a video clip into a high-quality GIF.
     """
+    if run_batch(
+        "video.gif",
+        {"target": target, "output": output, "width": width, "fps": fps},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Generating GIF (FPS={fps}, Width={width})...[/cyan]")
     _report(
         _run(
             video_ops.gif,
             "GIF creation failed",
             "[bold green]Rendering palette & GIF...[/bold green]",
-            target=target,
+            target=source,
             output=output,
             width=width,
             fps=fps,
@@ -205,7 +249,9 @@ def create_gif(
 
 @app.command("cut")
 def cut_video(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     start: str = typer.Option(
         ..., "--start", "-s", help="Start time (e.g. '00:01:00' or '60')."
     ),
@@ -214,17 +260,34 @@ def cut_video(
         None, "--duration", "-d", help="Duration to keep (e.g. '10')."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Trim a video file. Provide --end OR --duration, or neither to cut to end of file.
     """
+    if run_batch(
+        "video.cut",
+        {
+            "target": target,
+            "start": start,
+            "end": end,
+            "duration": duration,
+            "output": output,
+        },
+        queue=queue,
+        recursive=recursive,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Cutting from {start}...[/cyan]")
     _report(
         _run(
             video_ops.cut,
             "Cut failed",
             "[bold green]Processing cut...[/bold green]",
-            target=target,
+            target=source,
             start=start,
             end=end,
             duration=duration,
@@ -235,36 +298,64 @@ def cut_video(
 
 @app.command("snap")
 def snapshot(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     time: str = typer.Option(
         "00:00:05", "--time", "-t", help="Timestamp for screenshot."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output image."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Take a high-quality JPG screenshot at a specific time.
     """
+    if run_batch(
+        "video.snap",
+        {"target": target, "time": time, "output": output},
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     _report(
-        _run(video_ops.snap, "Snapshot failed", target=target, time=time, output=output)
+        _run(video_ops.snap, "Snapshot failed", target=source, time=time, output=output)
     )
 
 
 @app.command("louder")
 def boost_volume(
-    target: Path = typer.Argument(..., help="Video/Audio file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video/Audio file. Or several files, a folder, or a pattern."
+    ),
     db: float = typer.Option(5.0, "--db", help="Decibels to add (e.g., 5 or 10)."),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Increase volume (Useful for quiet recordings).
     """
+    if run_batch(
+        "video.louder",
+        {"target": target, "db": db, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Boosting volume by {db}dB...[/cyan]")
     _report(
         _run(
             video_ops.louder,
             "Volume adjustment failed",
             "[bold green]Adjusting audio...[/bold green]",
-            target=target,
+            target=source,
             db=db,
             output=output,
         )
@@ -273,14 +364,29 @@ def boost_volume(
 
 @app.command("mute")
 def mute_track(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Remove audio track from video.
     """
+    if run_batch(
+        "video.mute",
+        {"target": target, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print("[cyan]Removing audio track...[/cyan]")
-    _report(_run(video_ops.mute, "Mute failed", target=target, output=output))
+    _report(_run(video_ops.mute, "Mute failed", target=source, output=output))
 
 
 @app.command("concat")
@@ -320,7 +426,9 @@ def concat_videos(
 
 @app.command("brightness")
 def adjust_brightness_cmd(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     brightness: float = typer.Option(
         1.0, "--brightness", "-b", help="Brightness: 0.0-2.0 (1.0 is normal)."
     ),
@@ -328,10 +436,28 @@ def adjust_brightness_cmd(
         1.0, "--contrast", "-c", help="Contrast: 0.0-2.0 (1.0 is normal)."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Adjust video brightness and contrast.
     """
+    if run_batch(
+        "video.brightness",
+        {
+            "target": target,
+            "brightness": brightness,
+            "contrast": contrast,
+            "output": output,
+        },
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(
         f"[cyan]Adjusting brightness={brightness}, contrast={contrast}...[/cyan]"
     )
@@ -340,7 +466,7 @@ def adjust_brightness_cmd(
             video_ops.brightness,
             "Adjustment failed",
             "[bold green]Processing...[/bold green]",
-            target=target,
+            target=source,
             brightness=brightness,
             contrast=contrast,
             output=output,
@@ -350,7 +476,9 @@ def adjust_brightness_cmd(
 
 @app.command("color")
 def color_grade_cmd(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     preset: str = typer.Option(
         "vivid",
         "--preset",
@@ -358,17 +486,30 @@ def color_grade_cmd(
         help="Color preset: vivid, vintage, noir, warm, cool, fade.",
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Apply color grading presets to video.
     """
+    if run_batch(
+        "video.color",
+        {"target": target, "preset": preset, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Applying {preset} color preset...[/cyan]")
     _report(
         _run(
             video_ops.color,
             "Color grading failed",
             "[bold green]Processing...[/bold green]",
-            target=target,
+            target=source,
             preset=preset,
             output=output,
         )
@@ -377,19 +518,34 @@ def color_grade_cmd(
 
 @app.command("stabilize")
 def stabilize_cmd(
-    target: Path = typer.Argument(..., help="Video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Video file. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Stabilize shaky video footage.
     """
+    if run_batch(
+        "video.stabilize",
+        {"target": target, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print("[cyan]Analyzing video motion...[/cyan]")
     _report(
         _run(
             video_ops.stabilize,
             "Stabilization failed",
             "[bold green]Stabilizing (this may take a while)...[/bold green]",
-            target=target,
+            target=source,
             output=output,
         )
     )
@@ -397,22 +553,37 @@ def stabilize_cmd(
 
 @app.command("normalize")
 def normalize_audio_cmd(
-    target: Path = typer.Argument(..., help="Audio or video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Audio or video file. Or several files, a folder, or a pattern."
+    ),
     level: float = typer.Option(
         -20.0, "--level", "-l", help="Target loudness in LUFS (default: -20.0)."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Normalize audio loudness to a target level.
     """
+    if run_batch(
+        "video.normalize",
+        {"target": target, "level": level, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Normalizing audio to {level} LUFS...[/cyan]")
     _report(
         _run(
             video_ops.normalize,
             "Normalization failed",
             "[bold green]Processing...[/bold green]",
-            target=target,
+            target=source,
             level=level,
             output=output,
         )
@@ -422,8 +593,9 @@ def normalize_audio_cmd(
 @app.command("denoise")
 @app.command("dn", hidden=True)
 def denoise_audio_cmd(
-    target: Path = typer.Argument(
-        ..., help="Video or audio file with background noise."
+    target: list[Path] = typer.Argument(
+        ...,
+        help="Video or audio file with background noise. Or several files, a folder, or a pattern.",
     ),
     mode: str = typer.Option(
         "auto",
@@ -439,6 +611,8 @@ def denoise_audio_cmd(
     ),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file."),
     queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Remove background noise from audio/video.
@@ -451,10 +625,17 @@ def denoise_audio_cmd(
       max video denoise podcast.mp4 --mode hiss --strength aggressive
       max video denoise lecture.mp4 --mode hum --output clean_lecture.mp4
     """
-    _get_engine()
-    if queue:
-        _queue("denoise", target=target, mode=mode, strength=strength, output=output)
+    if run_batch(
+        "video.denoise",
+        {"target": target, "mode": mode, "strength": strength, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
         return
+    source = target[0]
+    _get_engine()
 
     console.print(
         f"[cyan]Denoising audio (mode: {mode}, strength: {strength})...[/cyan]"
@@ -471,7 +652,7 @@ def denoise_audio_cmd(
     task_id = progress.add_task("Removing background noise...", total=100)
 
     def _on_progress(event):
-        if event.type == EventType.PROGRESS and event.file == target.name:
+        if event.type == EventType.PROGRESS and event.file == source.name:
             progress.update(task_id, completed=event.percentage)
         elif event.type == EventType.STATUS:
             progress.update(task_id, description=event.message)
@@ -482,7 +663,7 @@ def denoise_audio_cmd(
             result = _run(
                 video_ops.denoise,
                 "Denoising failed",
-                target=target,
+                target=source,
                 mode=mode,
                 strength=strength,
                 output=output,
@@ -503,7 +684,9 @@ def denoise_audio_cmd(
 
 @app.command("audio-convert")
 def convert_audio_cmd(
-    target: Path = typer.Argument(..., help="Audio or video file."),
+    target: list[Path] = typer.Argument(
+        ..., help="Audio or video file. Or several files, a folder, or a pattern."
+    ),
     format: str = typer.Option(
         "mp3", "--format", "-f", help="Target format: mp3, aac, flac, wav, ogg."
     ),
@@ -514,17 +697,30 @@ def convert_audio_cmd(
         help="Quality: s (128k), m (192k), h (320k).",
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Convert audio between formats (e.g., WAV to MP3).
     """
+    if run_batch(
+        "video.audio-convert",
+        {"target": target, "format": format, "quality": quality, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    source = target[0]
     console.print(f"[cyan]Converting to {format.upper()}...[/cyan]")
     _report(
         _run(
             video_ops.audio_convert,
             "Conversion failed",
             "[bold green]Converting audio...[/bold green]",
-            target=target,
+            target=source,
             format=format,
             quality=quality,
             output=output,

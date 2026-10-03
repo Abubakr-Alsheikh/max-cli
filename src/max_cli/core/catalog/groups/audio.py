@@ -1,5 +1,6 @@
 """Catalog entries for `max audio`. `tests/test_catalog_drift.py` checks them against the CLI."""
 
+from max_cli.common import file_kinds
 from max_cli.core.catalog.spec import Action, Danger, Group, Param, ParamKind
 from max_cli.core.presets import (
     AUDIO_COMPRESS_BITRATES,
@@ -14,8 +15,19 @@ OPS = "max_cli.core.operations.audio"
 VIDEO_OPS = "max_cli.core.operations.video"
 
 
+EACH_HINT = "Or several files, a folder, or a pattern such as *.m4a."
+
+
 def _target(help: str = "Audio file.") -> Param:
     return Param("target", ParamKind.FILE, help)
+
+
+def _each_target(kinds: tuple[str, ...], help: str = "Audio file.") -> Param:
+    """The file param of an action that runs once per file: callers may
+    give several files, a folder or a pattern (catalog.batch)."""
+    return Param(
+        "target", ParamKind.FILE, f"{help} {EACH_HINT}", each=True, kinds=kinds
+    )
 
 
 def _targets(help: str) -> Param:
@@ -54,7 +66,7 @@ GROUP = Group(
             summary="Shrink an audio file by re-encoding it as a smaller MP3.",
             operation=f"{OPS}:compress",
             params=(
-                _target("Audio file to compress."),
+                _each_target((file_kinds.AUDIO,), "Audio file to compress."),
                 Param(
                     "output",
                     ParamKind.OUTPUT,
@@ -78,6 +90,8 @@ GROUP = Group(
                     cli=("--mono", "-m"),
                 ),
             ),
+            output_name="{stem}_compressed.mp3",
+            queueable=True,
         ),
         Action(
             group="audio",
@@ -85,7 +99,7 @@ GROUP = Group(
             summary="Remove background noise: hiss, hum, fans, room sound.",
             operation=f"{VIDEO_OPS}:denoise",
             params=(
-                _target("Audio file with background noise."),
+                _each_target((file_kinds.AUDIO,), "Audio file with background noise."),
                 Param(
                     "mode",
                     ParamKind.CHOICE,
@@ -110,6 +124,8 @@ GROUP = Group(
                     cli=("-o", "--output"),
                 ),
             ),
+            output_name="{stem}_denoised{suffix}",
+            queueable=True,
         ),
         Action(
             group="audio",
@@ -140,7 +156,10 @@ GROUP = Group(
             name="clear",
             summary="Remove every tag from an audio file. The sound stays the same.",
             operation=f"{OPS}:clear",
-            params=(_target("Audio file to clear."), _output()),
+            params=(
+                _each_target((file_kinds.AUDIO,), "Audio file to clear."),
+                _output(),
+            ),
             danger=Danger.OVERWRITES,
         ),
         Action(
