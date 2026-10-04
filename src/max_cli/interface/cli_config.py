@@ -37,6 +37,12 @@ def setup_font(
             "here can answer. Run it in a terminal, or add --yes."
         )
         raise typer.Exit(1)
+    console.print(
+        "The dashboard can show an icon before each page's name. Icons need a "
+        f"Nerd Font: [bold]{fonts.NERD_FONT_FACE}[/bold] is Cascadia Mono, the font "
+        "Windows Terminal uses already, with icons added. Your text looks the same."
+    )
+    folder = fonts.user_font_dir()
     if fonts.font_installed() and not force:
         console.print(f"[green]{fonts.NERD_FONT_FACE} is installed.[/green]")
     else:
@@ -49,7 +55,11 @@ def setup_font(
             console.print("[dim]Cancelled.[/dim]")
             return
         try:
-            with console.status("Downloading the font..."):
+            if sys.stdout.isatty():
+                with console.status("Downloading the font..."):
+                    folder = fonts.setup_font()
+            else:  # a spinner without a terminal prints every frame
+                console.print("Downloading the font...")
                 folder = fonts.setup_font()
         except (MaxError, OSError) as e:
             log_error(f"Font setup failed: {e}")
@@ -82,11 +92,18 @@ def setup_font(
     except (MaxError, OSError) as e:
         log_error(str(e))
         raise typer.Exit(1) from None
-    log_success(
-        "Windows Terminal now uses the font. Open a new tab, then run max: the "
-        "pages have their icons."
+    log_success("Windows Terminal now uses the font.")
+    console.print(
+        "\n[bold]What changed[/bold]\n"
+        f"  - The font: installed for your account only, in {folder}\n"
+        f"  - Windows Terminal: its default font is now {fonts.NERD_FONT_FACE}\n"
+        f"  - A copy of Terminal's old settings: {backup}\n"
+        "\n[bold]Next[/bold]: open a new Terminal tab and run [bold]max[/bold]. Each "
+        "page shows an icon before its name.\n"
+        "[dim]To undo: in Windows Terminal, Settings > Defaults > Appearance > Font "
+        "face, or copy the old settings back. To keep the font and hide the "
+        "icons: the dashboard's Settings page, Page icons, Neon codes.[/dim]"
     )
-    console.print(f"[dim]The old settings are in {backup}[/dim]")
 
 
 @app.command("setup-ffmpeg")

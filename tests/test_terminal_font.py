@@ -162,6 +162,7 @@ def test_setup_font_installs_and_sets_windows_terminal(tmp_path, monkeypatch):
     assert installed == [1]
     assert fonts.terminal_font_face(settings_path) == fonts.NERD_FONT_FACE
     assert "Windows Terminal now uses the font" in result.output
+    assert "What changed" in result.output and "To undo" in result.output
 
 
 def test_setup_font_leaves_a_nerd_font_terminal_alone(tmp_path, monkeypatch):

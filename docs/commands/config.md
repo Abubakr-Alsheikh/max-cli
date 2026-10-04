@@ -136,6 +136,8 @@ Max downloads CaskaydiaMono Nerd Font (3.6 MB): Cascadia Mono, Windows Terminal'
 
 With Windows Terminal installed, Max then offers to make the font Windows Terminal's default. It keeps a copy of Terminal's settings next to them (`settings.json.max-backup`) and leaves the file alone if it has comments; Windows Terminal picks up the change at once. Open a new tab and run `max`: the pages show their icons.
 
+To undo it, pick another font in Windows Terminal (Settings > Defaults > Appearance > Font face) or copy `settings.json.max-backup` back over `settings.json`. To keep the font but hide the icons, set **Page icons** to **Neon codes** on the dashboard's Settings page.
+
 In another terminal, set CaskaydiaMono Nerd Font as its font yourself, then pick **Nerd Font** for **Page icons** on the dashboard's Settings page.
 
 **Options:**

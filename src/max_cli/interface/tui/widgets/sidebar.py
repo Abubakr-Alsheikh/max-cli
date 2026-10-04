@@ -169,6 +169,21 @@ class NavItem(Widget, can_focus=True):
         event.stop()
         self.action_open()
 
+    # render() lights the bar and the code for the item under the mouse or
+    # the cursor. Nothing else redraws it when those change, so the item
+    # stayed lit after the mouse moved on.
+    def on_enter(self) -> None:
+        self.refresh()
+
+    def on_leave(self) -> None:
+        self.refresh()
+
+    def on_focus(self) -> None:
+        self.refresh()
+
+    def on_blur(self) -> None:
+        self.refresh()
+
 
 class Sidebar(Vertical):
     """Grouped page list; posts SectionSelected when a page is opened."""
