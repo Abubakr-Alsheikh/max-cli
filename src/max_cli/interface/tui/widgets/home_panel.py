@@ -646,7 +646,7 @@ class HomePanel(Vertical):
             self.query_one("#tile-saved", Tile).show("0", "compress something")
 
         manager = get_task_manager()
-        manager.refresh()
+        manager.try_refresh()  # busy store: show the counts read last time
         stats = manager.get_stats()
         running, waiting = int(stats.get("running", 0)), int(stats.get("pending", 0))
         note = f"{running} now · {waiting} next" if running or waiting else "idle"

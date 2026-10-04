@@ -29,6 +29,11 @@ WORKER_STOP_TIMEOUT_SECONDS = 5
 STORE_LOCK_NAME = "queue.lock"  # held while a process reads, changes, saves
 WORKER_LOCK_NAME = "worker.lock"  # held by the one process running tasks
 STORE_LOCK_TIMEOUT_SECONDS = 30
+UI_REFRESH_TIMEOUT_SECONDS = 0.1  # try_refresh: a screen redraw never waits longer
+WORKER_START_WAIT_SECONDS = 2  # outlasts a worker_alive() probe of worker.lock
+READ_ATTEMPTS = 3  # Windows refuses a read while another process replaces the file
+READ_RETRY_SECONDS = 0.1
+CORRUPT_SUFFIX = ".corrupt-"  # queue.json.corrupt-20261004-150531
 PROGRESS_SAVE_SECONDS = 2  # a running task's progress reaches the file
 WORKER_IDLE_EXIT_SECONDS = 30  # the background worker stops after this
 WORKER_BUSY = (
@@ -36,6 +41,16 @@ WORKER_BUSY = (
     "background worker); it will run these tasks."
 )
 INTERRUPTED_NOTE = "Interrupted: the worker running it stopped. It runs again."
+WORKER_DIED_NOTE = (
+    "Stopped: the worker died while running it {count} times. "
+    "Retry it once you know why."
+)
+STORE_BUSY = "Another Max process is holding the task queue; try again."
+STORE_UNREADABLE = (
+    "Could not read the task queue in {folder} (another program may hold "
+    "the file); nothing was changed. Try again."
+)
+STORE_UNSAVED = "Could not save the task queue to {path}: {error}"
 
 
 class TaskManagerError(MaxError):
@@ -82,37 +97,63 @@ class TaskManager:
     # --- the shared store -----------------------------------------------------
 
     @contextmanager
-    def _locked(self) -> Iterator[None]:
-        """This process's lock, then the one every Max process shares."""
-        with self._lock:
-            store_lock = FileLock(self.QUEUE_DIR / STORE_LOCK_NAME)
-            if not store_lock.acquire(timeout=STORE_LOCK_TIMEOUT_SECONDS):
-                raise TaskManagerError(
-                    "Another Max process is holding the task queue; try again."
-                )
-            try:
+    def _locked(self, timeout: Optional[float] = None) -> Iterator[None]:
+        """The lock every Max process shares (waiting up to `timeout`, by
+        default STORE_LOCK_TIMEOUT_SECONDS), then this process's lock.
+
+        In that order: a thread waiting for another process holds nothing
+        here, so get_stats() and try_refresh() on the UI thread never wait
+        for that process. (Two threads of one process conflict on the file
+        lock too, so they still take turns.)
+        """
+        store_lock = FileLock(self.QUEUE_DIR / STORE_LOCK_NAME)
+        wait = STORE_LOCK_TIMEOUT_SECONDS if timeout is None else timeout
+        if not store_lock.acquire(timeout=wait):
+            raise TaskManagerError(STORE_BUSY)
+        try:
+            with self._lock:
                 yield
-            finally:
-                store_lock.release()
+        finally:
+            store_lock.release()
 
     @contextmanager
     def _store(self, history: bool = True) -> Iterator[None]:
         """Read the store, let the caller change it, save it: one step that
-        no other process can split. `history` False saves the queue only."""
+        no other process can split. `history` False saves the queue only.
+
+        A file that can't be read raises TaskManagerError before the change:
+        saving the lists held in memory would write over tasks on disk.
+        """
         with self._locked():
-            self._reload()
+            queue_read, history_read = self._reload()
+            if not queue_read or (history and not history_read):
+                raise TaskManagerError(STORE_UNREADABLE.format(folder=self.QUEUE_DIR))
             yield
             self._save_queue()
             if history:
                 self._save_history()
 
     def refresh(self) -> None:
-        """Reload queue and history from disk to see other processes' changes."""
+        """Reload queue and history from disk to see other processes' changes.
+
+        Raises TaskManagerError when another process holds the store past
+        STORE_LOCK_TIMEOUT_SECONDS."""
         with self._locked():
             self._reload()
 
-    def _reload(self) -> None:
-        """Take the stores on disk. Caller holds the locks.
+    def try_refresh(self, timeout: float = UI_REFRESH_TIMEOUT_SECONDS) -> bool:
+        """refresh() for screens that redraw on a timer: it waits at most
+        `timeout` and never raises. False keeps the lists from last time."""
+        try:
+            with self._locked(timeout):
+                self._reload()
+        except TaskManagerError:
+            return False
+        return True
+
+    def _reload(self) -> tuple[bool, bool]:
+        """Take the stores on disk; whether the queue and the history were
+        read. Caller holds the locks.
 
         A task this process already holds keeps its object and takes the
         saved fields; the task running here keeps its own progress and
@@ -132,25 +173,30 @@ class TaskManager:
         history = self._read_tasks(self.HISTORY_FILE)
         if history is not None:
             self._history = history
+        return queue is not None, history is not None
 
     @staticmethod
     def _read_tasks(path: Path) -> Optional[list[TaskItem]]:
         """The tasks stored in `path`; None when the file can't be read.
 
         None means "keep what you have": on Windows a read fails while
-        another process replaces the file, and treating that as an empty
-        store wiped the history. A single bad entry is skipped, not the file.
+        another process replaces the file or a scanner holds it, and
+        treating that as an empty store wiped the history. A file that
+        isn't a task list is moved aside (see _move_aside) and reads as
+        empty. A single bad entry is skipped, not the file.
         """
         if not path.exists():
             return []
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        text = _read_text(path)
+        if text is None:
             logger.warning("Could not read task store %s; keeping current tasks", path)
             return None
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
         if not isinstance(data, list):
-            logger.warning("Task store %s is not a list; keeping current tasks", path)
-            return None
+            return [] if _move_aside(path) else None
         tasks = []
         for item in data:
             try:
@@ -160,20 +206,20 @@ class TaskManager:
         return tasks
 
     def _save_queue(self) -> None:
-        self._ensure_dirs()
-        try:
-            data = [item.to_dict() for item in self._queue]
-            atomic_write_json(self.QUEUE_FILE, data, default=str)
-        except OSError:
-            logger.exception("Failed to save task queue %s", self.QUEUE_FILE)
+        self._save(self.QUEUE_FILE, self._queue)
 
     def _save_history(self) -> None:
-        self._ensure_dirs()
+        self._save(self.HISTORY_FILE, self._history)
+
+    def _save(self, path: Path, tasks: list[TaskItem]) -> None:
+        """Write `tasks` to `path`; TaskManagerError when the disk refuses,
+        so add() never reports a task it didn't store."""
         try:
-            data = [item.to_dict() for item in self._history]
-            atomic_write_json(self.HISTORY_FILE, data, default=str)
-        except OSError:
-            logger.exception("Failed to save task history %s", self.HISTORY_FILE)
+            self._ensure_dirs()
+            atomic_write_json(path, [item.to_dict() for item in tasks], default=str)
+        except OSError as exc:
+            logger.warning("Failed to save task store %s: %s", path, exc)
+            raise TaskManagerError(STORE_UNSAVED.format(path=path, error=exc)) from exc
 
     def _find(self, task_id: str) -> Optional[TaskItem]:
         return next((item for item in self._queue if item.id == task_id), None)
@@ -440,47 +486,70 @@ class TaskManager:
         live worker and started none, so this worker picks the task up.
         """
         processed = 0
-        while self._worker_lock.acquire(timeout=0):
+        while self._worker_lock.acquire(timeout=WORKER_START_WAIT_SECONDS):
             try:
                 self._recover_orphans()
                 idle_since = time.monotonic()
                 while time.monotonic() - idle_since < idle_seconds:
-                    if self._process_next():
+                    if self._try_next():
                         processed += 1
                         idle_since = time.monotonic()
                     else:
                         time.sleep(IDLE_POLL_SECONDS)
             finally:
                 self._worker_lock.release()
-            self.refresh()
+            self.try_refresh(STORE_LOCK_TIMEOUT_SECONDS)
             if not self.get_pending():
                 return processed
         return processed or None
 
     def _process_loop(self) -> None:
         while self._running:
-            if not self._worker_lock.held:
-                if not self._worker_lock.acquire(timeout=0):
-                    time.sleep(IDLE_POLL_SECONDS)  # another process runs it
-                    continue
-                self._recover_orphans()
-            if self._process_next():
-                time.sleep(BETWEEN_TASKS_SECONDS)
-            else:
+            try:
+                if not self._worker_lock.held:
+                    if not self._worker_lock.acquire(timeout=0):
+                        time.sleep(IDLE_POLL_SECONDS)  # another process runs it
+                        continue
+                    self._recover_orphans()
+            except TaskManagerError as exc:
+                logger.warning("Task queue unavailable: %s", exc)
                 time.sleep(IDLE_POLL_SECONDS)
+                continue
+            ran = self._try_next()
+            time.sleep(BETWEEN_TASKS_SECONDS if ran else IDLE_POLL_SECONDS)
         self._worker_lock.release()
+
+    def _try_next(self) -> bool:
+        """_process_next for the worker loops: a store that stays busy or
+        unreadable counts as nothing run, so the worker waits and tries
+        again instead of dying."""
+        try:
+            return self._process_next()
+        except TaskManagerError as exc:
+            logger.warning("Task queue unavailable: %s", exc)
+            return False
 
     def _recover_orphans(self) -> None:
         """Tasks marked running that no worker runs (the one that ran them
         stopped or crashed) go back to pending; cancelled ones are archived.
-        Only the worker-lock holder calls this, so nobody else runs them."""
+        Only the worker-lock holder calls this, so nobody else runs them.
+
+        Each claim counts a run in retry_count. A task whose worker died on
+        more than 1 + MAX_RETRIES runs fails instead: one that crashes its
+        worker would otherwise run on every start and block the queue."""
         with self._store():
             for item in list(self._queue):
                 if item is self._running_task:
                     continue
                 if item.status == TaskStatus.RUNNING:
-                    item.status = TaskStatus.PENDING
-                    item.error = INTERRUPTED_NOTE
+                    if item.retry_count > settings.MAX_RETRIES:
+                        item.status = TaskStatus.FAILED
+                        item.error = WORKER_DIED_NOTE.format(count=item.retry_count)
+                        item.completed_at = datetime.now().isoformat()
+                        self._archive(item)
+                    else:
+                        item.status = TaskStatus.PENDING
+                        item.error = INTERRUPTED_NOTE
                 elif item.status == TaskStatus.CANCELLED:
                     item.completed_at = datetime.now().isoformat()
                     self._archive(item)
@@ -492,6 +561,10 @@ class TaskManager:
             try:
                 if self._execute_task(task):
                     return True
+            except TaskManagerError:
+                # The store, not the task, failed: the task keeps its state
+                # on disk (a claimed one goes back to pending on recovery).
+                raise
             except Exception as exc:  # noqa: BLE001 - worker must survive and record it
                 logger.exception("Task %s failed outside its executor", task.id)
                 with self._store():
@@ -604,6 +677,33 @@ def _merge(
     for name in TaskItem.model_fields:
         setattr(held, name, getattr(saved, name))
     return held
+
+
+def _read_text(path: Path) -> Optional[str]:
+    """`path`'s text, tried READ_ATTEMPTS times; None when every try fails."""
+    for attempt in range(READ_ATTEMPTS):
+        if attempt:
+            time.sleep(READ_RETRY_SECONDS)
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return None
+
+
+def _move_aside(path: Path) -> bool:
+    """Rename a store that isn't a task list to `<name>.corrupt-<time>`, so
+    the next save starts afresh without destroying it. False when the
+    rename fails: then the caller keeps its tasks and saves nothing."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    kept = path.with_name(f"{path.name}{CORRUPT_SUFFIX}{stamp}")
+    try:
+        path.replace(kept)
+    except OSError as exc:
+        logger.warning("Task store %s is corrupt and could not be moved: %s", path, exc)
+        return False
+    logger.warning("Task store %s was corrupt; moved it to %s", path, kept.name)
+    return True
 
 
 def _reset(item: TaskItem) -> None:

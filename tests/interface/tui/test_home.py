@@ -1,6 +1,7 @@
 """The Home page (command center) and its charts
 (PLANS/active/dashboard-design-system.md, R3)."""
 
+import time
 from datetime import date, datetime
 
 import pytest
@@ -230,3 +231,36 @@ def test_page_icons_follow_the_setting(monkeypatch, style, glyph):
 
     assert icon.plain.startswith(glyph)
     assert icon.cell_length == 2  # labels line up either way
+
+
+@pytest.mark.asyncio
+async def test_home_keeps_the_queue_count_while_another_process_holds_it(
+    monkeypatch,
+):
+    """Home refreshed the queue on the UI thread: while another process
+    held queue.lock the dashboard froze, then died of TaskManagerError."""
+    from max_cli.common.file_lock import FileLock
+    from max_cli.core.engines import task_manager
+    from max_cli.core.engines.task_queue import TaskItem, TaskType
+    from max_cli.interface.tui.widgets.home_panel import HomePanel
+
+    monkeypatch.setattr(task_manager, "STORE_LOCK_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(task_manager.TaskManager, "start_worker", lambda self: None)
+    task_manager.get_task_manager().add(TaskItem(type=TaskType.CUSTOM))
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        queue_tile = app.query_one("#tile-queue", Tile)
+        assert queue_tile.query_one(Digits).value == "1"
+        other_process = FileLock(
+            task_manager.TaskManager.QUEUE_DIR / task_manager.STORE_LOCK_NAME
+        )
+        assert other_process.acquire(timeout=0)
+        try:
+            started = time.monotonic()
+            app.query_one(HomePanel).refresh_data()
+            assert time.monotonic() - started < 0.9
+        finally:
+            other_process.release()
+
+        assert queue_tile.query_one(Digits).value == "1"

@@ -355,7 +355,7 @@ class MaxDashboardApp(App):
         from max_cli.core.engines.task_manager import get_task_manager
 
         manager = get_task_manager()
-        manager.refresh()
+        manager.try_refresh()  # busy store: count what was read last time
         stats = manager.get_stats()
         return int(stats.get("pending", 0)) + int(stats.get("running", 0))
 

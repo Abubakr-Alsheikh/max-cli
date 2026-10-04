@@ -45,10 +45,16 @@ def _spawn(log_path: Path) -> "subprocess.Popen[bytes]":
 
 
 def _detached() -> dict:
-    """Popen options that keep the worker alive after the terminal closes."""
+    """Popen options that keep the worker alive after the terminal closes.
+
+    On Windows the worker gets a console of its own, hidden: the ffmpeg,
+    ffprobe and yt-dlp processes it starts share it. DETACHED_PROCESS left
+    it with none, so each of them opened a visible window, and closing one
+    killed the job.
+    """
     if sys.platform == "win32":
         return {
-            "creationflags": subprocess.DETACHED_PROCESS
+            "creationflags": subprocess.CREATE_NO_WINDOW
             | subprocess.CREATE_NEW_PROCESS_GROUP
         }
     return {"start_new_session": True}

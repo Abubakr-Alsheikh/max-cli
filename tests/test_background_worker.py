@@ -1,7 +1,11 @@
 """core/engines/background_worker.py: the queue runs on after the command."""
 
 import json
+import subprocess
+import sys
 import time
+
+import pytest
 
 from max_cli.core.engines import background_worker
 from max_cli.core.engines.task_manager import TaskManager, get_task_manager
@@ -68,3 +72,20 @@ def test_the_detached_worker_runs_a_queued_action(tmp_path, monkeypatch):
     log = (queue_dir / "worker.log").read_text(encoding="utf-8", errors="replace")
     assert finished, log
     assert finished[0]["status"] == "completed", log
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows creation flags")
+def test_the_worker_gets_no_console_window_on_windows():
+    """DETACHED_PROCESS left the worker without a console, so every ffmpeg
+    or yt-dlp it started opened a window of its own (closing it killed the
+    job). CREATE_NO_WINDOW gives the worker a hidden console they share."""
+    flags = background_worker._detached()["creationflags"]
+
+    assert flags & subprocess.CREATE_NO_WINDOW
+    assert flags & subprocess.CREATE_NEW_PROCESS_GROUP
+    assert not flags & subprocess.DETACHED_PROCESS
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX sessions")
+def test_the_worker_starts_its_own_session_elsewhere():
+    assert background_worker._detached() == {"start_new_session": True}
