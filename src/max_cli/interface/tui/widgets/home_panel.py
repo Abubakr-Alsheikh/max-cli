@@ -39,12 +39,8 @@ from max_cli.interface.tui.widgets.charts import (
     Spark,
     StackChart,
 )
-from max_cli.interface.tui.widgets.sidebar import (
-    ICON_WIDTH,
-    SECTION_KEYS,
-    page_colour,
-    page_icon,
-)
+from max_cli.interface.tui.widgets.page_icons import page_colour, page_icon
+from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
 HISTORY_SAMPLES = 60  # 2 minutes of CPU history at one sample per refresh
 GIGABYTE = 1024**3
@@ -59,14 +55,14 @@ ASK_OFF = "Set up an AI on the Settings page ({key}) to ask Max in plain words"
 
 # (page id, name, what it's for) on the launchpad, in sidebar order.
 LAUNCHPAD = [
-    ("download", "Download", "videos · music"),
-    ("video", "Video", "compress · cut"),
-    ("audio", "Audio", "tags · to MP3"),
-    ("images", "Images", "shrink · resize"),
-    ("pdf", "PDF", "merge · OCR"),
-    ("files", "Files", "sort · dedupe"),
+    ("download", "Download", "video, music"),
+    ("video", "Video", "compress, cut"),
+    ("audio", "Audio", "tags, to MP3"),
+    ("images", "Images", "shrink, resize"),
+    ("pdf", "PDF", "merge, OCR"),
+    ("files", "Files", "sort, dedupe"),
     ("ai", "Ask AI", "plain words"),
-    ("activity", "Activity", "queue · history"),
+    ("activity", "Activity", "queue, history"),
 ]
 
 
@@ -154,7 +150,9 @@ class Launcher(Widget, can_focus=True):
 
     DEFAULT_CSS = """
     Launcher {
-        height: 4;
+        height: 5;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
         width: 1fr;
         padding: 0 1;
         background: $boost;
@@ -385,10 +383,10 @@ class HomePanel(Vertical):
     HomePanel.-narrow #home-launch-grid {
         grid-size: 2;
         grid-columns: 1fr 1fr;
-        height: 16;
+        height: 20;
     }
     HomePanel.-narrow #home-launch-card {
-        height: 19;
+        height: 23;
     }
     HomePanel.-narrow #home-tiles {
         grid-size: 2;
@@ -403,7 +401,7 @@ class HomePanel(Vertical):
         grid-columns: 2fr 1fr;
     }
     #home-launch-card {
-        height: 11;
+        height: 13;
         margin-bottom: 1;
     }
     #home-system-card {
@@ -413,7 +411,7 @@ class HomePanel(Vertical):
         grid-size: 4;
         grid-columns: 1fr 1fr 1fr 1fr;
         grid-gutter: 0 1;
-        height: 8;
+        height: 10;
     }
     #home-again {
         height: 1;
@@ -593,13 +591,20 @@ class HomePanel(Vertical):
 
     @staticmethod
     def _launch_label(section_id: str, name: str, purpose: str) -> Content:
-        """The page's chip and name with its key, what it's for under them."""
-        return Content.assemble(
-            page_icon(section_id),
-            (f" {name}", "bold"),
-            (f"  {SECTION_KEYS[section_id]}\n", "bold $text-muted"),
-            (" " * (ICON_WIDTH + 1) + purpose, "$text-muted"),
+        """The page's icon, with its name, what it's for and its key."""
+        text = (
+            Content.styled(name, "bold"),
+            Content.styled(purpose, "$text-muted"),
+            Content.assemble(
+                ("key ", "$text-muted"),
+                (SECTION_KEYS[section_id], f"bold {page_colour(section_id)}"),
+            ),
         )
+        rows = [
+            Content.assemble(icon_row, "  ", line)
+            for icon_row, line in zip(page_icon(section_id), text)
+        ]
+        return Content("\n").join(rows)
 
     # --- refresh ------------------------------------------------------------------
 

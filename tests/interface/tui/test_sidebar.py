@@ -267,13 +267,16 @@ async def test_collapsed_icons_are_centred_in_a_narrow_strip():
         await pilot.press("ctrl+b")
         await pilot.pause()
         sidebar = app.query_one(Sidebar)
-        assert sidebar.compact and sidebar.size.width <= 7
+        assert sidebar.compact and sidebar.size.width <= 10
+
+        from max_cli.interface.tui.widgets.page_icons import ICON_COLUMNS, page_icon
 
         for item in app.query(NavItem):
             if item.has_class("-active"):
                 continue  # its accent border takes a column
-            text = item.render()
-            indent = len(text.plain) - len(text.plain.lstrip(" "))
-            icon_width = text.cell_length - indent
             assert item.content_region == item.region, item.section_id
-            assert indent == (item.content_size.width - icon_width) // 2
+            indent = (item.content_size.width - ICON_COLUMNS) // 2
+            icon = [row.plain for row in page_icon(item.section_id)]
+            lines = item.render().plain.split("\n")
+            assert [line[indent : indent + ICON_COLUMNS] for line in lines] == icon
+            assert all(line[:indent] == " " * indent for line in lines)

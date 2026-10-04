@@ -21,7 +21,10 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
 
+from max_cli.interface.tui.widgets.page_icons import ICON_ROWS, page_icon
+
 # (page id, emoji, label), in sidebar order. The number keys follow this order.
+# The icons themselves are in page_icons.py.
 SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
@@ -35,58 +38,6 @@ SECTIONS = [
     ("extras", "\U0001f9f0", "Extras"),
     ("settings", "\U0001f527", "Settings"),
 ]
-# The same pages in Nerd Font icons (Material Design glyphs): one colour,
-# one column wide. DASHBOARD_ICONS picks them; they need a Nerd Font.
-NERD_ICONS = {
-    "home": "\U000f02dc",
-    "download": "\U000f01da",
-    "video": "\U000f0567",
-    "audio": "\U000f0387",
-    "images": "\U000f02e9",
-    "pdf": "\U000f0226",
-    "files": "\U000f024b",
-    "ai": "\U000f06a9",
-    "activity": "\U000f02da",
-    "extras": "\U000f09ac",
-    "settings": "\U000f0493",
-}
-EMOJI_ICONS = {section_id: icon for section_id, icon, _label in SECTIONS}
-# The default: plain symbols, drawn dark on a chip of the page's colour. Bare
-# thin symbols were hard to see, so the chip carries the page; symbols the
-# terminal's font lacks come from Segoe UI Symbol (Windows Terminal) or the
-# system's symbol font.
-GLYPH_ICONS = {
-    "home": "\u2302",  # house
-    "download": "\u2b07",  # down arrow
-    "video": "\u25ba",  # play
-    "audio": "\u266b",  # notes
-    "images": "\u25e9",  # framed picture
-    "pdf": "\u2630",  # page of lines
-    "files": "\u274f",  # stacked sheets
-    "ai": "\u2726",  # spark
-    "activity": "\u25f7",  # clock
-    "extras": "\u271a",  # plus
-    "settings": "\u2699",  # gear
-}
-GLYPH_STYLE, NERD_STYLE, EMOJI_STYLE = "glyph", "nerd", "emoji"
-ICON_WIDTH = 3  # cells, in every style, so labels line up
-# Each page's colour: a command group's is the one Home's BY TYPE chart uses
-# for it (home_stats.TYPE_LOOK), so a page looks the same everywhere.
-PAGE_KINDS = {
-    "download": "download",
-    "video": "video",
-    "audio": "audio",
-    "images": "images",
-    "pdf": "pdf",
-    "files": "files",
-    "ai": "ai",
-    "extras": "tools",
-}
-OTHER_PAGE_COLOURS = {
-    "home": "$primary-lighten-2",
-    "activity": "$success-darken-1",
-    "settings": "$secondary-darken-2",
-}
 SECTION_GROUPS = (
     (
         "DO",
@@ -109,32 +60,6 @@ SECTION_KEYS = {
     )
 }
 SECTION_KEYS["settings"] = SETTINGS_KEY
-
-
-def page_colour(section_id: str) -> str:
-    """The theme colour that marks a page (its chip, its launch tile)."""
-    from max_cli.interface.tui.home_stats import look
-
-    kind = PAGE_KINDS.get(section_id)
-    if kind is not None:
-        return look(kind).style
-    return OTHER_PAGE_COLOURS.get(section_id, "$primary")
-
-
-def page_icon(section_id: str) -> Content:
-    """A page's icon in the style DASHBOARD_ICONS picks, ICON_WIDTH cells
-    in each: a symbol (or a Nerd Font glyph) on a chip of the page's colour,
-    or an emoji."""
-    from max_cli.config import settings
-
-    style = settings.DASHBOARD_ICONS
-    if style == EMOJI_STYLE:
-        return Content(f"{EMOJI_ICONS.get(section_id, '  ')} ")
-    icons = NERD_ICONS if style == NERD_STYLE else GLYPH_ICONS
-    glyph = icons.get(section_id, " ")
-    return Content.styled(
-        f" {glyph} ", f"bold $background on {page_colour(section_id)}"
-    )
 
 
 EXPAND_LABEL = "»"
@@ -193,32 +118,44 @@ class NavItem(Widget, can_focus=True):
     def __init__(self, section_id: str, label: str) -> None:
         super().__init__(id=f"nav-{section_id}")
         self.section_id = section_id
-        self.icon = page_icon(section_id)
         self.label = label
         self.compact = False
         self.badge: Optional[Badge] = None
         self.tooltip = f"{label}  ({SECTION_KEYS[section_id]})"
 
     def render(self) -> Content:
+        """The icon's rows; the key, the name and a badge on the middle one."""
         badge = ""
         badge_style = ""
         if self.badge is not None:
             badge = f"{BADGE_SYMBOLS[self.badge.kind]}{self.badge.count}"
             badge_style = f"bold ${BADGE_COLOURS[self.badge.kind]}"
-        if self.compact:
-            icon = Content.assemble(self.icon, (badge, badge_style))
-            # Centre by hand: content-align doesn't move text a widget renders.
-            indent = max(0, (self.content_size.width - icon.cell_length) // 2)
-            return Content.assemble(" " * indent, icon)
-        name = Content.assemble(
-            (f"{SECTION_KEYS[self.section_id]}  ", "dim"),
-            self.icon,
-            f" {self.label}",
-        )
-        # The badge sits against the right padding, so the right margin
-        # matches the left one whatever the label's length.
-        gap = max(1, self.content_size.width - name.cell_length - len(badge))
-        return Content.assemble(name, " " * gap, (badge, badge_style))
+        middle = ICON_ROWS // 2
+        rows = []
+        # Full colour for the open page and the one under the mouse or
+        # cursor; the rest faded.
+        lit = self.has_class("-active") or self.mouse_hover or self.has_focus
+        for number, icon_row in enumerate(page_icon(self.section_id, dim=not lit)):
+            here = number == middle
+            if self.compact:
+                row = Content.assemble(icon_row, (badge if here else "", badge_style))
+                # Centre by hand: content-align doesn't move text a widget
+                # renders. Every row by the icon's width, so the rows line up.
+                indent = max(0, (self.content_size.width - icon_row.cell_length) // 2)
+                rows.append(Content.assemble(" " * indent, row))
+                continue
+            row = Content.assemble(
+                (f"{SECTION_KEYS[self.section_id]}  " if here else "   ", "dim"),
+                icon_row,
+                f"  {self.label}" if here else "",
+            )
+            if here:
+                # The badge sits against the right padding, so the right
+                # margin matches the left one whatever the label's length.
+                gap = max(1, self.content_size.width - row.cell_length - len(badge))
+                row = Content.assemble(row, " " * gap, (badge, badge_style))
+            rows.append(row)
+        return Content("\n").join(rows)
 
     def action_open(self) -> None:
         self.post_message(self.Selected(self.section_id))
@@ -239,7 +176,7 @@ class Sidebar(Vertical):
         border-right: solid $border;
     }
     Sidebar.-compact {
-        width: 7;
+        width: 10;
     }
     /* These live here, not in NavItem's CSS: Textual scopes a widget's
        DEFAULT_CSS to that widget, so a rule starting at Sidebar never
