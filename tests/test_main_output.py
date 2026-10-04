@@ -29,3 +29,18 @@ def test_utf8_output_is_left_alone(monkeypatch):
     tolerate_unencodable_output()
 
     assert stream.errors == "strict"
+
+
+def test_version_prints_the_installed_version(monkeypatch):
+    from importlib import metadata
+
+    from typer.testing import CliRunner
+
+    from max_cli.main import app
+
+    monkeypatch.setattr(metadata, "version", lambda name: "9.9.9")
+
+    result = CliRunner().invoke(app, ["--version"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "max 9.9.9"
