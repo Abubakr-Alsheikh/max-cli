@@ -68,6 +68,6 @@ You can also set the providers on the dashboard's Settings page, which lists eac
 ## Check the install
 
 ```bash
-max --help
+max --version
 max config validate
 ```

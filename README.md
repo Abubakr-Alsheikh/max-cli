@@ -73,7 +73,7 @@ pip install -e .
 | [OpenAI](https://platform.openai.com/api-keys) | Yes | GPT models, image generation, or any server that speaks the OpenAI API |
 | [Ollama](https://ollama.com) | No | Private AI on your own machine, no internet |
 
-Check the install with `max --help`.
+Check the install with `max --version`.
 
 ## Three ways to use Max
 
