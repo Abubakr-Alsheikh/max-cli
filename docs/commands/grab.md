@@ -11,6 +11,9 @@ max grab download "https://youtube.com/watch?v=..."
 # Download audio only
 max grab download "https://youtube.com/watch?v=..." -a
 
+# Download in the background and get your terminal back
+max grab download "https://youtube.com/watch?v=..." -Q
+
 # Interactive mode (no URL required)
 max grab download
 ```
@@ -19,17 +22,17 @@ max grab download
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--quality` | `-q` | Quality: `ss` (360p), `s` (480p), `m` (720p), `h` (1080p), `x` (4K) |
+| `--quality` | `-q` | Quality: `ss` (360p), `s` (480p), `m` (720p), `h` (1080p), `x` (4K). Max reads the first letter, so `-q high` works too. Default: your saved quality (`max config grab`) |
 | `--resolution` | `-r` | Exact height, such as 144, 240 or 720. Overrides `--quality` |
-| `--video` | `-v` | Force video download |
+| `--video` | `-v` | Download video, even when your default type is audio |
 | `--audio` | `-a` | Audio only |
 | `--subtitles` | `-s` | Download subtitles |
 | `--index` | `-i` | Playlist items to download, such as `1` or `1-5` |
 | `--no-playlist` | | Download one video, not the playlist |
 | `--no-meta` | `--nom` | Skip embedded metadata and thumbnails |
-| `--output` | `-o` | Output folder |
-| `--queue` | `-Q` | Add to the queue and download in the background (`max queue status` follows it) |
-| `--no-process` | | Add to the queue without processing it |
+| `--output` | `-o` | Output folder. Default: your download folder (`max config grab`) |
+| `--queue` | `-Q` | Add the download to the queue and start the background worker, unless the dashboard or a worker already runs the queue. The command returns at once, and closing the terminal doesn't stop the download. `max queue status` follows it |
+| `--no-process` | | Use with `--queue`: add to the queue but don't start the worker. Run `max queue start` or `max queue process` later |
 | `--progress` / `--no-progress` | | Show or hide the progress bar (default: show) |
 | `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |
 
@@ -47,12 +50,12 @@ If downloads fail with `HTTP Error 403: Forbidden`, YouTube is probably blocking
    ```bash
    max grab pot-setup
    ```
-   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies. After that, `max grab download` detects the provider and uses the `android` client with token fetching. You don't need extra flags. Pass `--yes` (`-y`) to skip the confirmations. In the dashboard, the Download page's Tools card shows whether the fix is installed and has an "Install fix" button.
+   This installs the yt-dlp plugin (`bgutil-ytdlp-pot-provider`), clones the token server, and sets up its Deno dependencies. Deno must be installed and on your PATH first (step 1). After that, `max grab download` detects the provider and uses the `android` client with token fetching. You don't need extra flags. Pass `--yes` (`-y`) to skip the confirmations. In the dashboard, the Download page's Tools card shows whether the fix is installed and has an "Install fix" button.
 3. **Update yt-dlp** to the latest version:
    ```bash
    pip install -U yt-dlp
    ```
-4. **Manually switch the player client**:
+4. **Switch the player client yourself**:
    ```bash
    max grab download "https://youtube.com/watch?v=..." --player-client web
    ```
@@ -63,36 +66,38 @@ Run without a URL to enter interactive mode:
 
 ```bash
 max grab download
-# Enter URL and press Enter - download starts in background
-# Enter another URL while the first is downloading
-# Press Enter with empty input to exit
+# Enter a URL and press Enter: Max adds it to the queue and starts downloading
+# Enter another URL while the first one downloads
+# Press Enter on an empty line (or Ctrl+C) to stop adding URLs
 ```
 
-Benefits:
-- Downloads run in background while you add more URLs
-- No waiting - enter next URL immediately after previous starts
-- Shows progress and status
+- Each URL goes into the download queue, and this terminal downloads them one after another while you type more.
+- When the dashboard or the background worker already runs the queue, that process downloads them instead.
+- The options you pass (`-a`, `-q`, `-o` and the rest) apply to every URL you enter.
+- When you stop, Max waits up to 30 seconds for the downloads still going, then prints how many completed and failed.
 
 ## Queue Commands
 
 ```bash
 # Show the download queue
 max grab queue
-max grab queue --process    # Process pending downloads now
+max grab queue --process    # (-p) Run pending downloads now, in this terminal
 
 # Show download history
-max grab history
-max grab history --limit 20
-max grab history --clear    # Delete the download history (asks first; -f skips)
+max grab history            # The last 10 downloads
+max grab history --limit 20 # (-n)
+max grab history --clear    # (-c) Delete the download history (asks first; -f skips)
 
 # Clear the queue
 max grab clear              # Clear pending downloads
-max grab clear --all        # Clear every queued download that isn't running
-max grab clear --force      # Skip the confirmation prompt
+max grab clear --all        # (-a) Clear every queued download that isn't running
+max grab clear --force      # (-f) Skip the confirmation prompt
 
-# Show statistics
+# Show counts: queued, pending, downloading, completed, failed
 max grab status
 ```
+
+`max grab queue --process` leaves the downloads alone when the dashboard or the background worker already runs the queue: that process downloads them.
 
 Downloads share one task store with `max queue` and the dashboard, so
 `max queue status` lists queued downloads next to other tasks. The first run
@@ -110,13 +115,12 @@ Set default download preferences:
 max config grab
 ```
 
-Options include:
-- Default quality
-- Auto-strip playlist info
-- Embed metadata
-- Default type (video/audio)
+It asks for:
+- Default quality (`s`, `m`, `h` or `x`)
+- Whether to strip playlist info from a video link (`watch?v=ID&list=LIST` becomes `watch?v=ID`)
+- Whether to embed metadata and thumbnails
+- Default type (video or audio)
 - Default download folder
-- Queue system enabled/disabled
 
 ## Quality Presets
 

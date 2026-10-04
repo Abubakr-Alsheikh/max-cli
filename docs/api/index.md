@@ -1,45 +1,53 @@
 # API Reference
 
-## Core Modules
+You can drive Max from Python. The CLI, the dashboard and the AI agent all use the layers below, so a script gets the same checks, defaults and results.
 
-- [Core](core.md) - Engine implementations
-- [Common](common.md) - Utilities
-- [Config](config.md) - Configuration
+- [Core](core.md): the action catalog, operations, batches, the task queue, the agent and the engines.
+- [Common](common.md): shared helpers (atomic writes, file locks, undo log, caching).
+- [Config](config.md): every setting and its default.
 
-## Module Overview
+## Run an action
 
-### Image Processing
+Every command is an action in the catalog, named `group.command`. `run_action` checks the arguments, fills in defaults and returns an `ActionResult`.
 
 ```python
-from max_cli.core.image_processor import ImageEngine
+from max_cli.core.catalog import get_action
+from max_cli.core.catalog.runner import run_action
 
-engine = ImageEngine()
-engine.compress_image("input.jpg", "output.jpg", quality=85)
+result = run_action(get_action("video.compress"), {"target": "movie.mp4", "level": "high"})
+print(result.ok, result.message, result.output_files)
 ```
 
-### PDF Operations
+Arguments are the same strings a dashboard form sends, or JSON values. Paths can be strings.
+
+## Run it on many files
 
 ```python
-from max_cli.core.pdf_engine import PDFEngine
+from max_cli.core.catalog import get_action
+from max_cli.core.catalog.batch import run_each
 
-engine = PDFEngine()
-engine.merge_pdfs(["file1.pdf", "file2.pdf"], "merged.pdf")
+result = run_each(get_action("pdf.ocr"), {"target": "scans/"}, recursive=True)
+print(result.message)        # one summary for every file
 ```
 
-### Media Processing
+## Queue it
 
 ```python
-from max_cli.core.media_engine import MediaEngine
+from max_cli.core.catalog import get_action
+from max_cli.core.catalog.batch import enqueue_each
+from max_cli.core.engines.background_worker import start_background_worker
 
-engine = MediaEngine()
-engine.compress_video("input.mp4", "output.mp4", quality=75)
+tasks, batch = enqueue_each(get_action("video.compress"), {"target": "videos/"})
+print(f"{len(tasks)} jobs, {len(batch.done_already)} done already")
+start_background_worker()    # runs them, even after this script ends
 ```
 
-### AI Features
+## Ask the agent
 
 ```python
-from max_cli.core.ai_engine import AIEngine
+from max_cli.core.agent.agent import Agent
 
-engine = AIEngine()
-result = engine.categorize_files("/path/to/files")
+agent = Agent.from_settings(confirm=lambda call: input(f"{call.describe()}? [y/N] ") == "y")
+reply = agent.ask("convert the wav files here to mp3")
+print(reply.text)
 ```

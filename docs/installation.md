@@ -2,52 +2,72 @@
 
 ## Prerequisites
 
-- Python 3.9+
-- FFmpeg (for media operations; Max can download it for you)
-- Tesseract OCR (optional, for PDF OCR)
+- Python 3.9 or newer
+- FFmpeg for video and audio commands (Max can download it for you)
+- Tesseract, only for `max pdf ocr`
 
-## Install from PyPI
+## Install
+
+From PyPI:
 
 ```bash
 pip install max-cli
 ```
 
-## Install Development Version
+For the newest code, install from the repository:
 
 ```bash
 git clone https://github.com/Abubakr-Alsheikh/max-cli.git
 cd max-cli
-pip install -e .[dev]
-```
-
-## Install from Source
-
-```bash
 pip install -e .
 ```
 
-The base install includes the AI, PDF, image and download features. The dashboard is part of the base install too. Add an extra from the table below for OCR, for example `pip install -e .[ocr]`.
+For development, add the `dev` extra: `pip install -e .[dev]`.
 
-## Optional Dependencies
+The base install includes the AI, PDF, image and download features and the dashboard.
 
-| Extra | Description |
-|-------|-------------|
-| `dev` | Development dependencies (pytest, ruff, mypy, mkdocs) |
-| `ocr` | OCR support (pytesseract) |
-| `tui` | Empty; kept so `pip install max-cli[tui]` from older instructions still works |
+## Optional extras
 
-## FFmpeg Auto-Resolution
+| Extra | What it adds |
+|-------|--------------|
+| `ocr` | `pytesseract`, for `max pdf ocr`. Install [Tesseract](https://github.com/tesseract-ocr/tesseract) too |
+| `dev` | pytest, ruff, mypy and mkdocs |
+| `tui` | Nothing. It stays so `pip install max-cli[tui]` from older instructions still works |
 
-Max looks for FFmpeg on your PATH. If it can't find it, Max offers to download a binary for your platform into `~/.max_cli/bin/` and checks that it runs.
+## FFmpeg
 
-To install FFmpeg ahead of time:
+Max looks for FFmpeg on your PATH. If it can't find it, the first video or audio command offers to download a build for your platform into `~/.max_cli/bin/`, and checks that it runs.
+
+To install it ahead of time:
 
 ```bash
 max config setup-ffmpeg
 ```
 
-## Verify Installation
+Or use your package manager: `winget install Gyan.FFmpeg` (Windows), `brew install ffmpeg` (macOS), `sudo apt install ffmpeg` (Debian and Ubuntu).
+
+## AI provider
+
+The AI agent and the `max ai` commands need a provider. Run the wizard:
+
+```bash
+max config setup
+```
+
+It asks for a main AI and a fallback, each with its key and model. Max switches to the fallback when the main one fails.
+
+| Provider | Key | Good for |
+|----------|-----|----------|
+| [OpenRouter](https://openrouter.ai/keys) | Yes | Many models behind one key, including free ones |
+| [Google Gemini](https://aistudio.google.com/app/apikey) | Yes | A free tier, vision and image generation |
+| [OpenAI](https://platform.openai.com/api-keys) | Yes | GPT models, or any server that speaks the OpenAI API |
+| [Ollama](https://ollama.com) | No | Private AI on your own machine |
+
+You can also set the providers on the dashboard's Settings page, which lists each provider's models for you to pick.
+
+## Check the install
 
 ```bash
 max --help
+max config validate
 ```

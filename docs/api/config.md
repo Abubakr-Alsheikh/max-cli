@@ -17,7 +17,7 @@ from max_cli.config import settings
 | OPENROUTER_MODEL | str | "" | OpenRouter's model; pick one on the Settings page (openrouter/free picks a free model) |
 | GEMINI_API_KEY | str | None | Google Gemini's key (free at aistudio.google.com/apikey) |
 | GEMINI_MODEL | str | "" | Gemini's model, e.g. gemini-flash-latest (follows Google's newest Flash) |
-| OPENAI_BASE_URL | str | None | API base URL; empty for OpenAI |
+| OPENAI_BASE_URL | str | None | API base URL for an OpenAI-compatible service; empty for OpenAI. OpenRouter and Gemini use fixed URLs |
 | AI_MODEL | str | gpt-6-luna | OpenAI's (or the custom URL's) model |
 | AI_IMAGE_MODEL | str | gpt-image-2.5-flare | OpenAI's (or the custom URL's) image model for max ai create and edit |
 | OPENROUTER_IMAGE_MODEL | str | "" | OpenRouter's image model; empty for none |
@@ -28,9 +28,9 @@ from max_cli.config import settings
 | DEFAULT_QUALITY | int | 85 | Image quality for compress and convert |
 | MAX_WORKERS | int | 4 | Images processed at once (1-16) |
 | DOWNLOAD_TIMEOUT | int | 60 | Seconds a download waits for data before it retries or stops (10 or more): videos, FFmpeg, the noise model, AI images |
-| MAX_RETRIES | int | 2 | How many more times the queue runs a task that failed |
+| MAX_RETRIES | int | 2 | How many more times the queue runs a task that failed (0 or more) |
 | CONFIRM_DESTRUCTIVE | bool | True | Ask before moving, overwriting or deleting files. Off works like `--force` on every command, except `max files shred` |
-| GRAB_QUALITY | str | h | Download quality: ss, s, m, h, x |
+| GRAB_QUALITY | str | h | Download quality: ss (360p), s (480p), m (720p), h (1080p), x (best) |
 | GRAB_DEFAULT_TYPE | str | video | video or audio |
 | GRAB_DEFAULT_PATH | path | ~/Max Downloads | Where downloads go |
 | GRAB_STRIP_PLAYLIST | bool | True | A video link from a playlist gets only that video |
@@ -44,23 +44,30 @@ Removed settings (`APP_NAME`, `BATCH_SIZE`, `GRAB_AUDIO_FORMAT`, `GRAB_QUEUE_ENA
 
 ## Configuration Files
 
-Configuration is loaded from (in order):
-1. `~/.max_cli/.env` (user-level)
-2. `.env` (project-level)
+Max reads settings from, in order:
+1. `~/.max_config.env` (your global settings)
+2. `.env` in the current folder
+
+A setting in the `.env` file wins over the same setting in `~/.max_config.env`, and an environment variable wins over both.
 
 ## CLI Commands
 
 ```bash
-# Show config
+# Show where settings come from and which AI Max uses
 max config show
 
-# Set value
-max config set MAX_WORKERS 8
+# Pick the main AI and a fallback
+max config setup
 
-# Reset to defaults
+# Check values and API keys
+max config validate
+
+# Delete the config files, so the defaults apply
 max config reset
 
-# Export/Import
-max config export config.json
+# Export to JSON and import it again
+max config export -o config.json
 max config import config.json
 ```
+
+Max has no `config set` command. To change one setting, edit `~/.max_config.env` or use the dashboard's Settings page. See [Config Commands](../commands/config.md).

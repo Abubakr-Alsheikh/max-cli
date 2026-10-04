@@ -15,3 +15,5 @@ Max CLI provides these command groups:
 - [Dashboard](dashboard.md) - Interactive terminal dashboard (`max`, or `max dashboard`)
 
 Run `max <group> --help` to see every command in a group, and `max <group> <command> --help` for its options.
+
+Many commands take several files, a folder or a pattern, and long ones take `--queue`. See [Several files at once](../usage.md#several-files-at-once) and [Background jobs](../usage.md#background-jobs).

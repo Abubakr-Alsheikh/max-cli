@@ -51,9 +51,11 @@ ruff check .
 # Format code
 ruff format .
 
-# Type check
-mypy src/
+# Type check: the error count may not rise above mypy-baseline.txt
+python scripts/mypy_baseline.py
 ```
+
+After you fix type errors, run `python scripts/mypy_baseline.py --update` to lock in the lower count.
 
 ## Running CI Locally
 
@@ -85,9 +87,16 @@ CI also runs on macOS and Linux. The script can't reproduce those, so watch for 
 
 ```
 src/max_cli/
-├── core/           # Business logic engines
-├── interface/     # Typer CLI commands
-├── common/        # Shared utilities
-├── plugins/       # Plugin system
-└── config.py      # Configuration
+├── core/
+│   ├── catalog/      # one description per action (params, defaults, danger, batches)
+│   ├── operations/   # the work behind each action; returns an ActionResult
+│   ├── engines/      # FFmpeg, PDF, images, AI providers, downloads, the task queue
+│   ├── agent/        # the AI agent
+│   └── cli/          # lazy command-group loading
+├── interface/        # Typer commands (cli_*.py) and the dashboard (tui/)
+├── common/           # shared helpers
+├── plugins/          # plugin system
+└── config.py         # settings
 ```
+
+A new command touches three places: its catalog entry, its operation and its CLI command. `tests/test_catalog_drift.py` fails when they disagree. [AGENTS.md](https://github.com/Abubakr-Alsheikh/max-cli/blob/main/AGENTS.md) lists the patterns and rules, and [API Reference](api/index.md) shows the layers.

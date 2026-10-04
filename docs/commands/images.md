@@ -1,13 +1,13 @@
 # Image Commands
 
-Every `max images` command takes a file or a folder. With no path, it works on the current folder. Max never overwrites your originals:
+Every `max images` command takes one file or one folder (not a list or a pattern). With no path, it works on the current folder. Max never overwrites your originals:
 
 - For a single file, Max writes `<name>_opt.<ext>` next to it.
 - For a folder, Max writes the results to a sibling folder named `<folder>_optimized`. It reads the folder's own images, not those in subfolders.
 
 If an image fails (a damaged file, for example), Max reports it and carries on with the rest. A missing path, a folder with no images, or an unknown `--to` format stops the command with exit code 1.
 
-The dashboard's Tools page has a form for each command, and the Files page's Compress button opens it filled in for the selected image.
+The dashboard's Images page (`5`) has a form for each command. When you pick an image on another page, such as Files, an **Open on the Images page** button takes it there.
 
 All commands process files in parallel. Use `-j` to set the number of workers (default: `MAX_WORKERS` from your config, 4 unless you change it).
 
@@ -52,6 +52,8 @@ max images resize [TARGET] [-w WIDTH] [-h HEIGHT] [-s SCALE] [-j WORKERS]
 - `-s` - Scale as a percentage
 - `-j` - Number of parallel workers (default: 4)
 
+Here `-h` means height, so use `--help` for the command's help.
+
 **Examples:**
 
 ```bash
@@ -85,6 +87,10 @@ Remove GPS and EXIF data from images.
 ```bash
 max images strip [TARGET] [-j WORKERS]
 ```
+
+**Options:**
+
+- `-j` - Number of parallel workers (default: 4)
 
 **Example:**
 

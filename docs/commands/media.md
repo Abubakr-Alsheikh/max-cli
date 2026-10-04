@@ -1,6 +1,6 @@
 # Video Commands
 
-The `max video` group wraps FFmpeg. Most commands take one input file and accept `-o` to set the output path. Without `-o`, Max writes a new file next to the input and leaves the original alone.
+The `max video` group wraps FFmpeg. Most commands take an input file and accept `-o` to set the output path. Without `-o`, Max writes a new file next to the input and leaves the original alone. Each command below names its default result, where `{stem}` is the input's name without its extension.
 
 ## FFmpeg Auto-Resolution
 
@@ -18,31 +18,36 @@ max config setup-ffmpeg
 
 ## Several files at once
 
-Every command below except `concat`, `record`, `stream` and `preview` also takes several files, a folder or a pattern:
+Every command below except `concat`, `record`, `stream` and `preview` takes several files, a folder or a pattern as well as one file:
 
 ```bash
-max video compress a.mp4 b.mp4          # these two
-max video compress ~/Videos             # every video in the folder
-max video audio-convert "*.m4a"         # every M4A here, to MP3
-max video compress ~/Videos --recursive # subfolders too
-max video compress ~/Videos --queue     # in the background, one job per file
+max video compress a.mp4 b.mp4            # these two files
+max video compress ~/Videos --recursive   # every video in the folder and its subfolders
+max video audio-convert "*.m4a" --queue   # every M4A here, as background jobs
 ```
 
-Max runs up to four files at once and lists each as it finishes. With a folder or a pattern, it skips files whose result is already there (`a.mp4` when `a_compressed.mp4` exists) and never treats its own earlier results as new input. `--redo` runs those files again. Files you name one by one always run. `-o` works only with one file; with several, each result goes next to its file.
+- A folder gives you its video files. `cut`, `louder`, `normalize`, `denoise` and `audio-convert` take its audio files too. Max leaves out hidden files and folders.
+- Quote a pattern (`"*.m4a"`) so Max expands it, not your shell.
+- `--recursive` looks in subfolders too.
+- With a folder or a pattern, Max skips a file whose result already exists (`a.mp4` when `a_compressed.mp4` is there) and doesn't treat its own earlier results as new input. `--redo` runs those files again. Files you name one by one always run. `cut` skips nothing, so it has no `--redo`.
+- Max runs up to four files at a time and ticks off each one as it finishes. When a file fails, the others still run; Max lists the failures at the end and exits with code 1.
+- `-o` names one file, so Max refuses it with several. Each result goes next to its file.
+- `--queue` (every command here except `snap`) adds one job per file to the background queue and starts a background worker. The worker keeps going after you close the terminal. Run `max queue status` to watch it. See [Queue](queue.md). `compress` and `denoise` also take `-q` for `--queue`; in `to-audio` and `audio-convert`, `-q` means `--quality`.
 
 ## compress
 
 Compress a video to H.264 MP4.
 
 ```bash
-max video compress TARGET [-o OUTPUT] [--level LEVEL] [--queue]
+max video compress TARGET... [-o OUTPUT] [--level LEVEL] [--queue]
 ```
 
 **Options:**
 
-- `-o` - Output path
+- `-o` - Output path (default: `{stem}_compressed.mp4`)
 - `--level` - `high` (CRF 23), `balanced` (CRF 28) or `max` (CRF 35, smallest file). Default: `balanced`
 - `--queue`, `-q` - Add the job to the background queue instead of running it now. See [Queue](queue.md).
+- `--recursive`, `--redo` - See [Several files at once](#several-files-at-once)
 
 **Examples:**
 
@@ -51,6 +56,7 @@ max video compress movie.mp4
 max video compress movie.mp4 --level high
 max video compress movie.mp4 --level max -o small.mp4
 max video compress movie.mp4 --queue
+max video compress ~/Videos --level max
 ```
 
 ## convert
@@ -58,26 +64,30 @@ max video compress movie.mp4 --queue
 Change the video container, for example MKV to MP4.
 
 ```bash
-max video convert TARGET [--format FORMAT]
+max video convert TARGET... [--format FORMAT]
 ```
+
+Max saves the result next to the input as `{stem}.{format}`. This command has no `-o`.
 
 **Options:**
 
 - `--format`, `-f` - Target format: `mp4`, `mkv` or `avi` (default: `mp4`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## to-audio
 
 Extract the audio track from a video.
 
 ```bash
-max video to-audio TARGET [--format FORMAT] [--quality QUALITY] [--output OUTPUT]
+max video to-audio TARGET... [--format FORMAT] [--quality QUALITY] [--output OUTPUT]
 ```
 
 **Options:**
 
 - `--format`, `-f` - `mp3`, `wav`, `flac` or `aac` (default: `mp3`)
 - `--quality`, `-q` - `s` (96k), `m` (128k), `h` (192k) or `x` (320k). Default: `h`
-- `--output`, `-o` - Output path
+- `--output`, `-o` - Output path (default: `{stem}.{format}`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 **Examples:**
 
@@ -92,7 +102,7 @@ max video to-audio lecture.mp4 -q x
 Trim a video. `--start` is required. Pass `--end` or `--duration`, or neither to keep everything up to the end of the file.
 
 ```bash
-max video cut TARGET --start TIME [--end TIME | --duration SECONDS] [-o OUTPUT]
+max video cut TARGET... --start TIME [--end TIME | --duration SECONDS] [-o OUTPUT]
 ```
 
 **Options:**
@@ -100,7 +110,8 @@ max video cut TARGET --start TIME [--end TIME | --duration SECONDS] [-o OUTPUT]
 - `--start`, `-s` - Start time, such as `00:01:00` or `60` (required)
 - `--end`, `-e` - End time
 - `--duration`, `-d` - Length to keep, such as `10`
-- `-o` - Output file
+- `-o` - Output file (default: `{stem}_cut.mp4`, or `{stem}_cut.mp3` for an audio file)
+- `--recursive`, `--queue` - See [Several files at once](#several-files-at-once)
 
 **Examples:**
 
@@ -136,108 +147,132 @@ max video concat list.txt --method safe
 Turn a video clip into a GIF.
 
 ```bash
-max video gif TARGET [-o OUTPUT] [--width PX] [--fps FPS]
+max video gif TARGET... [-o OUTPUT] [--width PX] [--fps FPS]
 ```
 
 **Options:**
 
-- `-o` - Output GIF
+- `-o` - Output GIF (default: `{stem}.gif`)
 - `--width` - Width in pixels; height scales to match (default: 480)
 - `--fps` - Frames per second (default: 15)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## snap
 
 Save a JPG screenshot at a timestamp.
 
 ```bash
-max video snap TARGET [--time TIME] [-o OUTPUT]
+max video snap TARGET... [--time TIME] [-o OUTPUT]
 ```
 
 **Options:**
 
 - `--time`, `-t` - Timestamp (default: `00:00:05`)
-- `-o` - Output image
+- `-o` - Output image (default: `{stem}_thumb.jpg`)
+- `--recursive`, `--redo` - See [Several files at once](#several-files-at-once)
 
 ## louder
 
 Raise the volume of a quiet recording.
 
 ```bash
-max video louder TARGET [--db DECIBELS] [-o OUTPUT]
+max video louder TARGET... [--db DECIBELS] [-o OUTPUT]
 ```
+
+`TARGET` can be a video or an audio file.
 
 **Options:**
 
 - `--db` - Decibels to add (default: 5.0)
-- `-o` - Output file
+- `-o` - Output file (default: `{stem}_boosted` with the input's extension)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## mute
 
 Remove the audio track.
 
 ```bash
-max video mute TARGET [-o OUTPUT]
+max video mute TARGET... [-o OUTPUT]
 ```
+
+**Options:**
+
+- `-o` - Output file (default: `{stem}_mute.mp4`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## brightness
 
 Adjust brightness and contrast.
 
 ```bash
-max video brightness TARGET [--brightness VALUE] [--contrast VALUE] [-o OUTPUT]
+max video brightness TARGET... [--brightness VALUE] [--contrast VALUE] [-o OUTPUT]
 ```
 
 **Options:**
 
 - `--brightness`, `-b` - 0.0 to 2.0, where 1.0 is unchanged (default: 1.0)
 - `--contrast`, `-c` - 0.0 to 2.0, where 1.0 is unchanged (default: 1.0)
-- `-o` - Output file
+- `-o` - Output file (default: `{stem}_adjusted.mp4`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## color
 
 Apply a color grading preset.
 
 ```bash
-max video color TARGET [--preset PRESET] [-o OUTPUT]
+max video color TARGET... [--preset PRESET] [-o OUTPUT]
 ```
 
-**Presets:** `vivid` (default), `vintage`, `noir`, `warm`, `cool`, `fade`
+**Options:**
+
+- `--preset`, `-p` - `vivid`, `vintage`, `noir`, `warm`, `cool` or `fade` (default: `vivid`)
+- `-o` - Output file (default: `{stem}_{preset}.mp4`, such as `trip_noir.mp4`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## stabilize
 
 Smooth out shaky footage.
 
 ```bash
-max video stabilize TARGET [-o OUTPUT]
+max video stabilize TARGET... [-o OUTPUT]
 ```
+
+**Options:**
+
+- `-o` - Output file (default: `{stem}_stabilized.mp4`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## normalize
 
 Set the audio loudness to a target level.
 
 ```bash
-max video normalize TARGET [--level LUFS] [-o OUTPUT]
+max video normalize TARGET... [--level LUFS] [-o OUTPUT]
 ```
+
+`TARGET` can be a video or an audio file.
 
 **Options:**
 
 - `--level`, `-l` - Target loudness in LUFS (default: -20.0)
-- `-o` - Output file
+- `-o` - Output file (default: `{stem}_normalized` with the input's extension)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
 
 ## denoise
 
 Remove background noise such as hiss, hum, fans or room noise.
 
 ```bash
-max video denoise TARGET [OPTIONS]
+max video denoise TARGET... [OPTIONS]
 ```
 
 **Options:**
 
 - `--mode`, `-m` - `auto` (general), `hiss` (constant hiss), `hum` (low rumble) or `speech` (RNNoise, best for voice). Default: `auto`
 - `--strength`, `-s` - `mild`, `medium` or `aggressive`. Applies to `auto` mode only. Default: `medium`
-- `--output`, `-o` - Output file (default: `{stem}_denoised{ext}`)
+- `--output`, `-o` - Output file (default: `{stem}_denoised` with the input's extension)
 - `--queue`, `-q` - Add the job to the background queue
+- `--recursive`, `--redo` - See [Several files at once](#several-files-at-once)
 
 **Examples:**
 
@@ -257,8 +292,11 @@ max video denoise recording.mp4 --mode speech
 # Very noisy audio
 max video denoise noisy.mp4 --strength aggressive
 
-# Run it later from the queue
+# Run it in the background
 max video denoise long_clip.mp4 --queue
+
+# Every recording in a folder
+max video denoise ~/Recordings --mode speech
 ```
 
 > **Note**: `auto` mode uses FFmpeg's `anlmdn` filter, which is CPU-heavy. For faster results, try `--mode hiss` or `--mode hum`. Max copies the video stream (`-c:v copy`) and re-encodes only the audio.
@@ -268,14 +306,23 @@ max video denoise long_clip.mp4 --queue
 Convert audio between formats, for example WAV to MP3.
 
 ```bash
-max video audio-convert TARGET [--format FORMAT] [--quality QUALITY] [-o OUTPUT]
+max video audio-convert TARGET... [--format FORMAT] [--quality QUALITY] [-o OUTPUT]
 ```
+
+`TARGET` can be an audio file or a video file.
 
 **Options:**
 
 - `--format`, `-f` - `mp3`, `aac`, `flac`, `wav` or `ogg` (default: `mp3`)
 - `--quality`, `-q` - `s` (128k), `m` (192k) or `h` (320k). Default: `h`
-- `-o` - Output file
+- `-o` - Output file (default: `{stem}.{format}`)
+- `--recursive`, `--redo`, `--queue` - See [Several files at once](#several-files-at-once)
+
+**Example:**
+
+```bash
+max video audio-convert "*.wav" --format mp3 -q m
+```
 
 ## record
 
