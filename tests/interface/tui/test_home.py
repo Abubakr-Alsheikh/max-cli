@@ -1,11 +1,12 @@
 """The Home page (command center) and its charts
 (PLANS/active/dashboard-design-system.md, R3)."""
 
-from datetime import date, datetime, timedelta
+import time
+from datetime import date, datetime
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Button, Digits
+from textual.widgets import Digits, Input
 
 from max_cli.common.activity_log import ActivityEntry, ActivityLog
 from max_cli.interface.tui.app import MaxDashboardApp
@@ -19,9 +20,8 @@ from max_cli.interface.tui.widgets.charts import (
     Spark,
 )
 from max_cli.interface.tui.widgets.home_panel import (
+    Launcher,
     Tile,
-    category_bars,
-    daily_counts,
     greeting,
     load_colour,
 )
@@ -38,28 +38,6 @@ def _entry(category: str, day: date, status: str = "success") -> ActivityEntry:
 
 
 class TestStats:
-    def test_daily_counts_cover_fourteen_days_oldest_first(self):
-        entries = [
-            _entry("download", TODAY),
-            _entry("download", TODAY),
-            _entry("ai", TODAY - timedelta(days=3)),
-            _entry("ai", TODAY - timedelta(days=30)),  # too old
-        ]
-
-        bars = daily_counts(entries, TODAY)
-
-        assert len(bars) == 14
-        assert bars[-1] == Bar("now", 2, highlight=True)
-        assert bars[-4].value == 1 and not bars[-4].highlight
-        assert sum(bar.value for bar in bars) == 3
-
-    def test_category_bars_merge_aliases_and_sort(self):
-        entries = [_entry("grab", TODAY), _entry("download", TODAY), _entry("ai", TODAY)]
-
-        bars = category_bars(entries)
-
-        assert [(bar.label, bar.value) for bar in bars] == [("Downloads", 2), ("AI", 1)]
-
     @pytest.mark.parametrize(
         ("hour", "words"),
         [(8, "Good morning"), (14, "Good afternoon"), (21, "Good evening")],
@@ -124,15 +102,17 @@ async def test_spark_uses_a_fixed_scale():
 async def test_home_shows_activity_and_counts(isolated_home):
     log = ActivityLog()
     for status in ("success", "success", "failed"):
-        log.add_entry("download", "grab", status=status, details={"title": "Song [red]"})
+        log.add_entry(
+            "download", "grab", status=status, details={"title": "Song [red]"}
+        )
 
     app = MaxDashboardApp()
     async with app.run_test(size=(140, 50)) as pilot:
         await pilot.pause()
         actions = app.query_one("#tile-actions", Tile)
 
-        assert actions.query_one(Digits).value == "3"
-        assert "66% succeeded" in str(actions.query_one(".tile-note").render())
+        assert actions.query_one(Digits).value == "66"  # % that worked
+        assert "2 of 3 worked" in str(actions.query_one(".tile-note").render())
         recent = str(app.query_one("#home-recent").render())
         assert "Song [red]" in recent  # plain text, not markup
 
@@ -141,8 +121,8 @@ async def test_home_shows_activity_and_counts(isolated_home):
 async def test_quick_launch_opens_pages():
     app = MaxDashboardApp()
     async with app.run_test(size=(140, 50)) as pilot:
-        app.query_one("#launch-audio", Button).press()
-        # Two hops: Button.Pressed -> HomePanel.OpenPage -> the app navigates.
+        await pilot.click("#launch-audio")
+        # Two hops: the tile posts OpenPage -> the app navigates.
         # Wait for the result instead of guessing a pause count.
         for _ in range(POLL_ATTEMPTS):
             await pilot.pause(POLL_SECONDS)
@@ -166,3 +146,152 @@ async def test_the_dashboard_uses_the_max_theme_and_remembers_a_switch():
     second = MaxDashboardApp()
     async with second.run_test(size=(100, 30)):
         assert second.theme == "nord"
+
+
+@pytest.mark.asyncio
+async def test_the_ask_bar_sends_the_request_to_the_ai_page(monkeypatch):
+    from max_cli.config import settings
+    from max_cli.interface.tui.widgets.ai_panel import AIPanel
+
+    monkeypatch.setattr(settings, "AI_PROVIDER", "openai")
+    monkeypatch.setattr(settings, "AI_FALLBACK_PROVIDER", "")
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
+    sent = []
+    monkeypatch.setattr(AIPanel, "send", lambda panel, text: sent.append(text))
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 50)) as pilot:
+        box = app.query_one("#home-ask-input", Input)
+        box.value = "shrink the videos here"
+        await box.action_submit()
+        for _ in range(POLL_ATTEMPTS):
+            await pilot.pause(POLL_SECONDS)
+            if sent:
+                break
+        on_ai_page = app.query_one("#ai-panel").display
+
+    assert sent == ["shrink the videos here"]
+    assert on_ai_page
+
+
+@pytest.mark.asyncio
+async def test_pick_up_again_opens_the_actions_you_use_most(isolated_home):
+    log = ActivityLog()
+    for _ in range(3):
+        log.add_entry("video", "compress", status="success", details={})
+    log.add_entry("pdf", "merge", status="success", details={})
+    app = MaxDashboardApp()
+    opened = []
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.open_action = opened.append  # type: ignore[method-assign]  # spy
+        await pilot.pause()
+        chips = list(app.query("#home-again Launcher").results(Launcher))
+        labels = [chip.label.plain for chip in chips]
+        chips[0].action_launch()
+
+    assert labels == ["▸ video compress", "▸ pdf merge"]
+    assert opened == ["video.compress"]
+
+
+@pytest.mark.asyncio
+async def test_stack_chart_colours_each_kind():
+    from max_cli.interface.tui.widgets.charts import Stack, StackChart
+
+    class StackApp(App):
+        def compose(self) -> ComposeResult:
+            yield StackChart(id="stacks")
+
+    app = StackApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        chart = app.query_one(StackChart)
+        assert "No activity yet" in chart.render().plain
+        chart.set_data(
+            [
+                Stack("01", ((3, "$primary"), (1, "$secondary"))),
+                Stack("now", ((2, "$secondary"),), highlight=True),
+            ]
+        )
+        await pilot.pause()
+        rendered = chart.render()
+
+    assert "peak 4" in rendered.plain and "now" in rendered.plain
+    styles = {str(span.style) for span in rendered.spans}
+    assert "$primary" in styles and "$secondary" in styles
+
+
+@pytest.mark.parametrize(
+    ("style", "glyph"),
+    [("codes", None), ("nerd", "\U000f0567"), ("emoji", "\U0001f3ac")],
+)
+def test_a_glyph_comes_only_with_the_nerd_or_emoji_setting(monkeypatch, style, glyph):
+    from max_cli.config import settings
+    from max_cli.interface.tui.widgets.page_icons import page_glyph
+
+    monkeypatch.setattr(settings, "DASHBOARD_ICONS", style)
+
+    shown = page_glyph("video")
+
+    assert (shown.plain if shown is not None else None) == glyph
+
+
+@pytest.mark.parametrize(("key", "code"), [("2", "02"), ("0", "00"), (",", " ,")])
+def test_a_page_code_is_its_key_in_two_digits(key, code):
+    from max_cli.interface.tui.widgets.page_icons import page_code
+
+    assert page_code(key) == code
+
+
+def test_a_page_bar_wears_the_colour_home_gives_its_kind():
+    """Video is cyan in BY TYPE, so its bar is cyan in the sidebar too, and
+    faded when its page isn't open."""
+    from max_cli.interface.tui import home_stats
+    from max_cli.interface.tui.widgets.page_icons import DIM, page_bar, page_colour
+
+    cyan = home_stats.look("video").style
+
+    assert page_colour("video") == cyan
+    assert [str(span.style) for span in page_bar("video").spans] == [cyan]
+    assert [str(span.style) for span in page_bar("video", lit=False).spans] == [
+        f"{cyan} {DIM}"
+    ]
+
+
+def test_a_launch_tile_shows_the_code_name_and_purpose():
+    from max_cli.interface.tui.widgets.home_panel import HomePanel
+
+    label = HomePanel._launch_label("download", "Download", "video, music").plain
+
+    assert label.splitlines()[0].endswith("02  DOWNLOAD")
+    assert label.splitlines()[1].endswith("video, music")
+
+
+@pytest.mark.asyncio
+async def test_home_keeps_the_queue_count_while_another_process_holds_it(
+    monkeypatch,
+):
+    """Home refreshed the queue on the UI thread: while another process
+    held queue.lock the dashboard froze, then died of TaskManagerError."""
+    from max_cli.common.file_lock import FileLock
+    from max_cli.core.engines import task_manager
+    from max_cli.core.engines.task_queue import TaskItem, TaskType
+    from max_cli.interface.tui.widgets.home_panel import HomePanel
+
+    monkeypatch.setattr(task_manager, "STORE_LOCK_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(task_manager.TaskManager, "start_worker", lambda self: None)
+    task_manager.get_task_manager().add(TaskItem(type=TaskType.CUSTOM))
+    app = MaxDashboardApp()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        queue_tile = app.query_one("#tile-queue", Tile)
+        assert queue_tile.query_one(Digits).value == "1"
+        other_process = FileLock(
+            task_manager.TaskManager.QUEUE_DIR / task_manager.STORE_LOCK_NAME
+        )
+        assert other_process.acquire(timeout=0)
+        try:
+            started = time.monotonic()
+            app.query_one(HomePanel).refresh_data()
+            assert time.monotonic() - started < 0.9
+        finally:
+            other_process.release()
+
+        assert queue_tile.query_one(Digits).value == "1"

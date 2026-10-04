@@ -153,7 +153,7 @@ def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
         "each": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Files to run the action on, one run each.",
+            "description": "Files, folders or patterns (*.m4a): one run per file.",
         },
     }
     if can_queue:

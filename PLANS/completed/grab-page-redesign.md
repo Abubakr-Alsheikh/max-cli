@@ -1,8 +1,8 @@
 # Plan: Grab (Download) Page Redesign
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** P0 (maintainer's top feature)
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 **Related:** `command-catalog.md` (build step 4), `dashboard-ui-redesign.md`, `paths-from-anywhere.md`
 
 ## Goal
@@ -132,3 +132,4 @@ The second round (2026-09-30) moved Advanced beside the preview, paged the histo
   - `max grab download` now downloads through `core/operations/grab.download`. Terminal downloads now appear in the dashboard's History, which they didn't before, and the CLI lists the saved files.
   - `--no-process` now does what its help says: it queues without starting the queue.
   - The CLI's flags stay as they are (`--video`/`--audio`, `--no-meta`, `--index`), because renaming them would break scripts. The catalog drift test therefore checks `grab`'s operation but not its CLI flags; see `CLI_CHECKED_GROUPS` in `tests/test_catalog_drift.py`.
+- 2026-10-04: Reconciled before the 1.0 release and moved to completed. All five phases shipped; the second round of the page (OPTIONS card, paged History, TOOLS card) is recorded in `dashboard-design-system.md`, R3. Open follow-up, tracked in `cli-dashboard-sync.md`: downloads run from this page don't write to the activity log, so Home and Activity's History leave them out.

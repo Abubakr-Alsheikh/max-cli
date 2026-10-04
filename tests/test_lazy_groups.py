@@ -95,10 +95,57 @@ def test_text_that_isnt_a_command_goes_to_the_agent(args, expected):
 
 @pytest.mark.parametrize(
     "args",
+    [
+        ["vidoe", "compress", "a.mp4"],
+        ["imagse", "resize", "logo.png"],
+        ["pdff", "merge"],
+        ["qeue", "status"],
+        ["fiels", "order", "."],
+        ["vidoe"],
+        ["vidoe", "--help"],
+    ],
+)
+def test_mistyped_group_is_not_a_request(args):
+    """`max vidoe compress a.mp4` is a typo, not a question for the agent."""
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
+
+    assert group.route(args) == args
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        ["shrink", "every", "video", "here"],
+        ["convert", "this"],
+        ["make", "a", "gif"],
+        # Close to a group name, but no command of it follows.
+        ["videos", "are", "too", "big"],
+        ["image", "to", "webp"],
+        ["audit", "my", "music"],
+    ],
+)
+def test_plain_words_still_go_to_the_agent(words):
+    group = LazyTyperGroup()
+    registry.register(typer.Typer())
+
+    assert group.route(words)[:2] == ["ai", "ask"]
+
+
+def test_mistyped_group_suggests_the_right_name():
+    result = runner.invoke(_root_app(), ["vidoe", "compress", "a.mp4"])
+
+    assert result.exit_code == 2
+    assert "No such command 'vidoe'" in result.output
+    assert "video" in result.output
+
+
+@pytest.mark.parametrize(
+    "args",
     [["video", "--help"], ["--help"], ["queue", "stats"]],
 )
 def test_commands_and_options_are_not_requests(args):
     group = LazyTyperGroup()
     registry.register(typer.Typer())
 
-    assert not group._is_request(args[0])
+    assert not group._is_request(args)

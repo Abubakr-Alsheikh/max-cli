@@ -214,3 +214,152 @@ def test_strip_metadata_keeps_palette_images_intact(tmp_path):
     with Image.open(source) as original, Image.open(output) as cleaned:
         expected = original.convert("RGB").getpixel((0, 0))
         assert cleaned.convert("RGB").getpixel((0, 0)) == expected
+
+
+# --- any image in, the usual formats out ------------------------------------------
+
+LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32">
+<rect x="0" y="0" width="32" height="32" fill="#ff0000"/>
+</svg>"""
+
+
+def _logo(tmp_path: Path) -> Path:
+    logo = tmp_path / "8.svg"
+    logo.write_text(LOGO_SVG, encoding="utf-8")
+    return logo
+
+
+def test_an_svg_converts_to_png_sharp_and_transparent(engine, tmp_path):
+    """The agent said SVG "can't be converted": Pillow can't read it."""
+    stats = engine.process_single_image(
+        _logo(tmp_path), tmp_path / "logo.png", force_format="png"
+    )
+
+    with Image.open(stats["out_path"]) as result:
+        assert result.format == "PNG"
+        assert result.size == (1024, 512)  # drawn big, not 64x32
+        assert result.getpixel((10, 10))[:3] == (255, 0, 0)
+        assert result.getpixel((1000, 10))[3] == 0  # undrawn: transparent
+
+
+def test_an_svg_without_a_format_becomes_a_png(engine, tmp_path):
+    stats = engine.process_single_image(_logo(tmp_path), tmp_path / "logo_opt.svg")
+
+    assert stats["out_path"] == tmp_path / "logo_opt.png"
+
+
+def test_transparency_turns_white_not_black_in_a_jpeg(engine, tmp_path):
+    clear = tmp_path / "clear.png"
+    Image.new("RGBA", (20, 20), color=(0, 0, 0, 0)).save(clear)
+
+    stats = engine.process_single_image(clear, tmp_path / "flat.jpg")
+
+    with Image.open(stats["out_path"]) as result:
+        assert all(value > 245 for value in result.getpixel((5, 5)))
+
+
+@pytest.mark.parametrize(
+    ("to", "pillow_format", "suffix"),
+    [
+        ("avif", "AVIF", ".avif"),
+        ("gif", "GIF", ".gif"),
+        ("bmp", "BMP", ".bmp"),
+        ("tiff", "TIFF", ".tiff"),
+        ("ico", "ICO", ".ico"),
+        ("webp", "WEBP", ".webp"),
+    ],
+)
+def test_every_format_convert_offers_is_written(
+    engine, dummy_image_png, tmp_path, to, pillow_format, suffix
+):
+    from PIL import features
+
+    if to == "avif" and not features.check("avif"):
+        pytest.skip("this Pillow has no AVIF")
+
+    stats = engine.process_single_image(
+        dummy_image_png, tmp_path / "out.png", force_format=to
+    )
+
+    assert stats["out_path"].suffix == suffix
+    with Image.open(stats["out_path"]) as result:
+        assert result.format == pillow_format
+
+
+def test_heic_without_pillow_heif_says_what_to_install(engine, tmp_path, monkeypatch):
+    import builtins
+
+    from max_cli.common.exceptions import ProcessingError
+
+    photo = tmp_path / "photo.heic"
+    photo.write_bytes(b"\0")
+    real_import = builtins.__import__
+
+    def no_heif(name, *args, **kwargs):
+        if name == "pillow_heif":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_heif)
+
+    with pytest.raises(ProcessingError, match="pip install pillow-heif"):
+        engine.process_single_image(photo, tmp_path / "photo.jpg")
+
+
+def test_an_svg_has_no_photo_data_to_strip(engine, tmp_path):
+    from max_cli.common.exceptions import ProcessingError
+
+    with pytest.raises(ProcessingError, match="no photo data"):
+        engine.strip_metadata(_logo(tmp_path), tmp_path / "out.svg")
+
+
+def test_an_svg_is_described(engine, tmp_path):
+    facts = engine.inspect_image(_logo(tmp_path))
+
+    assert facts["format"] == "SVG"
+    assert (facts["width"], facts["height"]) == (1024, 512)
+
+
+def test_an_svg_with_a_mask_is_drawn_with_it(engine, tmp_path):
+    """A Canva-style logo drew its masked part as a black box in PyMuPDF."""
+    masked = tmp_path / "masked.svg"
+    masked.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">'
+        '<defs><mask id="m"><rect width="20" height="40" fill="white"/></mask></defs>'
+        '<rect width="40" height="40" fill="#0000ff" mask="url(#m)"/></svg>',
+        encoding="utf-8",
+    )
+
+    stats = engine.process_single_image(masked, tmp_path / "m.png", force_format="png")
+
+    with Image.open(stats["out_path"]) as result:
+        assert result.getpixel((100, 500))[:3] == (0, 0, 255)  # inside the mask
+        assert result.getpixel((900, 500))[3] == 0  # masked out: transparent
+
+
+def test_without_resvg_an_svg_still_converts(engine, tmp_path, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_resvg(name, *args, **kwargs):
+        if name == "resvg_py":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_resvg)
+
+    stats = engine.process_single_image(
+        _logo(tmp_path), tmp_path / "logo.png", force_format="png"
+    )
+
+    with Image.open(stats["out_path"]) as result:
+        assert result.size == (1024, 512)
+
+
+def test_resvg_0_2_0_returns_a_list(tmp_path):
+    from max_cli.core.engines.image_processor import _png
+
+    assert _png([137, 80, 78, 71]) == b"\x89PNG"
+    assert _png([b"\x89PN", b"G"]) == b"\x89PNG"
+    assert _png(b"\x89PNG") == b"\x89PNG"

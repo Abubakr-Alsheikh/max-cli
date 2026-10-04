@@ -20,6 +20,12 @@ from max_cli.core.presets import (
     DEFAULT_AUDIO_ORGANIZE_PATTERN,
     bitrate_for_quality,
 )
+from max_cli.interface.batch_cli import (
+    QUEUE_OPTION,
+    RECURSIVE_OPTION,
+    REDO_OPTION,
+    run_batch,
+)
 
 if TYPE_CHECKING:
     from max_cli.core.operations.result import ActionResult
@@ -56,8 +62,10 @@ def _run(
     Bad input (a missing file, no tags given) exits 1 before any work. Other
     failures print `fail_message` and return None; `max` still exits 1.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     try:
-        return operation(**kwargs)
+        return run_recorded(operation, **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
@@ -80,7 +88,9 @@ def _clock(seconds: float) -> str:
 @app.command("compress")
 @app.command("c", hidden=True)
 def compress_audio(
-    target: Path = typer.Argument(..., help="Audio file to compress."),
+    target: list[Path] = typer.Argument(
+        ..., help="Audio file to compress. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output audio file path."
     ),
@@ -93,6 +103,9 @@ def compress_audio(
     mono: bool = typer.Option(
         False, "--mono", "-m", help="Convert to mono for maximum compression."
     ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Compress an audio file by re-encoding to a lower bitrate.
@@ -101,8 +114,17 @@ def compress_audio(
     Defaults to high-quality MP3 (128k) with stereo.
     Use --quality s and --mono for maximum space savings.
     """
-    if not target.is_file():
-        log_error(escape(f"File not found: {target}"))
+    if run_batch(
+        "audio.compress",
+        {"target": target, "output": output, "quality": quality, "mono": mono},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
+    if not source.is_file():
+        log_error(escape(f"File not found: {source}"))
         raise typer.Exit(1)
     bitrate = bitrate_for_quality(
         AUDIO_COMPRESS_BITRATES, quality, DEFAULT_AUDIO_COMPRESS_QUALITY
@@ -115,7 +137,7 @@ def compress_audio(
         result = _run(
             _ops().compress,
             "Compression failed",
-            target=target,
+            target=source,
             output=output,
             quality=quality,
             mono=mono,
@@ -136,7 +158,10 @@ def compress_audio(
 @app.command("denoise")
 @app.command("dn", hidden=True)
 def denoise_audio_cmd(
-    target: Path = typer.Argument(..., help="Audio file with background noise."),
+    target: list[Path] = typer.Argument(
+        ...,
+        help="Audio file with background noise. Or several files, a folder, or a pattern.",
+    ),
     mode: str = typer.Option(
         "auto",
         "--mode",
@@ -150,6 +175,9 @@ def denoise_audio_cmd(
         help="Denoising strength: mild, medium, aggressive (auto mode only).",
     ),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Remove background noise from audio.
@@ -162,11 +190,20 @@ def denoise_audio_cmd(
       max audio denoise podcast.mp3 --mode hiss --strength aggressive
       max audio denoise lecture.mp3 --mode hum --output clean_lecture.mp3
     """
+    if run_batch(
+        "audio.denoise",
+        {"target": target, "mode": mode, "strength": strength, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
     from max_cli.core.operations import video
     from max_cli.core.presets import DENOISE_MODES
 
-    if not target.is_file():
-        log_error(escape(f"File not found: {target}"))
+    if not source.is_file():
+        log_error(escape(f"File not found: {source}"))
         raise typer.Exit(1)
     if mode not in DENOISE_MODES:
         log_error(f"Unknown mode '{escape(mode)}'. Use: {', '.join(DENOISE_MODES)}.")
@@ -179,7 +216,7 @@ def denoise_audio_cmd(
         result = _run(
             video.denoise,
             "Denoising failed",
-            target=target,
+            target=source,
             mode=mode,
             strength=strength,
             output=output,
@@ -278,7 +315,10 @@ def set_metadata(
 @app.command("clear")
 @app.command("cl", hidden=True)
 def clear_metadata(
-    target: Path = typer.Argument(..., help="Audio file to clear metadata from."),
+    target: list[Path] = typer.Argument(
+        ...,
+        help="Audio file to clear metadata from. Or several files, a folder, or a pattern.",
+    ),
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output file (default: overwrite)."
     ),
@@ -289,14 +329,22 @@ def clear_metadata(
         help="Does nothing: clearing tags never changes the audio. Kept so old "
         "scripts still run.",
     ),
+    recursive: bool = RECURSIVE_OPTION,
 ):
     """
     Remove all metadata from an audio file. The audio itself stays the same.
     """
+    if run_batch(
+        "audio.clear",
+        {"target": target, "output": output},
+        recursive=recursive,
+    ):
+        return
+    source = target[0]
     result = _run(
         _ops().clear,
         "Failed to clear metadata",
-        target=target,
+        target=source,
         output=output,
         engine=_get_engine(),
     )

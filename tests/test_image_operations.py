@@ -83,7 +83,7 @@ class TestErrors:
         with pytest.raises(ValidationError, match="between 1 and 100"):
             images.compress(_image(tmp_path / "a.jpg"), quality=quality)
 
-    @pytest.mark.parametrize("to", [None, "", "gif"])
+    @pytest.mark.parametrize("to", [None, "", "psd"])
     def test_convert_needs_a_known_format(self, tmp_path, to):
         with pytest.raises(ValidationError):
             images.convert(_image(tmp_path / "a.jpg"), to=to)
@@ -138,3 +138,21 @@ def test_dashboard_form_values_run_the_operation(tmp_path):
     assert args["quality"] == 70 and args["scale"] is None
     result = run_action(action, args)
     assert result.ok and result.output_files == [tmp_path / "a_opt.jpg"]
+
+
+def test_convert_takes_an_svg_and_the_new_formats(tmp_path):
+    from max_cli.core.operations import images
+
+    logo = tmp_path / "logo.svg"
+    logo.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8">'
+        '<rect width="8" height="8" fill="blue"/></svg>',
+        encoding="utf-8",
+    )
+
+    result = images.convert(logo, to="png")
+    gif = images.convert(logo, to="GIF")
+
+    assert result.ok, result.message
+    assert result.output_files == [tmp_path / "logo_opt.png"]
+    assert gif.output_files == [tmp_path / "logo_opt.gif"]

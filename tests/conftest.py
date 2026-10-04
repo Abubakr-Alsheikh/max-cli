@@ -31,6 +31,17 @@ def isolated_task_store(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_background_worker(monkeypatch):
+    """Commands that queue work start `max queue worker` as a real process,
+    which would run the real ~/.max_cli queue. Record the starts instead."""
+    from max_cli.core.engines import background_worker
+
+    started: list = []
+    monkeypatch.setattr(background_worker, "_spawn", started.append)
+    return started
+
+
+@pytest.fixture(autouse=True)
 def isolated_home(tmp_path_factory, monkeypatch):
     """Point Path.home() and every home-based constant at a temp folder.
 

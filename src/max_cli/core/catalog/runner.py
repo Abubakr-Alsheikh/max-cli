@@ -7,6 +7,7 @@ through `coerce_args` here first.
 
 import importlib
 import inspect
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -119,10 +120,17 @@ def run_action(
 
 
 def _json_safe(args: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        name: str(value) if isinstance(value, Path) else value
-        for name, value in args.items()
-    }
+    """The args as JSON, paths made absolute: the worker that runs the task
+    may have started in another folder."""
+    return {name: _stored(value) for name, value in args.items()}
+
+
+def _stored(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value.absolute())
+    if isinstance(value, (list, tuple)):
+        return [_stored(item) for item in value]
+    return value
 
 
 def enqueue_action(
@@ -195,9 +203,24 @@ def _task_hooks(task: TaskItem, operation: Callable[..., Any]) -> dict[str, Any]
 
 
 def _action_executor(task: TaskItem) -> dict[str, Any]:
+    from max_cli.common.exceptions import OperationCancelled
+    from max_cli.core.catalog.activity import record
+
     action = get_action(task.payload["action"])
+    args = task.payload.get("args", {})
     hooks = _task_hooks(task, _operation(action))
-    result = run_action(action, task.payload.get("args", {}), **hooks)
+    started = time.monotonic()
+    try:
+        result = run_action(action, args, **hooks)
+    except OperationCancelled:
+        raise
+    except Exception as e:
+        record(
+            action, args, error=str(e), seconds=time.monotonic() - started, via="queue"
+        )
+        raise
+    # Home and History count the work the worker did, not only what was queued.
+    record(action, args, result, seconds=time.monotonic() - started, via="queue")
     if not result.ok:
         raise ProcessingError(result.message)
     output_files = [str(path) for path in result.output_files]

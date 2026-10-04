@@ -7,7 +7,7 @@ Nothing in this module imports an engine or a heavy library.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 
 class ParamKind(str, Enum):
@@ -82,6 +82,13 @@ class Param:
     # Takes a list: repeated options (-f a -f b) or several arguments on the
     # CLI, a JSON array from the agent, LIST_SEPARATOR-separated form text.
     multiple: bool = False
+    # One file per run, but callers may give several files, a folder or a
+    # pattern: catalog.batch runs the action once per file. The operation
+    # still takes one path.
+    each: bool = False
+    # For an `each` param: the file kinds (common.file_kinds) a folder
+    # gives; empty gives every file.
+    kinds: tuple[str, ...] = ()
 
     @property
     def required(self) -> bool:
@@ -104,6 +111,14 @@ class Action:
     danger: Danger = Danger.WRITES_NEW
     queueable: bool = False
     surfaces: frozenset[Surface] = ALL_SURFACES
+    # The default output's name, from the input's {stem} and {suffix} and
+    # any argument ({format}), e.g. "{stem}_compressed.mp4". A batch skips
+    # inputs whose output exists. Empty: no single output file per input.
+    output_name: str = ""
+
+    def each_param(self) -> Optional[Param]:
+        """The param a batch fills with one file per run, if any."""
+        return next((param for param in self.params if param.each), None)
 
     @property
     def id(self) -> str:

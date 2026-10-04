@@ -75,6 +75,12 @@ class Settings(BaseSettings):
         default=3, ge=1, le=8
     )  # dashboard downloads at once
 
+    # --- DASHBOARD ---
+    # Page icons: "codes" (a colour bar and the page's key code), or a glyph
+    # before each name: "nerd" (needs a Nerd Font such as Cascadia Code NF as
+    # the terminal's font) or "emoji".
+    DASHBOARD_ICONS: str = "codes"
+
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]
         env_file_encoding = "utf-8"

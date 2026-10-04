@@ -1,8 +1,17 @@
 # Plan: Convert CLI Commands to Optional Plugins
 
-**Status:** Draft
+**Status:** Deferred
 **Priority:** P2
-**Updated:** 2026-09-25
+**Updated:** 2026-10-04
+
+## Deferred because
+
+The maintainer put plugins out of focus on 2026-09-25, and nothing in this plan has started. Since then the command catalog (`core/catalog`) became the place each action is described, so a migration would now move catalog groups as well as Typer apps; `feature-packs.md` holds the user-facing side (choose your features). Revisit after 1.0.
+
+Related open bugs, kept as strict xfail tests in `tests/test_plugin_manager.py` (deferred in `PLANS/completed/codebase-hardening.md`):
+- `load_all` fails on a plugin written like the README example, which imports `CLIPlugin` into the plugin module (`plugins/manager.py:112-119` collects the imported abstract class; the sort key at `:146-148` instantiates it).
+- `on_load` gets `plugin_dir=None` for hyphenated names.
+- Unknown plugins report as enabled.
 
 Out of focus for now (maintainer, 2026-09-25). Hardening Phase 3 emptied `core/engines/__init__.py` and made engine loading lazy, which this plan needs.
 

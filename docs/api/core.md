@@ -1,76 +1,88 @@
 # Core Modules
 
-## ImageEngine
+`max_cli.core` holds the work. It never prints or asks questions: it takes Python values and returns results. The CLI (`max_cli.interface`) and the dashboard print and ask.
 
-Image processing operations.
+## Catalog: `max_cli.core.catalog`
 
-```python
-from max_cli.core.image_processor import ImageEngine
-```
-
-### Methods
-
-- `compress_image(input_path, output_path, quality=85)` - Compress image
-- `resize_image(input_path, output_path, width, height)` - Resize image
-- `convert_format(input_path, output_path, format)` - Convert format
-- `strip_metadata(input_path, output_path)` - Remove metadata
-
-## PDFEngine
-
-PDF manipulation operations.
+One description per action: its parameters, defaults, CLI spellings, how risky it is, and whether it takes batches or the queue.
 
 ```python
-from max_cli.core.pdf_engine import PDFEngine
+from max_cli.core.catalog import get_action, group_names, load_group
+
+group_names()                    # ("video", "grab", "images", "pdf", ...)
+action = get_action("pdf.split")
+action.params                    # each Param: name, kind, default, help
+action.danger                    # SAFE, MOVES, OVERWRITES or DELETES
+action.queueable                 # can it go to the background queue?
+action.each_param()              # the file param a batch fills, or None
 ```
 
-### Methods
+## Runner: `max_cli.core.catalog.runner`
 
-- `merge_pdfs(input_paths, output_path)` - Merge PDFs
-- `split_pdf(input_path, output_dir)` - Split PDF
-- `compress_pdf(input_path, output_path, quality)` - Compress PDF
-- `ocr_pdf(input_path, output_path, lang)` - OCR extraction
+| Function | What it does |
+|----------|--------------|
+| `coerce_args(action, raw_args)` | Turns form strings or JSON into typed arguments, fills defaults, raises `ValidationError` on bad input |
+| `run_action(action, raw_args)` | Checks the arguments and runs the operation; returns an `ActionResult` |
+| `enqueue_action(action, raw_args, title=None)` | Checks the arguments now and adds one task to the queue |
 
-## MediaEngine
+## Batches: `max_cli.core.catalog.batch`
 
-Video and audio processing.
+| Function | What it does |
+|----------|--------------|
+| `expand_each(action, raw_args, recursive=False, redo=False)` | Turns files, folders and patterns into a `FileBatch`: `files` to run, `done_already` (results that exist) and `clashes` (results that would share a name with another file's) |
+| `run_each(action, raw_args, recursive=False, redo=False, on_file=None)` | Runs the files side by side and returns one summed `ActionResult`. `on_file(path, result, error)` hears about each file |
+| `enqueue_each(action, raw_args, recursive=False, redo=False)` | Queues one task per file; returns `(tasks, batch)` |
+| `is_batch(action, raw_args)` | True for several files, a folder or a pattern |
+
+## Results: `max_cli.core.operations.result.ActionResult`
+
+| Field | Meaning |
+|-------|---------|
+| `ok` | Whether the action worked |
+| `message` | One line for a person |
+| `output_files` | The files it made |
+| `details` | Numbers and facts (sizes, counts, pages) |
+| `undo_group` | The undo log group, when the action changed files |
+
+## Operations: `max_cli.core.operations`
+
+One module per group (`video`, `audio`, `images`, `pdf`, `files`, `grab`, `tools`) with one function per command. Each names its output, checks its input, calls the engine and returns an `ActionResult`. Most take an optional `engine`, so you can pass one that is already set up.
 
 ```python
-from max_cli.core.media_engine import MediaEngine
+from pathlib import Path
+
+from max_cli.core.operations import pdf
+
+result = pdf.merge([Path("a.pdf"), Path("b.pdf")], Path("both.pdf"))
 ```
 
-### Methods
-
-- `compress_video(input_path, output_path, quality)` - Compress video
-- `extract_audio(input_path, output_path)` - Extract audio
-- `convert_format(input_path, output_path, format)` - Convert format
-- `trim_video(input_path, output_path, start, end)` - Trim video
-
-## AIEngine
-
-AI-powered features.
+## Task queue: `max_cli.core.engines.task_manager`
 
 ```python
-from max_cli.core.ai_engine import AIEngine
+from max_cli.core.engines.task_manager import get_task_manager
+
+manager = get_task_manager()     # one per process
+manager.refresh()                # read what other processes changed
 ```
 
-### Methods
+Several processes share one store in `~/.max_cli/tasks/`: the dashboard, CLI commands and the background worker. A file lock guards each change, and only one process runs tasks at a time. `max_cli.core.engines.background_worker.start_background_worker()` starts a detached worker unless one is running.
 
-- `chat(message)` - Send chat message
-- `categorize_files(directory)` - Categorize files
-- `semantic_search(query, directory)` - Search files
-- `generate_image(prompt)` - Generate image
+## AI: `max_cli.core.agent` and `max_cli.core.engines.ai_providers`
 
-## FileOrganizer
+- `Agent.from_settings(confirm=..., on_step=None)` builds the agent on the configured provider and raises `ConfigurationError` when no AI is set up. `confirm(call)` decides about risky actions; `on_step(step)` hears each step.
+- `Agent.ask(request)` returns an `AgentReply` with `text`, `steps`, `tokens`, `model` and `fallback`.
+- `ai_providers.make_client()` returns a client that tries the main provider and moves to the fallback on an API error.
 
-File management operations.
+## Engines: `max_cli.core.engines`
 
-```python
-from max_cli.core.file_organizer import FileOrganizer
-```
+The operations call these. Use them when you need a lower-level step.
 
-### Methods
+| Engine | Module | Examples |
+|--------|--------|----------|
+| `ImageEngine` | `image_processor` | `process_single_image`, `strip_metadata`, `inspect_image` |
+| `PDFEngine` | `pdf_engine` | `merge_pdfs`, `compress_pdf`, `split_by_range`, `ocr_pdf`, `fill_form`, `compare_pdfs` |
+| `MediaEngine` | `media_engine` | Combines `VideoEngine`, `AudioEngine` and `StreamEngine`, all built on `FFmpegEngine` |
+| `AIEngine` | `ai_engine` | `analyze_image_content`, `generate_image`, `semantic_search`, `extract_structured_data` |
+| `FileOrganizer` | `file_organizer` | `order_files`, `smart_sort`, `find_duplicates`, `secure_delete`, `create_backup` |
 
-- `scan_directory(directory)` - Scan directory
-- `organize_files(directory, rules)` - Organize files
-- `find_duplicates(directory)` - Find duplicates
-- `secure_delete(path, passes)` - Secure delete
+FFmpeg engines find FFmpeg through `max_cli.common.ffmpeg_resolver`: the PATH, then `~/.max_cli/bin/`, then a download.

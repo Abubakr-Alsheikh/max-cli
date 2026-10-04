@@ -4,6 +4,7 @@ Both charts redraw only when their data changes (`set_data` compares), so a
 2-second page refresh with the same numbers costs nothing.
 """
 
+from collections import Counter
 from typing import NamedTuple
 
 from textual.content import Content
@@ -89,6 +90,105 @@ class BarChart(Widget):
         ]
         lines.append(Content.assemble(*labels))
         return Content("\n").join(lines)
+
+
+class Stack(NamedTuple):
+    """One column of a StackChart: a count per kind, drawn bottom up."""
+
+    label: str
+    parts: tuple[tuple[int, str], ...]  # (count, colour), lowest first
+    highlight: bool = False
+
+    @property
+    def total(self) -> int:
+        return sum(count for count, _style in self.parts)
+
+
+class StackChart(Widget):
+    """Vertical bars split by kind, e.g. actions per day in each kind's colour.
+
+    A cell shows one colour: the kind that fills most of it. The last row
+    holds the labels; the row above the bars shows the peak.
+    """
+
+    DEFAULT_CSS = """
+    StackChart {
+        height: 10;
+        width: 1fr;
+    }
+    """
+
+    EMPTY = "No activity yet. What you run in Max shows up here, day by day."
+
+    def __init__(self, *, id: str) -> None:
+        super().__init__(id=id)
+        self._stacks: list[Stack] = []
+
+    def set_data(self, stacks: list[Stack]) -> None:
+        if stacks != self._stacks:
+            self._stacks = stacks
+            self.refresh()
+
+    def render(self) -> Content:
+        width, height = self.content_size.width, self.content_size.height
+        stacks = self._stacks
+        if width <= 0 or height < 3:
+            return Content("")
+        if not any(stack.total for stack in stacks):
+            blank = "\n" * max(0, height // 2 - 1)
+            return Content.styled(f"{blank}{self.EMPTY}", "$text-muted")
+        slot = max(1, width // len(stacks))
+        bar_width = max(1, slot - 1)
+        indent = (" " * ((width - slot * len(stacks) + 1) // 2), "")
+        peak = max(stack.total for stack in stacks)
+        rows = height - 2
+        columns = [_eighths(stack, peak, rows * 8) for stack in stacks]
+        lines: list[Content] = [Content.styled(f"peak {peak}", "dim")]
+        for row in range(rows):
+            floor = (rows - row - 1) * 8
+            cells: list[tuple[str, str]] = [indent]
+            for colours in columns:
+                filled = colours[floor : floor + 8]
+                if not filled:
+                    mark = BASELINE if row == rows - 1 else " "
+                    cells.append((mark * bar_width + " ", "$boost"))
+                    continue
+                colour = Counter(filled).most_common(1)[0][0]
+                cells.append((EIGHTHS[len(filled)] * bar_width + " ", colour))
+            lines.append(Content.assemble(*cells))
+        lines.append(
+            Content.assemble(
+                indent,
+                *(
+                    (
+                        stack.label[:slot].center(slot),
+                        "bold $secondary" if stack.highlight else "dim",
+                    )
+                    for stack in stacks
+                ),
+            )
+        )
+        return Content("\n").join(lines)
+
+
+def _eighths(stack: Stack, peak: int, levels: int) -> list[str]:
+    """The column's colour for each eighth of a cell, bottom up. A small
+    non-zero day keeps at least one eighth, so it stays visible."""
+    if not stack.total or not peak:
+        return []
+    height = max(1, round(stack.total / peak * levels))
+    shares = [count / stack.total * height for count, _style in stack.parts]
+    sizes = [int(share) for share in shares]
+    # Largest remainders get the eighths that rounding down left over.
+    spare = height - sum(sizes)
+    for index in sorted(
+        range(len(shares)), key=lambda i: shares[i] - sizes[i], reverse=True
+    )[:spare]:
+        sizes[index] += 1
+    colours: list[str] = []
+    for size, (_count, style) in zip(sizes, stack.parts):
+        colours += [style] * size
+    return colours
 
 
 class HBar(NamedTuple):

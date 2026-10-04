@@ -1,8 +1,8 @@
 # Plan: Global Task Queue (DaemonManager)
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** P1
-**Updated:** 2026-09-25
+**Updated:** 2026-10-04
 **Related:** Architecture & System Design (Feature 2)
 **Depends on:** Event-Driven Progress System (recommended but not required)
 
@@ -47,10 +47,10 @@ max queue cancel <id>
 
 - [x] Create a generic `TaskItem` model that can represent any type of task
 - [x] Create `DaemonManager` that replaces and generalizes `QueueManager` (now: `TaskManager` in `core/engines/task_manager.py`; `QueueManager` is gone and `max grab` uses the same task store)
-- [ ] Support task types: `download`, `video_compress`, `audio_convert`, `ai_batch`, `pdf_merge`, `file_organize`, and custom (`audio_convert`, `ai_batch` and `custom` exist in `TaskType` but have no executor)
-- [ ] Add `--queue` flag to heavy commands across all CLI apps (only `video compress`, `video denoise` and `grab download` have it)
+- [x] Support task types: `download`, `video_compress`, `audio_convert`, `ai_batch`, `pdf_merge`, `file_organize`, and custom (now: `TaskType.ACTION` runs any queueable catalog action, so `video audio-convert` and the rest need no executor of their own. `audio_convert`, `ai_batch`, `file_backup` and `custom` stay in `TaskType` unused)
+- [x] Add `--queue` flag to heavy commands across all CLI apps (now: the 17 queueable catalog actions in `video`, `audio` and `pdf ocr` take `--queue` through `interface/batch_cli.py`, plus `grab download`)
 - [x] Implement `max queue` command group: `status`, `cancel`, `clear`, `retry`, `history` (plus `process` and `stats`)
-- [D] Support true background processing via a persistent daemon process (hardening D3 chose an in-process worker thread and removed the PID and log files)
+- [x] Support true background processing via a persistent daemon process (done 2026-10-03: `max queue worker`, started detached by `core/engines/background_worker.py`, keeps running after the command returns; `queue.lock` and `worker.lock` make the store safe across processes)
 - [x] Maintain backward compatibility with existing `QueueManager` usage (now: `max grab` commands work unchanged, and `task_migration.py` imports the old queue and history files)
 - [x] Add tests for DaemonManager (now: `test_task_queue.py`, `test_task_store.py`, `test_cli_queue.py`)
 
@@ -1142,12 +1142,17 @@ def test_queue_add_via_flag():
 - [x] `max video compress file.mp4 --queue` adds to queue instead of blocking
 - [D] Old `QueueManager` still works (backward compatibility) (hardening D1 removed the class and merged its store into `TaskManager`)
 - [x] All tests pass
-- [D] Background daemon survives CLI exit (if implemented) (not implemented; see D3 in `codebase-hardening.md`)
+- [x] Background daemon survives CLI exit (the background worker process, 2026-10-03)
 
 ## Remaining
 
-- Executors for `audio_convert` and `ai_batch`. The dashboard queues unmapped commands as `custom`, which has no executor either.
-- A `--queue` flag on the CLI commands that already have executors: `video convert`, `video to-audio`, `pdf merge`, `pdf compress`, `files smart-sort` and `files duplicates`. The dashboard can queue these today.
+Nothing. Checked against the code on 2026-10-04:
+
+- `audio_convert` and `ai_batch` executors: OBSOLETE. `TaskType.ACTION` (payload `{"action": ..., "args": ...}`) queues any catalog action marked `queueable`, and nothing creates the old types. The `ai` group isn't in the catalog yet (`dashboard-first-ai-agent.md`).
+- `--queue` on `video convert`, `video to-audio`: DONE through the catalog batch options. `pdf merge`, `pdf compress`, `files smart-sort` and `files duplicates` aren't `queueable` in the catalog; they finish in seconds, so they stay that way.
+- The dashboard no longer queues `custom` tasks; every dashboard queue goes through `catalog.runner.enqueue_action`.
+
+Cleanup left for later (not user-facing): the `VIDEO_*`, `PDF_*` and `FILE_*` executors only run tasks queued by older versions, and `_pdf_compress_executor` still defaults quality to 75 (`core/engines/pdf_engine.py:646`) while the preset is 80.
 
 ## Decisions
 
@@ -1155,3 +1160,4 @@ def test_queue_add_via_flag():
   - Hardening Phase 3 renamed `DaemonManager` to `TaskManager`. The worker is a `daemon=True` thread inside the CLI process (D3 option A). A detached background process would need its own plan.
   - `~/.max_cli/tasks/queue.json` and `history.json` hold every task: `max grab`, `max queue` and the dashboard share them.
   - `max queue` has no page in `docs/commands/` or `README.md` yet. Hardening Phase 6 tracks that.
+- 2026-10-04: Reconciled before the 1.0 release and moved to completed. `docs/commands/queue.md` documents `max queue`.

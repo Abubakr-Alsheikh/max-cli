@@ -1,5 +1,6 @@
 """Catalog entries for `max pdf`. `tests/test_catalog_drift.py` checks them against the CLI."""
 
+from max_cli.common import file_kinds
 from max_cli.core.catalog.spec import (
     Action,
     Danger,
@@ -15,8 +16,19 @@ OPS = "max_cli.core.operations.pdf"
 NOT_FOR_AGENT = frozenset({Surface.CLI, Surface.DASHBOARD})
 
 
+EACH_HINT = "Or several files, a folder, or a pattern such as *.pdf."
+
+
 def _pdf(help: str = "PDF file.") -> Param:
     return Param("target", ParamKind.FILE, help)
+
+
+def _each_pdf(kinds: tuple[str, ...], help: str = "PDF file.") -> Param:
+    """The file param of an action that runs once per file: callers may
+    give several files, a folder or a pattern (catalog.batch)."""
+    return Param(
+        "target", ParamKind.FILE, f"{help} {EACH_HINT}", each=True, kinds=kinds
+    )
 
 
 def _output(help: str = "Output file. Default: next to the input.") -> Param:
@@ -106,7 +118,7 @@ GROUP = Group(
             summary="Keep or remove a page range, or split into chunks of N pages.",
             operation=f"{OPS}:split",
             params=(
-                _pdf("PDF file to split."),
+                _each_pdf((file_kinds.PDF,), "PDF file to split."),
                 Param(
                     "start",
                     ParamKind.INT,
@@ -164,7 +176,7 @@ GROUP = Group(
             summary="Protect a PDF with a password.",
             operation=f"{OPS}:lock",
             params=(
-                _pdf("PDF to encrypt."),
+                _each_pdf((file_kinds.PDF,), "PDF to encrypt."),
                 Param(
                     "password",
                     ParamKind.SECRET,
@@ -174,6 +186,7 @@ GROUP = Group(
                 _output(),
             ),
             surfaces=NOT_FOR_AGENT,
+            output_name="{stem}_locked.pdf",
         ),
         Action(
             group="pdf",
@@ -181,7 +194,7 @@ GROUP = Group(
             summary="Extract every image inside a PDF.",
             operation=f"{OPS}:rip",
             params=(
-                _pdf("PDF to extract from."),
+                _each_pdf((file_kinds.PDF,), "PDF to extract from."),
                 Param(
                     "output_dir",
                     ParamKind.FOLDER,
@@ -190,6 +203,7 @@ GROUP = Group(
                     cli=("-o",),
                 ),
             ),
+            output_name="{stem}_assets",
         ),
         Action(
             group="pdf",
@@ -198,7 +212,7 @@ GROUP = Group(
             " Needs Tesseract (pip install max-cli[ocr]).",
             operation=f"{OPS}:ocr",
             params=(
-                _pdf("Scanned PDF."),
+                _each_pdf((file_kinds.PDF,), "Scanned PDF."),
                 Param(
                     "lang",
                     ParamKind.TEXT,
@@ -208,6 +222,8 @@ GROUP = Group(
                 ),
                 _output("Text file. Default: the PDF's name with .txt."),
             ),
+            output_name="{stem}.txt",
+            queueable=True,
         ),
         Action(
             group="pdf",
@@ -239,7 +255,8 @@ GROUP = Group(
             name="form-flatten",
             summary="Turn a form's fields into plain page content.",
             operation=f"{OPS}:form_flatten",
-            params=(_pdf("PDF form to flatten."), _output()),
+            params=(_each_pdf((file_kinds.PDF,), "PDF form to flatten."), _output()),
+            output_name="{stem}_flattened.pdf",
         ),
         Action(
             group="pdf",
@@ -247,7 +264,7 @@ GROUP = Group(
             summary="Remove unused objects, compress images and prepare for the web.",
             operation=f"{OPS}:optimize",
             params=(
-                _pdf("PDF to optimize."),
+                _each_pdf((file_kinds.PDF,), "PDF to optimize."),
                 _output(),
                 Param(
                     "no_compress",
@@ -266,6 +283,7 @@ GROUP = Group(
                     advanced=True,
                 ),
             ),
+            output_name="{stem}_optimized.pdf",
         ),
         Action(
             group="pdf",

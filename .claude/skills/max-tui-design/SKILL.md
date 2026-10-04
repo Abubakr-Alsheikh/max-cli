@@ -12,7 +12,7 @@ Every page in `max` (the Textual dashboard) should look like one product: the Ho
 | File | What to copy from it |
 |------|----------------------|
 | `interface/tui/theme.py` | The `max-cyber` theme and its colour tokens |
-| `interface/tui/widgets/home_panel.py` | Page header, cards, grid rows, `Digits` tiles, gauges, charts, empty states, one-repaint refresh |
+| `interface/tui/widgets/home_panel.py` | Page header, cards, grid rows, `Digits` tiles, live meters (`SystemLine`), clickable tiles that aren't Buttons (`Launcher`), a `-narrow` layout, empty states, one-repaint refresh; its numbers come from `home_stats.py` |
 | `interface/tui/widgets/charts.py` | `BarChart`, `HBarChart`, `Spark`, `Meter` |
 | `interface/tui/widgets/sidebar.py` | Large click targets, badges, compact mode, CSS that depends on a parent's state |
 | `interface/tui/widgets/jobs_drawer.py` | Live list with aligned columns, refresh while open only |

@@ -225,3 +225,24 @@ def test_a_log_that_stays_locked_never_overwrites_the_history(monkeypatch):
         log.add_entry("ai", "agent", "success")  # must not raise or write
 
     assert ActivityLog.LOG_FILE.read_text(encoding="utf-8") == saved
+
+
+def test_two_writers_keep_each_others_entries():
+    """A form loaded the log, ran a long batch and saved its whole list,
+    dropping what the agent or the queue worker logged meanwhile."""
+    form = ActivityLog()
+    running = form.start_entry("video", "compress")
+    ActivityLog().add_entry("download", "download", "success")  # meanwhile
+
+    form.complete_entry(running, "success", {"output_size": 1})
+
+    entries = ActivityLog().get_entries()
+    assert sorted(entry.action for entry in entries) == ["compress", "download"]
+    assert next(e for e in entries if e.action == "compress").status == "success"
+
+
+def test_clear_empties_the_log_for_every_reader():
+    ActivityLog().add_entry("files", "order", "success")
+
+    assert ActivityLog().clear() == 1
+    assert ActivityLog().get_entries() == []

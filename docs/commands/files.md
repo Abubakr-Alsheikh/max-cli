@@ -6,6 +6,20 @@ Max records every rename, move and delete these commands make, so `max files und
 
 In the dashboard, the Files page (`7`) has a form for each command. A form asks before it moves or deletes anything. To skip those questions here and in the CLI, turn off **Ask before moving, overwriting or deleting files** in Settings (`CONFIRM_DESTRUCTIVE=false`): it works like `--force` on every command. `shred` asks either way.
 
+## Several files at once
+
+`backup` takes several files, a folder or a pattern:
+
+```bash
+max files backup notes.txt todo.md      # these two
+max files backup ./thesis               # every file in the folder
+max files backup "*.docx" --recursive   # every Word file here and in subfolders
+```
+
+A folder gives every file in it; `--recursive` adds the files in its subfolders. Max leaves out hidden files and folders, and works on up to four files at once. Each run makes a new dated copy, so `backup` never skips a file and has no `--redo`. If a file fails, Max backs up the rest, lists the failures at the end and exits with code 1.
+
+`shred` takes one file at a time on purpose: it can't be undone.
+
 ## order
 
 Add a number prefix to every file in a folder (`1_file.txt`, `2_file.txt`, ...). Max skips files that already have a number. It asks before it renames anything.
@@ -44,9 +58,9 @@ max files duplicates [FOLDER] [--recursive] [--delete] [--force]
 **Options:**
 
 - `FOLDER` - Folder to scan (default: current folder)
-- `-r, --recursive` - Scan subfolders too
-- `-d, --delete` - Delete duplicates and keep the first file of each group. Max lists the groups and asks before deleting.
-- `-f, --force` - With `--delete`, delete without asking
+- `--recursive`, `-r` - Scan subfolders too
+- `--delete`, `-d` - Delete duplicates and keep the first file of each group. Max lists the groups and asks before deleting.
+- `--force`, `-f` - With `--delete`, delete without asking
 
 Max backs up every file it deletes, so `max files undo` can bring them back.
 
@@ -70,8 +84,6 @@ max files shred TARGET [--passes N] [--force]
 - `--passes`, `-p` - Number of overwrite passes (default: 3)
 - `--force`, `-f` - Skip the confirmation prompt
 
-Max keeps a backup of the file in `~/.max_cli/backups/` so `max files undo` can restore it. Run `max files backup-cleanup` to remove old backups.
-
 ## preview
 
 Show a file's size and dates, plus a preview of its content. For text files Max prints the first lines; for images and PDFs it prints dimensions or page count.
@@ -86,15 +98,25 @@ max files preview TARGET [--lines N]
 
 ## backup
 
-Copy a file into `~/.max_cli/backups/`.
+Copy a file into `~/.max_cli/backups/` as `<name>_<label>_<date>_<time>.<ext>`.
 
 ```bash
-max files backup TARGET [--label LABEL]
+max files backup TARGET... [--label LABEL] [--recursive]
 ```
+
+`TARGET` can be several files, a folder or a pattern (see [Several files at once](#several-files-at-once)).
 
 **Options:**
 
 - `--label`, `-l` - Label added to the backup name (default: `manual`)
+- `--recursive` - With a folder or pattern, look in subfolders too
+
+**Examples:**
+
+```bash
+max files backup report.docx -l before-edit
+max files backup ./thesis --recursive
+```
 
 ## backups
 
@@ -153,8 +175,8 @@ max files history [--limit N] [--verbose]
 
 **Options:**
 
-- `-n, --limit` - Number of entries to show (default: 10)
-- `-v, --verbose` - Show each file in every operation
+- `--limit`, `-n` - Number of entries to show (default: 10)
+- `--verbose`, `-v` - Show each file in every operation
 
 **Examples:**
 

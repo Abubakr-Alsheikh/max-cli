@@ -21,9 +21,15 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
 
-# (page id, icon, label), in sidebar order. The number keys follow this order.
-# Colour emoji: the thin symbols used before were hard to see, or missing, in
-# common Windows terminal fonts.
+from max_cli.interface.tui.widgets.page_icons import (
+    page_bar,
+    page_code,
+    page_colour,
+    page_glyph,
+)
+
+# (page id, emoji, label), in sidebar order. The number keys follow this order.
+# The icons themselves are in page_icons.py.
 SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
@@ -59,6 +65,8 @@ SECTION_KEYS = {
     )
 }
 SECTION_KEYS["settings"] = SETTINGS_KEY
+
+
 EXPAND_LABEL = "»"
 COLLAPSE_LABEL = "«"
 
@@ -95,12 +103,9 @@ class NavItem(Widget, can_focus=True):
         background: $boost;
         text-style: bold;
     }
+    /* The page's own bar marks it; the open one is lit and on a glow. */
     NavItem.-active {
-        background: $primary 25%;
-        border-left: outer $accent;
-        /* Full padding: a lone padding-left dropped the right padding. The
-           border takes one column, so the text stays where it was. */
-        padding: 0 2 0 1;
+        background: $primary 15%;
         text-style: bold;
     }
     """
@@ -112,28 +117,43 @@ class NavItem(Widget, can_focus=True):
 
     BINDINGS = [("enter", "open", "Open"), ("space", "open", "Open")]
 
-    def __init__(self, section_id: str, icon: str, label: str) -> None:
+    def __init__(self, section_id: str, label: str) -> None:
         super().__init__(id=f"nav-{section_id}")
         self.section_id = section_id
-        self.icon = icon
         self.label = label
         self.compact = False
         self.badge: Optional[Badge] = None
         self.tooltip = f"{label}  ({SECTION_KEYS[section_id]})"
 
     def render(self) -> Content:
+        """The page's bar, code and name, a badge at the right; folded, the
+        bar and the code."""
         badge = ""
         badge_style = ""
         if self.badge is not None:
             badge = f"{BADGE_SYMBOLS[self.badge.kind]}{self.badge.count}"
             badge_style = f"bold ${BADGE_COLOURS[self.badge.kind]}"
+        # Full colour for the open page and the one under the mouse or
+        # cursor; the rest faded.
+        lit = self.has_class("-active") or self.mouse_hover or self.has_focus
+        code = Content.styled(
+            page_code(SECTION_KEYS[self.section_id]),
+            f"bold {page_colour(self.section_id)}" if lit else "$text-muted",
+        )
+        bar = page_bar(self.section_id, lit)
         if self.compact:
-            icon = Content.assemble(self.icon, (badge, badge_style))
+            row = Content.assemble(bar, code, (badge, badge_style))
             # Centre by hand: content-align doesn't move text a widget renders.
-            indent = max(0, (self.content_size.width - icon.cell_length) // 2)
-            return Content.assemble(" " * indent, icon)
+            indent = max(0, (self.content_size.width - row.cell_length) // 2)
+            return Content.assemble(" " * indent, row)
+        glyph = page_glyph(self.section_id)
         name = Content.assemble(
-            (f"{SECTION_KEYS[self.section_id]}  ", "dim"), f"{self.icon}  {self.label}"
+            bar,
+            " ",
+            code,
+            "  ",
+            *((glyph, " ") if glyph is not None else ()),
+            self.label.upper(),
         )
         # The badge sits against the right padding, so the right margin
         # matches the left one whatever the label's length.
@@ -273,14 +293,13 @@ class Sidebar(Vertical):
             yield Static(f"MAX {self.version}".rstrip(), id="sidebar-brand")
             yield Button(COLLAPSE_LABEL, id="sidebar-toggle")
         with VerticalScroll(id="sidebar-scroll"):
-            icons = {section_id: (icon, label) for section_id, icon, label in SECTIONS}
+            labels = {section_id: label for section_id, _icon, label in SECTIONS}
             for position, (group, section_ids) in enumerate(SECTION_GROUPS):
                 yield Static(group, classes="sidebar-group")
                 if position:
                     yield Static("───", classes="sidebar-divider")
                 for section_id in section_ids:
-                    icon, label = icons[section_id]
-                    yield NavItem(section_id, icon, label)
+                    yield NavItem(section_id, labels[section_id])
         yield Static(Content("? Help"), id="sidebar-help")
 
     def on_mount(self) -> None:

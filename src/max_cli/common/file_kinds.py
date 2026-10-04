@@ -21,7 +21,24 @@ KIND_SUFFIXES: dict[str, frozenset[str]] = {
         {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma", ".opus"}
     ),
     IMAGE: frozenset(
-        {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tiff", ".tif", ".heic"}
+        {
+            ".jpg",
+            ".jpeg",
+            ".jfif",
+            ".png",
+            ".bmp",
+            ".gif",
+            ".webp",
+            ".avif",
+            ".tiff",
+            ".tif",
+            ".ico",
+            ".svg",
+            ".heic",
+            ".heif",
+            ".tga",
+            ".psd",
+        }
     ),
     PDF: frozenset({".pdf"}),
     DOCUMENT: frozenset(

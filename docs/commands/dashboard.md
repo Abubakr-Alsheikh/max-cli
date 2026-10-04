@@ -20,7 +20,7 @@ The sidebar on the left lists eleven sections in three groups, each with its nam
 | Key | Section | What it does |
 |-----|---------|--------------|
 | | **Do** | |
-| `1` | **Home** | Command center: live CPU, memory and disk, your download and action counts, activity over the last 14 days, a breakdown by type, quick launch and recent activity |
+| `1` | **Home** | Launchpad and command center: ask Max in plain words, open any page, pick up the actions you use most, and see your week, your activity by type and what ran lately |
 | `2` | **Download** | Download form with progress and recent downloads |
 | `3` | **Video** | Pick a video or audio file, see its length, size and codecs, and run any `max video` action on it |
 | `4` | **Audio** | Pick a song or a folder of music, see its tags, length and bitrate (or how many tracks lack tags), edit tags, sort music into folders, compress or clean it |
@@ -38,6 +38,26 @@ Badges next to a section show what needs a look: a green `2` on Download means t
 
 The dashboard remembers whether you left the sidebar open or folded. In a window narrower than 100 columns it always shows icons only.
 
+Each page shows as a neon code: a bar in the page's colour, the key that opens it as two digits, and its name (`02 DOWNLOAD`). Video is cyan, Audio magenta, Downloads green and so on, the same colours Home's BY TYPE chart uses. The open page's bar and code light up; the others are faded. **Page icons** on the Settings page can add a glyph before each name:
+
+- **Neon codes** (the default): no glyph, so it looks the same in any terminal font.
+- **Nerd Font**: a glyph per page in its colour. It needs a Nerd Font as your terminal's font, for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases; without one the glyphs show as boxes.
+- **Emoji**: a colour emoji per page.
+
+## Home page
+
+Home is the first page you see:
+
+- **The header** greets you with the date and time, and shows your streak once you've used Max two days in a row. Two lights on the right say whether Max found FFmpeg and whether an AI is set up.
+- **Ask Max:** type what you want done and press `Enter`; the AI page opens and runs it. Without an AI set up, `Enter` opens Settings.
+- **Launchpad:** a tile each for Download, Video, Audio, Images, PDF, Files, AI and Activity, with its key and what it's for. Click a tile or press `Enter` on it. **Pick up again** lists up to four actions you run most (as many as fit on the row); click one to open its form.
+- **This week, Success %, Space saved, Queue:** what you did in the last 7 days next to the 7 days before, how many actions worked, the bytes your compress and optimize runs took off, and the queue right now (click it to open the queue).
+- **Activity and By type:** the last 14 days, each day's bar split by kind in the same colours as By type. Under By type, a line counts what worked and what failed. AI counts your requests; what the agent ran counts in its own kind.
+- **Recent:** the latest 8 actions: when, whether they worked, what ran on what, what came out (a file, `-70%`, the error), how long it took, and `AI` when the agent ran it. Click the card for the full history.
+- **System:** CPU (with the last two minutes), memory and disk.
+
+Every number on Home except Queue counts finished actions from the same activity log over the last 14 days, so the cards agree with each other. In a window narrower than 86 columns, the cards stack.
+
 The Activity page's Queue tab reads the same task store as `max queue` and `max grab`. See [Queue](queue.md).
 
 ## Download page
@@ -50,15 +70,37 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 
 ## Video page
 
-The Video page (`3`) works on one file at a time. Paste a path or press Browse: the FILE card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
+The Video page (`3`) shows one file in its FILE card. Paste a path or press Browse: the card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
 
-Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Run it, or add compress and denoise to the queue.
+Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Every action but concat also takes several files, a folder or a pattern such as `*.mp4`: see [Many files at once](#many-files-at-once). Press Run, or **Add to queue** to run it later (every action but snap and concat).
+
+## Many files at once
+
+Some forms on the Video, Audio, PDF and Files pages take more than one file. Their file field says so: "a file, several split by ;, a folder or *.mp4". Type a folder, a pattern such as `*.mp4`, or several paths split by `;`. These forms show one or two checkboxes under the fields:
+
+- **Subfolders too** looks in the subfolders of a folder or pattern as well.
+- **Redo finished files** runs files whose result exists already. Without it, a folder or a pattern skips them, and skips Max's own earlier results too. Files you name one by one always run. Actions with no fixed result name (video cut, pdf split, audio clear, files backup) show only **Subfolders too**.
+
+Leave the output field empty: each result goes next to its file. Run works on several files side by side, and the status line counts them as they finish. When every file has its result already, the status says "Nothing to do". When the action moves, overwrites or deletes files, the question before it starts names how many files it will touch.
+
+Forms for long jobs also have **Add to queue**: the video actions (but snap and concat), audio compress and denoise, and pdf ocr. It queues one job per file and opens the Jobs window (`J`). The Activity page's Queue tab lists the jobs too.
+
+Which actions take many files:
+
+| Page | Actions |
+|------|---------|
+| Video | every action but concat |
+| Audio | compress, denoise, clear |
+| PDF | split, lock, rip, ocr, form-flatten, optimize |
+| Files | backup |
+
+The Images page's actions take a folder on their own; see [Images page](#images-page).
 
 ## Audio page
 
 The Audio page (`4`) works on one song or a folder of music. Pick a song: the FILE OR FOLDER card shows its length, bitrate, sample rate, size and whether it has cover art, then its title, artist, album, year, track and genre. Pick a folder: it counts the tracks, adds up their length and size, lists their formats, and warns you how many have no title or artist.
 
-The actions sit in three groups: **Tags** (set, get, batch, clear), **Sort** (organize) and **Sound** (compress, denoise). **set** opens with the song's current tags filled in, so you change only what's wrong; a field you've already typed in keeps your text. **organize** starts with folders by artist and album, and its **Dry run** box shows the moves before anything happens. Moves can be undone from the Files page (**undo**).
+The actions sit in three groups: **Tags** (set, get, batch, clear), **Sort** (organize) and **Sound** (compress, denoise). **set** opens with the song's current tags filled in, so you change only what's wrong; a field you've already typed in keeps your text. **organize** starts with folders by artist and album, and its **Dry run** box shows the moves before anything happens. Moves can be undone from the Files page (**undo**). compress, denoise and clear also take several songs, a folder or a pattern (see [Many files at once](#many-files-at-once)), and compress and denoise can go to the queue.
 
 ## Images page
 
@@ -70,13 +112,13 @@ The actions sit in two groups: **Shrink** (compress, resize) and **Convert & cle
 
 The PDF page (`6`) works like the Video page. Pick a PDF: the FILE card shows its pages, paper size (A4, Letter or millimetres), size, title and author, and how many form fields it has. It tells you when the PDF is locked with a password, and when it has no text on its first pages, which means it's a scan that **ocr** can read.
 
-The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more.
+The actions sit in five groups: **Shrink** (compress, optimize), **Combine & split** (merge, bundle, split, compare), **Protect & mark** (lock, stamp), **Extract** (rip, ocr) and **Forms** (form-data, form-fill, form-flatten). The picked PDF fills the action's first file field; for merge and bundle, press Browse there to add more. split, lock, rip, ocr, form-flatten and optimize also take several PDFs, a folder or a pattern (see [Many files at once](#many-files-at-once)), and ocr can go to the queue.
 
 ## Files page
 
 The Files page (`7`) works on a folder or one file. Pick a folder: the FILE OR FOLDER card counts the files directly in it and its subfolders, shows their total size, how many of each kind (images, videos, PDFs ...) and the biggest file. Pick a file: it shows the kind, size and date.
 
-The actions sit in four groups: **Organize** (order, smart-sort, duplicates), **Look** (preview, history), **Backup & undo** (backup, backups, backup-cleanup, undo) and **Destroy** (shred). Picking a file and then a folder action (order, smart-sort, duplicates) fills in the file's folder. Actions that move or delete files ask first, and **undo** reverses the last change Max recorded.
+The actions sit in four groups: **Organize** (order, smart-sort, duplicates), **Look** (preview, history), **Backup & undo** (backup, backups, backup-cleanup, undo) and **Destroy** (shred). Picking a file and then a folder action (order, smart-sort, duplicates) fills in the file's folder. Actions that move or delete files ask first, and **undo** reverses the last change Max recorded. **backup** also takes several files, a folder or a pattern (see [Many files at once](#many-files-at-once)).
 
 ### Open on another page
 
@@ -120,13 +162,13 @@ The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, 
 
 - Each answer starts with a status line: a spinner and what Max is doing ("Thinking", "Running files order", "Waiting for your answer"), then how many actions it ran and the tokens it used.
 - Every action gets a card: running, then `✓` with its result and how long it took, `✗` with the error, or a note when a path was refused, you said no, or it was a dry run. Click a card to see the arguments it ran with and the files it made.
-- Long jobs (compressing or cleaning up a video, downloads) can go to the queue: the card says `⧗ queued`, you keep talking, and the Jobs window (`J`) shows their progress. Only the dashboard queues; `max "<request>"` in a terminal waits for each action.
+- Long jobs (compressing or cleaning up a video, downloads) can go to the queue: the card says `⧗ queued`, you keep talking, and the Jobs window (`J`) shows their progress. In a terminal, `max "<request>"` can queue long jobs too: a background worker runs them, and `max queue status` shows them.
 - The line under the status names what it looked at first: folders it listed or searched, files it inspected, links it checked.
 - The reply itself is rendered as Markdown: lists, tables, code and links.
 - Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
 - **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
 - **Dry run** shows the steps and changes nothing. **New chat** starts over. The line beside them shows the model and the tokens the chat used.
-- With no API key and Ollama off, the page says so and links to Settings.
+- When neither the main AI nor the fallback is set up (each needs a model, and an API key unless it's Ollama), the page says so and links to Settings.
 
 Each request and each action the agent runs shows on Activity's History tab.
 
@@ -156,11 +198,12 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
   The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. Images follow the same main AI and fallback: `max ai create` uses the main AI's image model, and the fallback's when the main one fails.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
+- **Dashboard:** **Page icons**: neon codes, Nerd Font or emoji (see [Sections](#sections)).
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.
 
-"Save changes" checks the values first, writes only the settings you changed and applies them at once; "Downloads at once" applies the next time `max` starts. An empty API key removes it from the file. If a `.env` file in the folder you started `max` from sets the same settings, it wins; Maintenance says so.
+"Save changes" checks the values first, writes only the settings you changed and applies them at once; "Downloads at once" and "Page icons" apply the next time `max` starts. "Discard" drops your edits and shows the saved values again. An empty API key removes it from the file. If a `.env` file in the folder you started `max` from sets the same settings, it wins; Maintenance says so.
 
-**Maintenance** shows the Max, Python and system versions, whether FFmpeg is found, and how much `~/.max_cli` holds. Its buttons clear the cache, remove undo backups and undo records older than 30 days, and reset every setting. Each one asks first. If your settings file still sets something Max no longer has, such as `VERBOSE`, Maintenance names it and **Remove them** deletes those lines. The dashboard points them out when it starts, too.
+**Maintenance** shows the Max, Python and system versions, whether FFmpeg is found, and how much `~/.max_cli` holds (**Open folder** opens it). Its other buttons clear the cache, remove undo backups and undo records older than 30 days, and reset every setting by removing `~/.max_config.env`. Each one asks first. If your settings file still sets something Max no longer has, such as `VERBOSE`, Maintenance names it and **Remove them** deletes those lines. The dashboard points them out when it starts, too.
 
 ## Jobs window
 
@@ -184,7 +227,7 @@ The dashboard uses its own dark theme, `max-cyber`. Press `Ctrl+P` and search "t
 | `J` | Show or hide the Jobs window |
 | `Ctrl+P` | Find any action or page by name; themes |
 | `q` | Quit |
-| `r` | Refresh the sections |
+| `r` | Refresh the pages |
 | `Ctrl+B` | Collapse or expand the sidebar |
 | `Tab` / `Shift+Tab` | Move between buttons and fields |
 | `Enter` | Press the focused button |

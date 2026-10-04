@@ -15,6 +15,12 @@ from max_cli.common.logger import console, log_error, log_success
 from max_cli.common.utils import format_size
 from max_cli.core.operations import pdf as pdf_ops
 from max_cli.core.presets import PDF_COMPRESS_DPI, PDF_COMPRESS_QUALITY
+from max_cli.interface.batch_cli import (
+    QUEUE_OPTION,
+    RECURSIVE_OPTION,
+    REDO_OPTION,
+    run_batch,
+)
 
 if TYPE_CHECKING:
     from max_cli.core.operations.result import ActionResult
@@ -45,8 +51,10 @@ def _run(
     Other failures print `fail_message`; commands whose scripts rely on it
     exit 1 (exit_on_error), the rest return None and `max` exits 1 anyway.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     try:
-        return operation(engine=_get_engine(), **kwargs)
+        return run_recorded(operation, engine=_get_engine(), **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
@@ -207,7 +215,9 @@ def bundle_pdfs(
 @app.command("split")
 @app.command("sp", hidden=True)
 def split_pdf(
-    target: Path = typer.Argument(..., help="PDF file to split."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF file to split. Or several files, a folder, or a pattern."
+    ),
     start: int = typer.Option(
         1, "-s", "--start", help="Start page (1-based, default: 1)."
     ),
@@ -227,6 +237,7 @@ def split_pdf(
     list_pages: bool = typer.Option(
         False, "--list", help="Just show page count and exit."
     ),
+    recursive: bool = RECURSIVE_OPTION,
 ):
     """
     Split a PDF by page range or into chunks.
@@ -238,11 +249,26 @@ def split_pdf(
       max pdf split file.pdf -c 10             Split into chunks of 10 pages each
       max pdf split file.pdf --remove -s 5 -e 10  Remove pages 5-10
     """
+    if run_batch(
+        "pdf.split",
+        {
+            "target": target,
+            "start": start,
+            "end": end,
+            "output": output,
+            "chunks": chunks,
+            "remove": remove,
+            "list_pages": list_pages,
+        },
+        recursive=recursive,
+    ):
+        return
+    source = target[0]
     result = _run(
         pdf_ops.split,
         "Split failed",
         exit_on_error=True,
-        target=target,
+        target=source,
         start=start,
         end=end,
         output=output,
@@ -281,20 +307,32 @@ def stamp_pdf(
 @app.command("lock")
 @app.command("l", hidden=True)
 def lock_pdf(
-    target: Path = typer.Argument(..., help="PDF to encrypt."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF to encrypt. Or several files, a folder, or a pattern."
+    ),
     password: str = typer.Option(
         ..., "--password", "-p", prompt=True, hide_input=True, help="Password."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output filename."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Encrypt a PDF with a password.
     """
+    if run_batch(
+        "pdf.lock",
+        {"target": target, "password": password, "output": output},
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
     _success(
         _run(
             pdf_ops.lock,
             "Encryption failed",
-            target=target,
+            target=source,
             password=password,
             output=output,
         )
@@ -303,16 +341,28 @@ def lock_pdf(
 
 @app.command("rip")
 def rip_content(
-    target: Path = typer.Argument(..., help="PDF to extract from."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF to extract from. Or several files, a folder, or a pattern."
+    ),
     output_dir: Optional[Path] = typer.Option(
         None, "-o", help="Folder to save images."
     ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Extract all images from inside the PDF.
     """
+    if run_batch(
+        "pdf.rip",
+        {"target": target, "output_dir": output_dir},
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
     result = _run(
-        pdf_ops.rip, "Extraction failed", target=target, output_dir=output_dir
+        pdf_ops.rip, "Extraction failed", target=source, output_dir=output_dir
     )
     if result is None:
         return
@@ -325,13 +375,18 @@ def rip_content(
 @app.command("ocr")
 @app.command("o", hidden=True)
 def ocr_pdf(
-    target: Path = typer.Argument(..., help="PDF file to OCR."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF file to OCR. Or several files, a folder, or a pattern."
+    ),
     lang: str = typer.Option(
         "eng", "--lang", "-l", help="Language code (eng, deu, fra, eng+deu)."
     ),
     output: Optional[Path] = typer.Option(
         None, "-o", help="Output text file (default: same name with .txt)."
     ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
 ):
     """
     Extract text from scanned PDFs using OCR.
@@ -339,9 +394,18 @@ def ocr_pdf(
     Requires pytesseract and Tesseract OCR installed.
     Install: pip install max-cli[ocr]
     """
-    console.print(f"[cyan]Running OCR on {escape(target.name)} (lang={lang})...[/cyan]")
+    if run_batch(
+        "pdf.ocr",
+        {"target": target, "lang": lang, "output": output},
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
+    console.print(f"[cyan]Running OCR on {escape(source.name)} (lang={lang})...[/cyan]")
     try:
-        result = pdf_ops.ocr(target, lang=lang, output=output, engine=_get_engine())
+        result = pdf_ops.ocr(source, lang=lang, output=output, engine=_get_engine())
     except ResourceNotFoundError as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
@@ -406,17 +470,29 @@ def fill_form(
 
 @app.command("form-flatten")
 def flatten_form(
-    target: Path = typer.Argument(..., help="PDF form to flatten."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF form to flatten. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Flatten PDF form (convert fields to regular content).
     """
+    if run_batch(
+        "pdf.form-flatten",
+        {"target": target, "output": output},
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
     _success(
         _run(
             pdf_ops.form_flatten,
             "Failed to flatten form",
-            target=target,
+            target=source,
             output=output,
         )
     )
@@ -424,7 +500,9 @@ def flatten_form(
 
 @app.command("optimize")
 def optimize_pdf(
-    target: Path = typer.Argument(..., help="PDF file to optimize."),
+    target: list[Path] = typer.Argument(
+        ..., help="PDF file to optimize. Or several files, a folder, or a pattern."
+    ),
     output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
     no_compress: bool = typer.Option(
         False, "--no-compress", help="Skip image compression."
@@ -432,15 +510,30 @@ def optimize_pdf(
     no_linearize: bool = typer.Option(
         False, "--no-linearize", help="Skip web optimization."
     ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
 ):
     """
     Optimize PDF (remove unused objects, compress images, linearize).
     """
+    if run_batch(
+        "pdf.optimize",
+        {
+            "target": target,
+            "output": output,
+            "no_compress": no_compress,
+            "no_linearize": no_linearize,
+        },
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    source = target[0]
     result = _success(
         _run(
             pdf_ops.optimize,
             "Optimization failed",
-            target=target,
+            target=source,
             output=output,
             no_compress=no_compress,
             no_linearize=no_linearize,

@@ -11,7 +11,7 @@ import pytest
 
 from max_cli.common.cache import Cache
 from max_cli.common.transaction_log import TransactionLog
-from max_cli.core.engines.task_manager import TaskManager
+from max_cli.core.engines.task_manager import TaskManager, TaskManagerError
 from max_cli.core.engines.task_queue import TaskItem, TaskType
 from max_cli.plugins.manager import PluginManager
 
@@ -37,7 +37,9 @@ def test_task_queue_survives_crash(tmp_path, monkeypatch):
     before = (queue_dir / "queue.json").read_text(encoding="utf-8")
 
     _break_replace(monkeypatch)
-    manager.add(TaskItem(type=TaskType.CUSTOM, title="second"))
+    # A failed save says so: "Queued" must not show for a task that's gone.
+    with pytest.raises(TaskManagerError):
+        manager.add(TaskItem(type=TaskType.CUSTOM, title="second"))
 
     assert (queue_dir / "queue.json").read_text(encoding="utf-8") == before
     assert [t["title"] for t in json.loads(before)] == ["first"]

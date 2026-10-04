@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "max-cli"
-version = "0.4.0"
+version = "1.0.0"
 description = "The Local, Fast, & Lazy Terminal Assistant for high-performance tasks."
 authors = [{name = "Abubakr Alsheikh", email = "abubakralsheikh@outlook.com"}]
 readme = "README.md"
@@ -15,6 +15,7 @@ dependencies = [
     "shellingham>=1.5.0",
     "pillow>=10.0.0",
     "pymupdf>=1.22.0",
+    "resvg-py>=0.2.0",
     "pydantic-settings>=2.0.0",
     "openai>=1.0.0",
     "requests>=2.31.0",

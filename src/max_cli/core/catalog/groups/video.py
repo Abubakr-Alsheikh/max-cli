@@ -1,5 +1,6 @@
 """Catalog entries for `max video`. `tests/test_catalog_drift.py` checks them against the CLI."""
 
+from max_cli.common import file_kinds
 from max_cli.core.catalog.spec import (
     CLI_ONLY,
     Action,
@@ -25,8 +26,19 @@ from max_cli.core.presets import (
 OPS = "max_cli.core.operations.video"
 
 
+EACH_HINT = "Or several files, a folder, or a pattern such as *.mp4."
+
+
 def _target(help: str = "Video file.") -> Param:
     return Param("target", ParamKind.FILE, help)
+
+
+def _each_target(kinds: tuple[str, ...], help: str = "Video file.") -> Param:
+    """The file param of an action that runs once per file: callers may
+    give several files, a folder or a pattern (catalog.batch)."""
+    return Param(
+        "target", ParamKind.FILE, f"{help} {EACH_HINT}", each=True, kinds=kinds
+    )
 
 
 def _output(help: str = "Output file. Default: next to the input.") -> Param:
@@ -47,7 +59,7 @@ GROUP = Group(
             summary="Compress a video to H.264 MP4.",
             operation=f"{OPS}:compress",
             params=(
-                _target("Video file to compress."),
+                _each_target((file_kinds.VIDEO,), "Video file to compress."),
                 Param(
                     "output",
                     ParamKind.OUTPUT,
@@ -65,6 +77,7 @@ GROUP = Group(
                 ),
             ),
             queueable=True,
+            output_name="{stem}_compressed.mp4",
         ),
         Action(
             group="video",
@@ -72,7 +85,7 @@ GROUP = Group(
             summary="Convert a video container, for example MKV to MP4.",
             operation=f"{OPS}:convert",
             params=(
-                _target("Input video file."),
+                _each_target((file_kinds.VIDEO,), "Input video file."),
                 Param(
                     "format",
                     ParamKind.TEXT,
@@ -81,6 +94,8 @@ GROUP = Group(
                     cli=("--format", "-f"),
                 ),
             ),
+            output_name="{stem}.{format}",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -88,7 +103,7 @@ GROUP = Group(
             summary="Extract the audio track into its own file.",
             operation=f"{OPS}:to_audio",
             params=(
-                _target("Source video file."),
+                _each_target((file_kinds.VIDEO,), "Source video file."),
                 Param(
                     "format",
                     ParamKind.CHOICE,
@@ -107,6 +122,8 @@ GROUP = Group(
                 ),
                 _output_long("Output path."),
             ),
+            output_name="{stem}.{format}",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -114,7 +131,7 @@ GROUP = Group(
             summary="Turn a video clip into a GIF.",
             operation=f"{OPS}:gif",
             params=(
-                _target("Input video."),
+                _each_target((file_kinds.VIDEO,), "Input video."),
                 _output("Output GIF."),
                 Param(
                     "width",
@@ -133,6 +150,8 @@ GROUP = Group(
                     advanced=True,
                 ),
             ),
+            output_name="{stem}.gif",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -140,7 +159,9 @@ GROUP = Group(
             summary="Keep part of a video or audio file.",
             operation=f"{OPS}:cut",
             params=(
-                _target("Video or audio file."),
+                _each_target(
+                    (file_kinds.VIDEO, file_kinds.AUDIO), "Video or audio file."
+                ),
                 Param(
                     "start",
                     ParamKind.TEXT,
@@ -163,6 +184,7 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            queueable=True,
         ),
         Action(
             group="video",
@@ -170,7 +192,7 @@ GROUP = Group(
             summary="Save a JPG screenshot from a video.",
             operation=f"{OPS}:snap",
             params=(
-                _target(),
+                _each_target((file_kinds.VIDEO,)),
                 Param(
                     "time",
                     ParamKind.TEXT,
@@ -180,6 +202,7 @@ GROUP = Group(
                 ),
                 _output("Output image."),
             ),
+            output_name="{stem}_thumb.jpg",
         ),
         Action(
             group="video",
@@ -187,7 +210,9 @@ GROUP = Group(
             summary="Raise the volume of a video or audio file.",
             operation=f"{OPS}:louder",
             params=(
-                _target("Video or audio file."),
+                _each_target(
+                    (file_kinds.VIDEO, file_kinds.AUDIO), "Video or audio file."
+                ),
                 Param(
                     "db",
                     ParamKind.FLOAT,
@@ -197,13 +222,17 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            output_name="{stem}_boosted{suffix}",
+            queueable=True,
         ),
         Action(
             group="video",
             name="mute",
             summary="Remove the audio track from a video.",
             operation=f"{OPS}:mute",
-            params=(_target(), _output()),
+            params=(_each_target((file_kinds.VIDEO,)), _output()),
+            output_name="{stem}_mute.mp4",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -233,7 +262,7 @@ GROUP = Group(
             summary="Adjust brightness and contrast.",
             operation=f"{OPS}:brightness",
             params=(
-                _target(),
+                _each_target((file_kinds.VIDEO,)),
                 Param(
                     "brightness",
                     ParamKind.FLOAT,
@@ -250,6 +279,8 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            output_name="{stem}_adjusted.mp4",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -257,7 +288,7 @@ GROUP = Group(
             summary="Apply a colour grading preset.",
             operation=f"{OPS}:color",
             params=(
-                _target(),
+                _each_target((file_kinds.VIDEO,)),
                 Param(
                     "preset",
                     ParamKind.CHOICE,
@@ -268,13 +299,17 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            output_name="{stem}_{preset}.mp4",
+            queueable=True,
         ),
         Action(
             group="video",
             name="stabilize",
             summary="Stabilize shaky footage.",
             operation=f"{OPS}:stabilize",
-            params=(_target(), _output()),
+            params=(_each_target((file_kinds.VIDEO,)), _output()),
+            output_name="{stem}_stabilized.mp4",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -282,7 +317,9 @@ GROUP = Group(
             summary="Even out loudness to a target level.",
             operation=f"{OPS}:normalize",
             params=(
-                _target("Audio or video file."),
+                _each_target(
+                    (file_kinds.VIDEO, file_kinds.AUDIO), "Audio or video file."
+                ),
                 Param(
                     "level",
                     ParamKind.FLOAT,
@@ -292,6 +329,8 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            output_name="{stem}_normalized{suffix}",
+            queueable=True,
         ),
         Action(
             group="video",
@@ -299,7 +338,10 @@ GROUP = Group(
             summary="Remove background noise from audio or video.",
             operation=f"{OPS}:denoise",
             params=(
-                _target("Video or audio file with background noise."),
+                _each_target(
+                    (file_kinds.VIDEO, file_kinds.AUDIO),
+                    "Video or audio file with background noise.",
+                ),
                 Param(
                     "mode",
                     ParamKind.CHOICE,
@@ -319,6 +361,7 @@ GROUP = Group(
                 _output_long(),
             ),
             queueable=True,
+            output_name="{stem}_denoised{suffix}",
         ),
         Action(
             group="video",
@@ -326,7 +369,9 @@ GROUP = Group(
             summary="Convert audio between formats, for example WAV to MP3.",
             operation=f"{OPS}:audio_convert",
             params=(
-                _target("Audio or video file."),
+                _each_target(
+                    (file_kinds.AUDIO, file_kinds.VIDEO), "Audio or video file."
+                ),
                 Param(
                     "format",
                     ParamKind.CHOICE,
@@ -345,6 +390,8 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            output_name="{stem}.{format}",
+            queueable=True,
         ),
         Action(
             group="video",

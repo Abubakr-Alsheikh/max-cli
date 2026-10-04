@@ -16,6 +16,34 @@ app = typer.Typer(
 
 
 UTF8_NAMES = frozenset({"utf-8", "utf8"})
+PACKAGE_NAME = "max-cli"
+
+
+def _show_version(wanted: bool) -> None:
+    if not wanted:
+        return
+    from importlib import metadata
+
+    try:
+        number = metadata.version(PACKAGE_NAME)
+    except metadata.PackageNotFoundError:
+        number = "unknown (not installed)"
+    typer.echo(f"max {number}")
+    raise typer.Exit()
+
+
+@app.callback()
+def root(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_show_version,
+        is_eager=True,
+        help="Show Max's version and exit.",
+    ),
+) -> None:
+    """MAX: The High-Performance CLI Utility."""
 
 
 def tolerate_unencodable_output() -> None:

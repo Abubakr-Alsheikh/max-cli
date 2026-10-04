@@ -1,45 +1,30 @@
 # Max CLI
 
-A high-performance, modular CLI framework for developers and power users. It provides intelligent automation for media processing, document management, and file organization through a local-first, AI-assisted terminal interface.
+Max is a terminal assistant that turns jobs like compressing a video, merging PDFs or downloading from YouTube into short commands. You can type the commands, ask the AI agent in plain words, or work in the dashboard.
+
+```bash
+max video compress ~/Videos --recursive      # every video in a folder tree
+max pdf ocr scans/ --queue                   # OCR in the background
+max "sort my Music folder by artist"          # the AI agent plans and runs it
+max                                           # the dashboard
+```
 
 ## Features
 
-- **Image Processing**: Compress, resize, convert and strip metadata
-- **PDF Operations**: Merge, split, compress, OCR, watermark, forms and more
-- **Video and Audio**: Compression, audio extraction, noise removal, format conversion
-- **Downloads**: Media from YouTube and other sites, with a queue
-- **AI Integration**: Ask, chat, image analysis, semantic search, data extraction
-- **File Management**: Rename, sort, deduplicate, back up, secure delete and undo
+- **Video and audio:** compress, cut, convert, GIFs, volume, noise, color, music tags, sorting songs into folders. Max downloads FFmpeg when you first need it.
+- **PDF:** merge, split, compress, OCR, watermark, lock, forms, compare.
+- **Images:** compress, resize, convert (SVG, AVIF, ICO and more), strip GPS and camera data.
+- **Downloads:** video or audio from YouTube and most other sites, with quality presets.
+- **Files:** AI sorting, numbering, duplicates, backups, secure delete and undo.
+- **AI:** an agent that runs Max's commands for you, plus image analysis and generation, search by meaning and data extraction. It works with OpenAI, OpenRouter, Gemini or a local Ollama, with a fallback provider.
+- **Batches:** commands that work on one file also take several files, a folder or a pattern, and skip files that are done.
+- **Background queue:** `--queue` hands a long job to a worker that keeps going after you close the terminal.
+- **Dashboard:** a page per command group, live progress, history, undo and settings.
 
-## Quick Start
+## Where to start
 
-```bash
-# Install
-pip install max-cli
-
-# View help
-max --help
-
-# Image operations
-max images compress photo.jpg
-max images resize image.png -w 800
-
-# PDF operations
-max pdf compress document.pdf
-max pdf merge file1.pdf file2.pdf
-
-# Video operations
-max video compress video.mp4
-max video to-audio video.mp4
-
-# AI operations
-max ai chat
-max ai search "invoices from March" ./documents
-```
-
-## Why Max CLI?
-
-- **Fast**: Parallel processing, caching, and optimized algorithms
-- **Modular**: Plugin system for extensibility
-- **Developer-Friendly**: Type hints, comprehensive tests, clear documentation
-- **Local-First**: Works offline, no cloud dependency
+- [Installation](installation.md): install Max, FFmpeg, OCR and an AI provider.
+- [Usage](usage.md): the three ways to use Max, batches, the queue and the agent.
+- [Commands](commands/index.md): every command group and option.
+- [Dashboard](commands/dashboard.md): pages and keys.
+- [Config settings](api/config.md): every setting and its default.

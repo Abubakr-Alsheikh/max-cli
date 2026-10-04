@@ -475,14 +475,15 @@ class QueuePanel(Vertical):
 
     def refresh_data(self) -> None:
         manager = get_task_manager()
-        manager.refresh()
+        manager.try_refresh()  # busy store: show the tasks read last time
         queued = list(manager.get_all())
         running = [task for task in queued if task.status == TaskStatus.RUNNING]
         waiting = [task for task in queued if task.status in WAITING_STATES]
         finished = list(manager.get_history(limit=FINISHED_SHOWN))
         today = self._finished_today(manager)
         with self.app.batch_update():
-            self._show_worker(bool(manager.is_worker_running))
+            # This dashboard's worker, or the background worker.
+            self._show_worker(manager.worker_alive())
             self._show_tiles(running, waiting, today)
             self._sync("#queue-running", running)
             self._sync("#queue-waiting", waiting)

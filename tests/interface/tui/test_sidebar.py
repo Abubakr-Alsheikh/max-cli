@@ -270,10 +270,8 @@ async def test_collapsed_icons_are_centred_in_a_narrow_strip():
         assert sidebar.compact and sidebar.size.width <= 7
 
         for item in app.query(NavItem):
-            if item.has_class("-active"):
-                continue  # its accent border takes a column
             text = item.render()
             indent = len(text.plain) - len(text.plain.lstrip(" "))
-            icon_width = text.cell_length - indent
+            shown = text.cell_length - indent
             assert item.content_region == item.region, item.section_id
-            assert indent == (item.content_size.width - icon_width) // 2
+            assert indent == (item.content_size.width - shown) // 2

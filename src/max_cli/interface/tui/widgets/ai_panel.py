@@ -520,6 +520,17 @@ class AIPanel(Vertical):
         event.stop()
         self.send(str(event.button.label))
 
+    def ask_from(self, request: str) -> None:
+        """A request typed on another page (Home): send it now, or, when the
+        AI isn't set up or is busy, leave it in the box to send later."""
+        if self._busy or not ai_is_set_up():
+            box = self.query_one("#ai-input", Input)
+            box.value = request
+            box.cursor_position = len(request)
+            box.focus()
+            return
+        self.send(request)
+
     def send(self, request: str) -> None:
         """Show the request and hand it to the agent in a thread."""
         self._sent.append(request)

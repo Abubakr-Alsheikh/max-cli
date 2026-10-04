@@ -64,9 +64,15 @@ def _queue_download(url: str, **options) -> Optional[str]:
 
 
 def _process_downloads() -> None:
+    """Run queued downloads here, unless another process runs the queue
+    (the dashboard or the background worker): that one runs them."""
+    from max_cli.core.engines.task_manager import TaskManagerError
     from max_cli.core.engines.task_queue import TaskType
 
-    _get_task_manager().process_now(task_type=TaskType.DOWNLOAD)
+    try:
+        _get_task_manager().process_now(task_type=TaskType.DOWNLOAD)
+    except TaskManagerError:
+        return
 
 
 def _download_stats() -> dict:
@@ -285,12 +291,17 @@ def download_media(
         if queue and no_process:
             console.print("[dim]Queued. Run 'max queue process' to start it.[/dim]")
         elif queue:
-            import threading
+            from max_cli.core.engines.background_worker import (
+                start_background_worker,
+            )
 
-            console.print("[dim]Processing queue in background...[/dim]")
-
-            thread = threading.Thread(target=_process_downloads, daemon=True)
-            thread.start()
+            # A thread here would die when this command returns; a worker
+            # process keeps going after the terminal closes.
+            start_background_worker()
+            console.print(
+                "[dim]Downloading in the background. "
+                "'max queue status' shows progress.[/dim]"
+            )
 
 
 def _add_to_queue_or_download(
@@ -404,9 +415,11 @@ def _download_immediate(
     def _do_download() -> None:
         # The same operation the dashboard's Download page runs, so both record
         # the download in history and report the final files.
+        from max_cli.core.catalog.activity import run_recorded
         from max_cli.core.operations import grab as grab_ops
 
-        result = grab_ops.download(
+        result = run_recorded(
+            grab_ops.download,
             url=url,
             output=output_path,
             media_type="audio" if audio_only else "video",

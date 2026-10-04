@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import inspect
 import json
 import logging
 import sys
@@ -13,7 +14,6 @@ from max_cli.common.atomic import atomic_write_json
 from max_cli.plugins.base import (
     Plugin,
     PluginContext,
-    PluginLoadError,
     PluginValidationError,
 )
 
@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from max_cli.plugins.base import Plugin
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PRIORITY = 100
+# A plugin module may create its plugin itself under this name (the README
+# pattern); the manager then uses that object instead of making another.
+PLUGIN_INSTANCE_NAME = "plugin"
 
 
 @dataclass
@@ -40,6 +45,8 @@ class PluginManager:
         config_dir: Optional[Path] = None,
     ):
         self._plugins: dict[str, LoadedPlugin] = {}
+        # Plugin class -> the `plugin` object its module already created.
+        self._module_instances: dict[type[Plugin], Plugin] = {}
         self._config_dir = config_dir or self._get_default_config_dir()
         self._app: Optional[Any] = None
         self._load_config()
@@ -109,25 +116,54 @@ class PluginManager:
                     module = importlib.util.module_from_spec(spec)
                     sys.modules[module_name] = module
                     spec.loader.exec_module(module)
-                    for attr_name in dir(module):
-                        attr = getattr(module, attr_name)
-                        if (
-                            isinstance(attr, type)
-                            and issubclass(attr, Plugin)
-                            and attr is not Plugin
-                        ):
-                            plugins.append(attr)
+                    plugins.extend(self._plugin_classes_in(module))
             except Exception as e:
                 logger.warning(f"Failed to load plugin from {plugin_file}: {e}")
         return plugins
+
+    def _plugin_classes_in(self, module: Any) -> list[type[Plugin]]:
+        """Concrete Plugin classes the module defines itself.
+
+        Classes it imports (CLIPlugin from max_cli.plugins.base) and abstract
+        ones can't be plugins: instantiating them raises TypeError.
+        """
+        classes: list[type[Plugin]] = [
+            attr
+            for attr in vars(module).values()
+            if isinstance(attr, type)
+            and issubclass(attr, Plugin)
+            and attr.__module__ == module.__name__
+            and not inspect.isabstract(attr)
+        ]
+        instance = getattr(module, PLUGIN_INSTANCE_NAME, None)
+        if isinstance(instance, Plugin) and type(instance) in classes:
+            self._module_instances[type(instance)] = instance
+        return classes
+
+    def _instantiate(self, plugin_class: type[Plugin], **kwargs: Any) -> Plugin:
+        """The module's own `plugin` object when it made one, else a new one."""
+        instance = self._module_instances.get(plugin_class)
+        if instance is not None and not kwargs:
+            return instance
+        return plugin_class(**kwargs)
+
+    @staticmethod
+    def _priority_of(plugin: Plugin) -> int:
+        try:
+            return int(plugin.priority)
+        except Exception as e:
+            logger.warning(f"Plugin {plugin.name} has no usable priority: {e}")
+            return DEFAULT_PRIORITY
 
     def load_plugin(
         self,
         plugin_class: type[Plugin],
         **kwargs: Any,
     ) -> LoadedPlugin:
-        plugin = plugin_class(**kwargs)
+        plugin = self._instantiate(plugin_class, **kwargs)
+        return self._load_instance(plugin)
 
+    def _load_instance(self, plugin: Plugin) -> LoadedPlugin:
         is_valid, error_msg = plugin.validate()
         if not is_valid:
             raise PluginValidationError(f"Plugin validation failed: {error_msg}")
@@ -142,24 +178,20 @@ class PluginManager:
         return loaded_plugin
 
     def load_all(self, context: Optional[PluginContext] = None) -> None:
-        plugin_classes = self.discover_plugins()
-        plugin_classes.sort(
-            key=lambda p: p().priority if hasattr(p(), "priority") else 100
-        )
-
-        for plugin_class in plugin_classes:
+        # One broken plugin is reported and skipped; it must never stop `max`.
+        instances: list[Plugin] = []
+        for plugin_class in self.discover_plugins():
             try:
-                self.load_plugin(plugin_class)
-            except (PluginValidationError, PluginLoadError) as e:
-                logger.warning(f"Failed to load plugin {plugin_class.__name__}: {e}")
-                loaded_plugin = LoadedPlugin(
-                    plugin=None,
-                    enabled=False,
-                    error=str(e),
-                )
-                self._plugins[plugin_class.__name__.lower().replace("plugin", "")] = (
-                    loaded_plugin
-                )
+                instances.append(self._instantiate(plugin_class))
+            except Exception as e:
+                self._record_failure(plugin_class, e)
+        instances.sort(key=self._priority_of)
+
+        for plugin in instances:
+            try:
+                self._load_instance(plugin)
+            except Exception as e:
+                self._record_failure(type(plugin), e)
 
         if context:
             for name, loaded in self._plugins.items():
@@ -170,11 +202,18 @@ class PluginManager:
                     except Exception as e:
                         logger.warning(f"Plugin {name} on_load failed: {e}")
 
+    def _record_failure(self, plugin_class: type[Plugin], error: Exception) -> None:
+        logger.warning(f"Failed to load plugin {plugin_class.__name__}: {error}")
+        name = plugin_class.__name__.lower().replace("plugin", "")
+        self._plugins[name] = LoadedPlugin(plugin=None, enabled=False, error=str(error))
+
     def register_all(self, app: typer.Typer) -> None:
         self._app = app
         for name, loaded in sorted(
             self._plugins.items(),
-            key=lambda x: x[1].plugin.priority if x[1].plugin else 100,
+            key=lambda x: (
+                self._priority_of(x[1].plugin) if x[1].plugin else DEFAULT_PRIORITY
+            ),
         ):
             if loaded.plugin and loaded.enabled:
                 try:

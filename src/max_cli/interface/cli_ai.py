@@ -34,6 +34,8 @@ STEP_STYLES = {
     "planned": ("→", "cyan"),
     "queued": ("⧗", "cyan"),
 }
+# Where the agent tells the user to follow queued jobs.
+QUEUE_STATUS_HINT = "'max queue status'"
 # Quicker actions don't show how long they took.
 MIN_SHOWN_SECONDS = 0.1
 # A finished action's lines sit under its "⚙ name" line.
@@ -121,8 +123,30 @@ class _StepPrinter:
 def _make_agent(dry_run: bool = False) -> "Agent":
     from max_cli.core.agent.agent import Agent
 
+    # Long jobs may go to the queue: _start_queued_jobs runs it in the
+    # background after the reply, so the terminal is free at once.
     return Agent.from_settings(
-        confirm=_confirm, on_step=_StepPrinter(), dry_run=dry_run
+        confirm=_confirm,
+        on_step=_StepPrinter(),
+        dry_run=dry_run,
+        can_queue=True,
+        jobs_hint=QUEUE_STATUS_HINT,
+    )
+
+
+def _start_queued_jobs(reply: "AgentReply") -> None:
+    """Start the background worker when the reply queued jobs."""
+    from max_cli.core.agent.agent import StepKind
+    from max_cli.core.engines.background_worker import start_background_worker
+
+    queued = sum(step.kind == StepKind.QUEUED for step in reply.steps)
+    if not queued:
+        return
+    start_background_worker()
+    console.print(
+        f"[cyan]{queued} job{'s' if queued != 1 else ''} running in the "
+        f"background.[/cyan] [dim]Follow them with {QUEUE_STATUS_HINT}; "
+        "closing this terminal doesn't stop them.[/dim]"
     )
 
 
@@ -173,6 +197,7 @@ def ask_ai(
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
     _show_reply(reply)
+    _start_queued_jobs(reply)
 
 
 def _paused(status: Any, confirm: Any) -> Any:
@@ -236,14 +261,16 @@ def analyze_image(
 def create_image(
     prompt: str = typer.Argument(..., help="Description of the image to create."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
+    model: Optional[str] = typer.Option(
+        None, help="Image model. Default: the one picked for your AI in settings."
+    ),
 ):
     """
-    Generate an image from text (Nano Banana).
+    Generate an image from text.
     """
     console.print(f"[cyan]Painting: [bold]{prompt}[/bold]...[/cyan]")
 
-    with console.status("[bold green]Nano Banana is generating...[/bold green]"):
+    with console.status("[bold green]Generating...[/bold green]"):
         try:
             eng = _get_engine()
             url = eng.generate_image(prompt, model=model)
@@ -259,7 +286,9 @@ def edit_image(
         ..., help="Instruction (e.g., 'Turn the sky purple')."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
+    model: Optional[str] = typer.Option(
+        None, help="Image model. Default: the one picked for your AI in settings."
+    ),
 ):
     """
     Edit an existing image using AI instructions.
@@ -374,6 +403,7 @@ def chat_session(
             log_error(escape(str(e)))
             continue
         _show_reply(reply)
+        _start_queued_jobs(reply)
         eng.history += [
             {"role": "user", "content": user_input},
             {"role": "assistant", "content": reply.text},

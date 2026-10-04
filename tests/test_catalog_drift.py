@@ -23,6 +23,11 @@ QUEUE_OPTION = "queue"
 # the action's danger instead, so only dangerous actions may have it.
 FORCE_OPTION = "force"
 CONFIRM_DANGERS = {Danger.MOVES, Danger.OVERWRITES, Danger.DELETES}
+# A batch-ready action (an `each` param) takes several files, a folder or a
+# pattern: --recursive looks in subfolders, --redo runs files whose result
+# exists (only where the catalog knows the result's name).
+RECURSIVE_OPTION = "recursive"
+REDO_OPTION = "redo"
 # Groups whose Typer flags match their catalog entries. `max grab download`
 # calls its operation too, but keeps flags such as --video/--audio and
 # --no-meta that scripts rely on, so only its operation is checked.
@@ -75,6 +80,11 @@ def test_cli_options_match_the_catalog(group_name: str, action: Action):
     assert has_queue == action.queueable
     if cli_params.pop(FORCE_OPTION, None) is not None:
         assert action.danger in CONFIRM_DANGERS, "--force on a harmless action"
+    if RECURSIVE_OPTION not in {param.name for param in action.params}:
+        has_recursive = cli_params.pop(RECURSIVE_OPTION, None) is not None
+        assert has_recursive == (action.each_param() is not None)
+    has_redo = cli_params.pop(REDO_OPTION, None) is not None
+    assert has_redo == (action.each_param() is not None and bool(action.output_name))
     assert list(cli_params) == [param.name for param in action.params]
 
     for param in action.params:
@@ -83,7 +93,7 @@ def test_cli_options_match_the_catalog(group_name: str, action: Action):
         takes_list = (
             bool(getattr(cli_param, "multiple", False)) or cli_param.nargs == -1
         )
-        assert takes_list == param.multiple, param.name
+        assert takes_list == (param.multiple or param.each), param.name
         if not param.required:
             # A Setting default: the CLI read the same setting at import time.
             expected = _normalize(param.resolved_default())

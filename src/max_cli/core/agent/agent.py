@@ -56,6 +56,10 @@ DECLINED_NOTE = (
     "The user said no, so it didn't run. Don't run it again unless they ask."
 )
 NOT_RUN_NOTE = "Not run: the action limit for this request was reached."
+CLASH_NOTE = (
+    "Not run: its result would have the same name as another file's. "
+    "Run it on its own with an output name."
+)
 MAX_EACH = 100  # files one run_action call may list in `each`
 MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
 
@@ -77,15 +81,16 @@ need a folder outside them, ask the user to name it.
 - Act; don't ask for permission. Max itself asks the user before an action \
 moves, overwrites or deletes files. If they say no, don't retry.
 - Plan first: work out which files the request needs. Skip files that already have the result (find_files with missing "mp3" lists the .m4a files without an .mp3) and say which you skipped. Never redo finished work unless asked.
-- One action on several files: one run_action with the files in `each`; Max runs them side by side and asks once.
+- One action on several files: one run_action with the files, a folder or a pattern in `each`; Max runs them together, asks once, skips finished ones.
 - When you're done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead."""
 
 
 QUEUE_RULE = """
-- Long jobs (video compress or denoise, downloads) can run in the \
-background: run_action with queue true. Say they're queued and that the Jobs \
-window (J) shows them."""
+- Long jobs (video and audio work, OCR, downloads) can run in the \
+background: run_action with queue true. Say they're queued and that {jobs} \
+shows them."""
+JOBS_WINDOW = "the Jobs window (J)"  # where the dashboard shows queued jobs
 # The find_files arguments besides `path`.
 FIND_FILTERS = (
     "kind",
@@ -214,6 +219,7 @@ class _Batch:
     label: str
     runs: tuple[_Run, ...]
     refused: tuple[tuple[str, str], ...]  # (file, why)
+    done_already: tuple[str, ...] = ()  # found, but their result exists
 
     def summary(self, outcomes: list[_Outcome]) -> str:
         """What the model hears: counts, failures and the files made."""
@@ -234,9 +240,30 @@ class _Batch:
                 "failed": failed,
                 "outputs": outputs[:MAX_LISTED_OUTPUTS],
                 "more_outputs": max(0, len(outputs) - MAX_LISTED_OUTPUTS),
+                **_done_already(self.done_already),
             },
             ensure_ascii=False,
         )[:MAX_RESULT_CHARS]
+
+
+def _lists_files(item: str) -> bool:
+    """A folder or a pattern: reading it lists the files in it."""
+    from max_cli.core.catalog.batch import WILDCARDS
+
+    path = Path(item).expanduser()
+    return path.is_dir() or bool(WILDCARDS & set(path.name))
+
+
+def _done_already(names: tuple[str, ...]) -> dict[str, Any]:
+    """The skipped files, with what to tell the user, when there are any."""
+    if not names:
+        return {}
+    return {
+        "done_already": list(names[:MAX_LISTED_OUTPUTS]),
+        "done_already_count": len(names),
+        "note": "These had their result already, so they didn't run. Tell the "
+        "user you skipped them.",
+    }
 
 
 Confirm = Callable[[ActionCall], bool]
@@ -265,13 +292,16 @@ class Agent:
         parallel: int = PARALLEL_ACTIONS,
         token_limit: int = TOKEN_LIMIT,
         can_queue: bool = False,
+        jobs_hint: str = JOBS_WINDOW,
     ) -> None:
-        """`can_queue` lets the model queue long jobs: only where something
-        runs the queue (the dashboard); the CLI waits for each action.
-        `on_step` may be called from several threads at once, never two
-        calls at the same time."""
+        """`can_queue` lets the model queue long jobs, which the caller must
+        then run: the dashboard's worker, or the background worker the CLI
+        starts. `jobs_hint` names where the user follows them. `on_step`
+        may be called from several threads at once, never two calls at the
+        same time."""
         self.client = client
         self.can_queue = can_queue
+        self.jobs_hint = jobs_hint
         self.model = model
         self.confirm = confirm
         self.on_step = on_step or _ignore_step
@@ -311,7 +341,7 @@ class Agent:
         return SYSTEM_PROMPT.format(
             groups=group_lines(),
             cwd=self.scope.cwd,
-            queue_rule=QUEUE_RULE if self.can_queue else "",
+            queue_rule=QUEUE_RULE.format(jobs=self.jobs_hint) if self.can_queue else "",
         )
 
     # --- the loop -----------------------------------------------------------
@@ -478,8 +508,10 @@ class Agent:
                 return "Error: 'arguments' must be an object."
             queue = arguments.get("queue") is True
             each = arguments.get("each")
+            if each is None and _names_many(str(arguments.get("action", "")), given):
+                each = []  # the file argument holds the folder or pattern
             if each is not None:
-                if not isinstance(each, list) or not each:
+                if not isinstance(each, list):
                     return "Error: 'each' must be a list of file paths."
                 return self._run_each(
                     str(arguments.get("action", "")),
@@ -631,7 +663,10 @@ class Agent:
             return DECLINED_NOTE
 
         if queue and self.can_queue and action.queueable:
-            task = enqueue_action(action, given)
+            try:
+                task = enqueue_action(action, given)
+            except MaxError as e:
+                return f"Error: couldn't queue it: {e}"
             self._report(
                 reply,
                 Step(
@@ -646,8 +681,8 @@ class Agent:
                 {
                     "queued": True,
                     "task_id": task.id,
-                    "note": "It runs in the background; the user follows it in "
-                    "the Jobs window (J). Don't wait for it.",
+                    "note": "It runs in the background; the user follows it "
+                    f"with {self.jobs_hint}. Don't wait for it.",
                 }
             )
         resolved = tuple(self.scope.resolve(str(path)) for path in paths)
@@ -730,11 +765,44 @@ class Agent:
         param = _each_param(action)
         if param is None:
             return f"Error: {action_id} takes no file, so 'each' doesn't fit it."
+        done_already: list[Path] = []
+        refused: list[tuple[str, str]] = []
+        if action.each_param() is not None:
+            # Folders and patterns become files, finished ones left out.
+            from max_cli.core.catalog.batch import expand_each
+
+            wanted = each or given.get(param.name)
+            # Check folders and patterns before reading them: listing one
+            # outside the scope would show the model its file names. Named
+            # files get their own check below.
+            asked = wanted if isinstance(wanted, list) else [wanted]
+            outside = self.scope.outside(
+                str(item) for item in asked if item and _lists_files(str(item))
+            )
+            if outside:
+                return f"Error: {', '.join(outside)} is outside the folders I may use."
+            try:
+                found = expand_each(action, {**given, param.name: wanted})
+            except MaxError as e:
+                return f"Error: {e}"
+            each = [str(path) for path in found.files]
+            done_already = found.done_already
+            refused = [(path.name, CLASH_NOTE) for path in found.clashes]
+            if not each:
+                return json.dumps(
+                    {
+                        "action": f"{action.group} {action.name}",
+                        "files": 0,
+                        **_done_already(tuple(path.name for path in done_already)),
+                    },
+                    ensure_ascii=False,
+                )
+        if not each:
+            return "Error: 'each' must list at least one file."
         if len(each) > MAX_EACH:
             return f"Error: 'each' takes at most {MAX_EACH} files; split the list."
         label = f"{action.group} {action.name}"
         checked: list[tuple[str, ActionCall, dict[str, Any], tuple[Path, ...]]] = []
-        refused: list[tuple[str, str]] = []
         for number, path in enumerate(each):
             file_given = {**given, param.name: [path] if param.multiple else path}
             try:
@@ -799,7 +867,10 @@ class Agent:
             from max_cli.core.catalog.runner import enqueue_action
 
             for each_id, call, file_given, _paths_found in checked:
-                enqueue_action(action, file_given)
+                try:
+                    enqueue_action(action, file_given)
+                except MaxError as e:
+                    return f"Error: couldn't queue the files: {e}"
                 self._report(
                     reply,
                     Step(
@@ -814,8 +885,8 @@ class Agent:
                 {
                     "queued": len(checked),
                     "failed": [{"file": n, "error": why} for n, why in refused],
-                    "note": "They run in the background; the user follows them "
-                    "in the Jobs window (J). Don't wait for them.",
+                    "note": "They run in the background; the user follows "
+                    f"them with {self.jobs_hint}. Don't wait for them.",
                 },
                 ensure_ascii=False,
             )
@@ -823,7 +894,9 @@ class Agent:
             _Run(call, file_given, each_id, found)
             for each_id, call, file_given, found in checked
         )
-        return _Batch(label, runs, tuple(refused))
+        return _Batch(
+            label, runs, tuple(refused), tuple(path.name for path in done_already)
+        )
 
     def _report(self, reply: AgentReply, step: Step) -> None:
         # One at a time: actions running side by side report from their
@@ -856,6 +929,18 @@ def _tool_call_message(call: Any) -> dict[str, Any]:
     if isinstance(extra, Mapping):
         message["extra_content"] = dict(extra)
     return message
+
+
+def _names_many(action_id: str, given: Mapping[str, Any]) -> bool:
+    """True when a batch-ready action's file argument holds a list, a folder
+    or a pattern rather than one file."""
+    from max_cli.core.catalog.batch import is_batch
+
+    try:
+        action = get_action(action_id)
+    except KeyError:
+        return False
+    return action.each_param() is not None and is_batch(action, given)
 
 
 def _each_param(action: Action) -> Optional[Any]:
