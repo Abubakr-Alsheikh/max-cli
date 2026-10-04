@@ -21,14 +21,13 @@ from max_cli.common.exceptions import (
     ValidationError,
 )
 from max_cli.core.operations.result import ActionResult
-from max_cli.core.presets import STRIP_IMAGE_METADATA
+from max_cli.core.presets import IMAGE_FORMATS, STRIP_IMAGE_METADATA
 
 if TYPE_CHECKING:
     from max_cli.common.events import EventEmitter
     from max_cli.core.engines.image_processor import ImageEngine
 
-IMAGE_FORMATS = ("webp", "jpg", "png")
-FORMAT_ALIASES = {"jpeg": "jpg"}
+FORMAT_ALIASES = {"jpeg": "jpg", "tif": "tiff"}
 SINGLE_FILE_SUFFIX = "_opt"
 BATCH_FOLDER_SUFFIX = "_optimized"
 QUALITY_RANGE = range(1, 101)

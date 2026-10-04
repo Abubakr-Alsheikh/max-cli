@@ -5,6 +5,8 @@ Every `max images` command takes one file or one folder (not a list or a pattern
 - For a single file, Max writes `<name>_opt.<ext>` next to it.
 - For a folder, Max writes the results to a sibling folder named `<folder>_optimized`. It reads the folder's own images, not those in subfolders.
 
+Max reads JPG, PNG, WebP, AVIF, GIF, BMP, TIFF, ICO, TGA, PSD and SVG. It draws an SVG at least 1024 pixels on its longest side, with its transparency, masks and filters. HEIC and HEIF photos need one more package: `pip install pillow-heif`. A result in a format that can't hold transparency (JPG, BMP) gets a white background where the image was transparent.
+
 If an image fails (a damaged file, for example), Max reports it and carries on with the rest. A missing path, a folder with no images, or an unknown `--to` format stops the command with exit code 1.
 
 The dashboard's Images page (`5`) has a form for each command. When you pick an image on another page, such as Files, an **Open on the Images page** button takes it there.
@@ -71,13 +73,15 @@ max images convert [TARGET] --to FORMAT [-j WORKERS]
 
 **Options:**
 
-- `--to` - Target format: `webp`, `jpg` (or `jpeg`) or `png` (required)
+- `--to` - Target format: `webp`, `jpg` (or `jpeg`), `png`, `avif`, `gif`, `bmp`, `tiff` or `ico` (required)
 - `-j` - Number of parallel workers (default: 4)
 
 **Example:**
 
 ```bash
 max images convert ./photos --to webp
+max images convert logo.svg --to png      # writes logo_opt.png
+max images convert icon.png --to ico
 ```
 
 ## strip

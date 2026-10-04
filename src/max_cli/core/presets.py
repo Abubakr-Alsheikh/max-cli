@@ -46,6 +46,9 @@ PDF_COMPRESS_QUALITY = 80
 
 # --- images and audio metadata ----------------------------------------------
 STRIP_IMAGE_METADATA = True
+# What `images convert --to` writes. Max reads more than this: every format
+# Pillow opens, SVG (drawn by PyMuPDF) and HEIC with pillow-heif installed.
+IMAGE_FORMATS = ("webp", "jpg", "png", "avif", "gif", "bmp", "tiff", "ico")
 # Folder layouts for `max audio organize`, by tag: artist/, album/, genre/,
 # artist/album/, or the album artist (falling back to the artist).
 AUDIO_ORGANIZE_PATTERNS = (

@@ -37,7 +37,7 @@ max                                           # or open the dashboard
 
 - **Video and audio:** compress, cut, convert, make GIFs, fix volume and noise, edit music tags, sort songs into folders. Max downloads FFmpeg for you the first time you need it.
 - **PDF:** merge, split, compress, OCR, watermark, lock, fill and flatten forms, compare.
-- **Images:** compress, resize, convert, strip GPS and camera data.
+- **Images:** compress, resize, convert (SVG, AVIF, ICO and more), strip GPS and camera data.
 - **Downloads:** video or audio from YouTube and most other sites, with quality presets and a queue.
 - **Files:** sort by meaning with AI, number files, find duplicates, back up, shred, and undo.
 - **AI:** an agent that runs Max's own commands for you, plus image analysis, image generation, search by meaning and data extraction.
@@ -176,7 +176,7 @@ Type `max` (or `max dashboard`). In a script or a pipe, a bare `max` prints the 
 
 Forms take a file, a folder or a pattern, with **subfolders** and **redo** checkboxes for batches. Queueable forms can send the work to the queue. Other keys: `Ctrl+P` finds any action by name, `J` opens the jobs window, `?` shows help, `Ctrl+B` folds the sidebar to icons, `q` quits.
 
-Each page keeps one colour across the sidebar, the launchpad and Home's charts. With a [Nerd Font](https://www.nerdfonts.com/) in your terminal, set **Page icons** to **Nerd Font** in Settings for crisper icons. See [Dashboard](docs/commands/dashboard.md).
+Each page has a pixel-art icon in its own colour, the same colour Home's charts use for it. With a [Nerd Font](https://www.nerdfonts.com/) in your terminal, **Page icons** in Settings can switch to Nerd Font glyphs. See [Dashboard](docs/commands/dashboard.md).
 
 ## Safety: confirm, undo, back up
 
@@ -293,6 +293,7 @@ max images compress ./photos -m 1080         # longest side 1080px
 max images resize logo.png -w 800
 max images resize photo.png -s 50            # half size
 max images convert photo.jpg --to webp
+max images convert logo.svg --to png        # SVG, AVIF, ICO, PSD ... in; most formats out
 max images strip ./photos                    # remove GPS and camera data
 ```
 </details>

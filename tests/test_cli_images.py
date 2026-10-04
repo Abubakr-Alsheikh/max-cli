@@ -92,7 +92,7 @@ class TestCLIImagesUsesTheOperation:
         assert "Specify" in result.output
 
     def test_unknown_convert_format_exits_1(self, dummy_image):
-        result = runner.invoke(images_app, ["convert", str(dummy_image), "--to", "gif"])
+        result = runner.invoke(images_app, ["convert", str(dummy_image), "--to", "psd"])
 
         assert result.exit_code == 1
         assert "Unknown format" in result.output

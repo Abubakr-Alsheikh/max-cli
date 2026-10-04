@@ -3,12 +3,9 @@
 from pathlib import Path
 
 from max_cli.core.catalog.spec import Action, Group, Param, ParamKind, Setting
-from max_cli.core.presets import STRIP_IMAGE_METADATA
+from max_cli.core.presets import IMAGE_FORMATS, STRIP_IMAGE_METADATA
 
 OPS = "max_cli.core.operations.images"
-# Same list as core/operations/images.py IMAGE_FORMATS; catalog modules
-# don't import operations.
-IMAGE_FORMATS = ("webp", "jpg", "png")
 
 
 def _target() -> Param:

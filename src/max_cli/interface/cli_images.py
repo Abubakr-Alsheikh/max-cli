@@ -149,12 +149,14 @@ def resize_images(
 @app.command("cv", hidden=True)
 def convert_images(
     target: Path = typer.Argument(Path("."), help="File or folder."),
-    to: str = typer.Option(..., help="Target format (webp, jpg, png)."),
+    to: str = typer.Option(
+        ..., help="Target format: webp, jpg, png, avif, gif, bmp, tiff or ico."
+    ),
     workers: int = typer.Option(
         settings.MAX_WORKERS, "-j", help="Number of parallel workers."
     ),
 ):
-    """Bulk convert images to a new format."""
+    """Convert images to another format. Reads SVG and most image types."""
     _run(images_ops.convert, "Converting", target=target, to=to, workers=workers)
 
 

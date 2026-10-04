@@ -13,7 +13,7 @@ max                                           # the dashboard
 
 - **Video and audio:** compress, cut, convert, GIFs, volume, noise, color, music tags, sorting songs into folders. Max downloads FFmpeg when you first need it.
 - **PDF:** merge, split, compress, OCR, watermark, lock, forms, compare.
-- **Images:** compress, resize, convert, strip GPS and camera data.
+- **Images:** compress, resize, convert (SVG, AVIF, ICO and more), strip GPS and camera data.
 - **Downloads:** video or audio from YouTube and most other sites, with quality presets.
 - **Files:** AI sorting, numbering, duplicates, backups, secure delete and undo.
 - **AI:** an agent that runs Max's commands for you, plus image analysis and generation, search by meaning and data extraction. It works with OpenAI, OpenRouter, Gemini or a local Ollama, with a fallback provider.
