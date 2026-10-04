@@ -88,7 +88,10 @@ def test_the_first_prompt_holds_only_the_group_list(tmp_path):
     for group in agent_groups():
         for action in actions_for(group, Surface.AGENT):
             assert action.id not in system
-    size = len(system) + len(json.dumps(first["tools"]))
+    # Without the folder's path: test folders are long on macOS and Windows.
+    size = len(system.replace(str(agent.scope.cwd), "")) + len(
+        json.dumps(first["tools"])
+    )
     assert size < FIRST_PROMPT_CHAR_BUDGET, f"first prompt is {size} characters"
 
 
