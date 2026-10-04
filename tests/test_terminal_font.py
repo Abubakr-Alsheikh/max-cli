@@ -188,3 +188,19 @@ def test_auto_icons_follow_the_terminal_font(monkeypatch):
 
     monkeypatch.setattr(fonts, "terminal_has_nerd_font", lambda: False)
     assert page_glyph("video") is None
+
+
+def test_without_a_keyboard_setup_font_says_to_add_yes(monkeypatch):
+    """`! max config setup-font` stopped with a bare "Aborted."."""
+    from max_cli.interface.cli_config import app
+
+    downloads = []
+    monkeypatch.setattr(
+        fonts, "setup_font", lambda on_progress=None: downloads.append(1)
+    )
+
+    result = runner.invoke(app, ["setup-font"])
+
+    assert result.exit_code == 1
+    assert "add --yes" in result.output
+    assert downloads == []

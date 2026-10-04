@@ -1,3 +1,5 @@
+import sys
+
 import typer
 
 from max_cli.interface.config import grab_app, manage_app, setup_app
@@ -27,6 +29,14 @@ def setup_font(
     from max_cli.common.exceptions import MaxError
     from max_cli.common.logger import console, log_error, log_success
 
+    if not yes and not sys.stdin.isatty():
+        # `! max config setup-font` and pipes have no keyboard: the questions
+        # read end-of-input and stopped with a bare "Aborted."
+        log_error(
+            "This command asks before it downloads or changes anything, and nothing "
+            "here can answer. Run it in a terminal, or add --yes."
+        )
+        raise typer.Exit(1)
     if fonts.font_installed() and not force:
         console.print(f"[green]{fonts.NERD_FONT_FACE} is installed.[/green]")
     else:
