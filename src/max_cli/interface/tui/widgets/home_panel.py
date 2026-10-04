@@ -39,7 +39,12 @@ from max_cli.interface.tui.widgets.charts import (
     Spark,
     StackChart,
 )
-from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS, page_icon
+from max_cli.interface.tui.widgets.sidebar import (
+    ICON_WIDTH,
+    SECTION_KEYS,
+    page_colour,
+    page_icon,
+)
 
 HISTORY_SAMPLES = 60  # 2 minutes of CPU history at one sample per refresh
 GIGABYTE = 1024**3
@@ -63,6 +68,17 @@ LAUNCHPAD = [
     ("ai", "Ask AI", "plain words"),
     ("activity", "Activity", "queue · history"),
 ]
+
+
+# A launch tile lights up in its page's colour, like its chip.
+LAUNCH_HOVER_CSS = "".join(
+    f"""
+    Launcher.-page-{page}:hover, Launcher.-page-{page}:focus {{
+        background: {page_colour(page)} 15%;
+        border: round {page_colour(page)};
+    }}"""
+    for page, _name, _purpose in LAUNCHPAD
+)
 
 
 def greeting(now: datetime) -> str:
@@ -173,8 +189,9 @@ class Launcher(Widget, can_focus=True):
         page: str = "",
         action: str = "",
         chip: bool = False,
+        classes: str = "",
     ) -> None:
-        super().__init__(id=id, classes="-chip" if chip else "")
+        super().__init__(id=id, classes=f"{'-chip' if chip else ''} {classes}".strip())
         self.label = label
         self.page, self.action = page, action
         self.tooltip = f"Open {action.replace('.', ' ')}" if action else None
@@ -299,7 +316,8 @@ def _fit(text: str, width: int, right: bool = False) -> str:
 class HomePanel(Vertical):
     """The dashboard's first page."""
 
-    DEFAULT_CSS = """
+    DEFAULT_CSS = (
+        """
     HomePanel {
         padding: 1 2;
     }
@@ -462,6 +480,8 @@ class HomePanel(Vertical):
         height: 12;
     }
     """
+        + LAUNCH_HOVER_CSS
+    )
 
     OpenPage = OpenPage
 
@@ -485,6 +505,7 @@ class HomePanel(Vertical):
                         self._launch_label(section_id, name, purpose),
                         id=f"launch-{section_id}",
                         page=section_id,
+                        classes=f"-page-{section_id}",
                     )
             with Horizontal(id="home-again"):
                 yield Static("PICK UP AGAIN  ", id="home-again-label")
@@ -572,12 +593,12 @@ class HomePanel(Vertical):
 
     @staticmethod
     def _launch_label(section_id: str, name: str, purpose: str) -> Content:
+        """The page's chip and name with its key, what it's for under them."""
         return Content.assemble(
-            (f" {SECTION_KEYS[section_id]} ", "bold $background on $primary"),
-            " ",
             page_icon(section_id),
-            (f" {name}\n", "bold"),
-            (purpose, "$text-muted"),
+            (f" {name}", "bold"),
+            (f"  {SECTION_KEYS[section_id]}\n", "bold $text-muted"),
+            (" " * (ICON_WIDTH + 1) + purpose, "$text-muted"),
         )
 
     # --- refresh ------------------------------------------------------------------

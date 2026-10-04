@@ -76,9 +76,10 @@ class Settings(BaseSettings):
     )  # dashboard downloads at once
 
     # --- DASHBOARD ---
-    # Page icons: "emoji" works in any terminal; "nerd" draws crisp one-colour
-    # icons and needs a Nerd Font (e.g. Cascadia Code NF) in the terminal.
-    DASHBOARD_ICONS: str = "emoji"
+    # Page icons: "glyph" (symbols on chips in each page's colour), "nerd"
+    # (crisper glyphs; needs a Nerd Font such as Cascadia Code NF as the
+    # terminal's font) or "emoji".
+    DASHBOARD_ICONS: str = "glyph"
 
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]

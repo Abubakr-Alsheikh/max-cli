@@ -43,7 +43,7 @@ TYPE_LOOK: dict[str, TypeLook] = {
     "download": TypeLook("Downloads", "$success"),
     "ai": TypeLook("AI", "$accent"),
     "pdf": TypeLook("PDF", "$warning"),
-    "images": TypeLook("Images", "$primary-darken-2"),
+    "images": TypeLook("Images", "$warning-lighten-2"),
     "files": TypeLook("Files", "$accent-lighten-2"),
     "tools": TypeLook("Tools", "$foreground"),
 }

@@ -21,9 +21,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
 
-# (page id, icon, label), in sidebar order. The number keys follow this order.
-# Colour emoji: the thin symbols used before were hard to see, or missing, in
-# common Windows terminal fonts.
+# (page id, emoji, label), in sidebar order. The number keys follow this order.
 SECTIONS = [
     ("home", "\U0001f3e0", "Home"),
     ("download", "\U0001f4e5", "Download"),
@@ -53,7 +51,42 @@ NERD_ICONS = {
     "settings": "\U000f0493",
 }
 EMOJI_ICONS = {section_id: icon for section_id, icon, _label in SECTIONS}
-NERD_STYLE = "nerd"
+# The default: plain symbols, drawn dark on a chip of the page's colour. Bare
+# thin symbols were hard to see, so the chip carries the page; symbols the
+# terminal's font lacks come from Segoe UI Symbol (Windows Terminal) or the
+# system's symbol font.
+GLYPH_ICONS = {
+    "home": "\u2302",  # house
+    "download": "\u2b07",  # down arrow
+    "video": "\u25ba",  # play
+    "audio": "\u266b",  # notes
+    "images": "\u25e9",  # framed picture
+    "pdf": "\u2630",  # page of lines
+    "files": "\u274f",  # stacked sheets
+    "ai": "\u2726",  # spark
+    "activity": "\u25f7",  # clock
+    "extras": "\u271a",  # plus
+    "settings": "\u2699",  # gear
+}
+GLYPH_STYLE, NERD_STYLE, EMOJI_STYLE = "glyph", "nerd", "emoji"
+ICON_WIDTH = 3  # cells, in every style, so labels line up
+# Each page's colour: a command group's is the one Home's BY TYPE chart uses
+# for it (home_stats.TYPE_LOOK), so a page looks the same everywhere.
+PAGE_KINDS = {
+    "download": "download",
+    "video": "video",
+    "audio": "audio",
+    "images": "images",
+    "pdf": "pdf",
+    "files": "files",
+    "ai": "ai",
+    "extras": "tools",
+}
+OTHER_PAGE_COLOURS = {
+    "home": "$primary-lighten-2",
+    "activity": "$success-darken-1",
+    "settings": "$secondary-darken-2",
+}
 SECTION_GROUPS = (
     (
         "DO",
@@ -78,15 +111,30 @@ SECTION_KEYS = {
 SECTION_KEYS["settings"] = SETTINGS_KEY
 
 
+def page_colour(section_id: str) -> str:
+    """The theme colour that marks a page (its chip, its launch tile)."""
+    from max_cli.interface.tui.home_stats import look
+
+    kind = PAGE_KINDS.get(section_id)
+    if kind is not None:
+        return look(kind).style
+    return OTHER_PAGE_COLOURS.get(section_id, "$primary")
+
+
 def page_icon(section_id: str) -> Content:
-    """A page's icon in the style DASHBOARD_ICONS picks, two columns wide
-    either way, so labels line up: an emoji is two columns, a Nerd Font
-    glyph one, coloured like the theme's live values."""
+    """A page's icon in the style DASHBOARD_ICONS picks, ICON_WIDTH cells
+    in each: a symbol (or a Nerd Font glyph) on a chip of the page's colour,
+    or an emoji."""
     from max_cli.config import settings
 
-    if settings.DASHBOARD_ICONS == NERD_STYLE and section_id in NERD_ICONS:
-        return Content.assemble((NERD_ICONS[section_id], "$primary"), " ")
-    return Content(EMOJI_ICONS.get(section_id, "  "))
+    style = settings.DASHBOARD_ICONS
+    if style == EMOJI_STYLE:
+        return Content(f"{EMOJI_ICONS.get(section_id, '  ')} ")
+    icons = NERD_ICONS if style == NERD_STYLE else GLYPH_ICONS
+    glyph = icons.get(section_id, " ")
+    return Content.styled(
+        f" {glyph} ", f"bold $background on {page_colour(section_id)}"
+    )
 
 
 EXPAND_LABEL = "»"
@@ -165,7 +213,7 @@ class NavItem(Widget, can_focus=True):
         name = Content.assemble(
             (f"{SECTION_KEYS[self.section_id]}  ", "dim"),
             self.icon,
-            f"  {self.label}",
+            f" {self.label}",
         )
         # The badge sits against the right padding, so the right margin
         # matches the left one whatever the label's length.

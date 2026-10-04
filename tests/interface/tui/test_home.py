@@ -219,18 +219,32 @@ async def test_stack_chart_colours_each_kind():
 
 
 @pytest.mark.parametrize(
-    ("style", "glyph"), [("emoji", "\U0001f3e0"), ("nerd", "\U000f02dc")]
+    ("style", "glyph"),
+    [("glyph", "►"), ("nerd", "\U000f0567"), ("emoji", "\U0001f3ac")],
 )
 def test_page_icons_follow_the_setting(monkeypatch, style, glyph):
     from max_cli.config import settings
-    from max_cli.interface.tui.widgets.sidebar import page_icon
+    from max_cli.interface.tui.widgets.sidebar import ICON_WIDTH, page_icon
 
     monkeypatch.setattr(settings, "DASHBOARD_ICONS", style)
 
-    icon = page_icon("home")
+    icon = page_icon("video")
 
-    assert icon.plain.startswith(glyph)
-    assert icon.cell_length == 2  # labels line up either way
+    assert glyph in icon.plain
+    assert icon.cell_length == ICON_WIDTH  # labels line up in every style
+
+
+def test_a_page_chip_wears_the_colour_home_gives_its_kind(monkeypatch):
+    """Video is cyan in BY TYPE, so its chip is cyan in the sidebar too."""
+    from max_cli.config import settings
+    from max_cli.interface.tui import home_stats
+    from max_cli.interface.tui.widgets.sidebar import page_colour, page_icon
+
+    monkeypatch.setattr(settings, "DASHBOARD_ICONS", "glyph")
+
+    assert page_colour("video") == home_stats.look("video").style
+    styles = {str(span.style) for span in page_icon("video").spans}
+    assert any(home_stats.look("video").style in style for style in styles)
 
 
 @pytest.mark.asyncio

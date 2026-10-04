@@ -176,7 +176,7 @@ Type `max` (or `max dashboard`). In a script or a pipe, a bare `max` prints the 
 
 Forms take a file, a folder or a pattern, with **subfolders** and **redo** checkboxes for batches. Queueable forms can send the work to the queue. Other keys: `Ctrl+P` finds any action by name, `J` opens the jobs window, `?` shows help, `Ctrl+B` folds the sidebar to icons, `q` quits.
 
-With a [Nerd Font](https://www.nerdfonts.com/) in your terminal, set **Page icons** to **Nerd Font** in Settings for one-colour icons. See [Dashboard](docs/commands/dashboard.md).
+Each page keeps one colour across the sidebar, the launchpad and Home's charts. With a [Nerd Font](https://www.nerdfonts.com/) in your terminal, set **Page icons** to **Nerd Font** in Settings for crisper icons. See [Dashboard](docs/commands/dashboard.md).
 
 ## Safety: confirm, undo, back up
 

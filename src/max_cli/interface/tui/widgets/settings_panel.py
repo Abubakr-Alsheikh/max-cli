@@ -122,10 +122,10 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
                 "DASHBOARD_ICONS",
                 "Page icons",
                 "choice",
-                "Nerd Font icons need a Nerd Font (e.g. Cascadia Code NF) set as "
-                "your terminal's font; without one they show as boxes. Applies the "
-                "next time max starts.",
-                (("Emoji", "emoji"), ("Nerd Font", "nerd")),
+                "Symbols work in any terminal. Nerd Font icons are crisper but need "
+                "a Nerd Font (e.g. Cascadia Code NF) as your terminal's font; "
+                "without one they show as boxes. Applies the next time max starts.",
+                (("Symbols", "glyph"), ("Nerd Font", "nerd"), ("Emoji", "emoji")),
                 wide=True,
             ),
         ),

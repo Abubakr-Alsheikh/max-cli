@@ -38,7 +38,11 @@ Badges next to a section show what needs a look: a green `2` on Download means t
 
 The dashboard remembers whether you left the sidebar open or folded. In a window narrower than 100 columns it always shows icons only.
 
-The sidebar shows emoji icons, which work in any terminal. With a Nerd Font as your terminal's font (for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases), pick **Page icons: Nerd Font** on the Settings page for crisp one-colour icons in the dashboard's colours. Without a Nerd Font they show as boxes.
+Each page has a colour, and its icon sits on a chip of that colour in the sidebar and on Home's launchpad. Video is cyan, Audio magenta, Downloads green and so on, the same colours Home's BY TYPE chart uses. **Page icons** on the Settings page picks the style:
+
+- **Symbols** (the default): plain symbols that work in any terminal.
+- **Nerd Font**: crisper icons. They need a Nerd Font as your terminal's font, for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases; without one they show as boxes.
+- **Emoji**: colour emoji, without the page colours.
 
 ## Home page
 
@@ -194,7 +198,7 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
   The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. Images follow the same main AI and fallback: `max ai create` uses the main AI's image model, and the fallback's when the main one fails.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
-- **Dashboard:** **Page icons**, emoji or Nerd Font (see [Sections](#sections)).
+- **Dashboard:** **Page icons**: symbols, Nerd Font or emoji (see [Sections](#sections)).
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.
 
 "Save changes" checks the values first, writes only the settings you changed and applies them at once; "Downloads at once" and "Page icons" apply the next time `max` starts. "Discard" drops your edits and shows the saved values again. An empty API key removes it from the file. If a `.env` file in the folder you started `max` from sets the same settings, it wins; Maintenance says so.
