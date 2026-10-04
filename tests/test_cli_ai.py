@@ -229,9 +229,8 @@ class TestCreateAndEdit:
             result = runner.invoke(ai_app, ["create", "a cat", "-o", str(output)])
 
         assert result.exit_code == 0, result.output
-        engine.generate_image.assert_called_once_with(
-            "a cat", model="gemini-2.5-flash-image"
-        )
+        # No --model: the image models picked in settings answer.
+        engine.generate_image.assert_called_once_with("a cat", model=None)
         download_mock.assert_called_once_with("https://img.example/cat.png", output)
         output_text = _plain(result)
         assert "Image Ready!" in output_text

@@ -261,14 +261,16 @@ def analyze_image(
 def create_image(
     prompt: str = typer.Argument(..., help="Description of the image to create."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
+    model: Optional[str] = typer.Option(
+        None, help="Image model. Default: the one picked for your AI in settings."
+    ),
 ):
     """
-    Generate an image from text (Nano Banana).
+    Generate an image from text.
     """
     console.print(f"[cyan]Painting: [bold]{prompt}[/bold]...[/cyan]")
 
-    with console.status("[bold green]Nano Banana is generating...[/bold green]"):
+    with console.status("[bold green]Generating...[/bold green]"):
         try:
             eng = _get_engine()
             url = eng.generate_image(prompt, model=model)
@@ -284,7 +286,9 @@ def edit_image(
         ..., help="Instruction (e.g., 'Turn the sky purple')."
     ),
     output: Optional[Path] = typer.Option(None, "-o", help="Save path."),
-    model: str = typer.Option("gemini-2.5-flash-image", help="Override image model."),
+    model: Optional[str] = typer.Option(
+        None, help="Image model. Default: the one picked for your AI in settings."
+    ),
 ):
     """
     Edit an existing image using AI instructions.

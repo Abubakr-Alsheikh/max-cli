@@ -111,7 +111,7 @@ max ai create PROMPT [--output PATH] [--model MODEL]
 **Options:**
 
 - `--output`, `-o` - Save path (default: `created_image.png` in the current folder)
-- `--model` - Image model (default: `gemini-2.5-flash-image`). Max sends this model name to your main AI and to the fallback, in place of the image models you picked in settings. If your main AI doesn't serve that model, pass one it does
+- `--model` - Image model. Without it, Max uses the image model you picked for your main AI (`AI_IMAGE_MODEL`, `OPENROUTER_IMAGE_MODEL` or `GEMINI_IMAGE_MODEL`), and the fallback's when the main one fails
 
 **Example:**
 
@@ -130,7 +130,7 @@ max ai edit TARGET PROMPT [-o PATH] [--model MODEL]
 **Options:**
 
 - `-o` - Save path (default: `edited_<name>` in the current folder). `edit` has no long `--output` form
-- `--model` - Image model, as for `create` (default: `gemini-2.5-flash-image`)
+- `--model` - Image model, as for `create`
 
 **Example:**
 
