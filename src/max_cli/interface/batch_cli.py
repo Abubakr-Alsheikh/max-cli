@@ -6,6 +6,7 @@ returns True when it did. For one plain file it returns False and the
 command goes on with its own code, so one file looks exactly as before.
 """
 
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -57,6 +58,7 @@ def run_batch(
             if prepare is not None:
                 prepare()
             tasks, found = enqueue_each(action, raw, recursive, redo)
+            _say_clashes(found.clashes)
             _say_queued(len(tasks), found.done_already)
             return True
         if not is_batch(action, raw):
@@ -65,6 +67,7 @@ def run_batch(
     except MaxError as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
+    _say_clashes(found.clashes)
     _say_found(len(found.files), found.done_already)
     if not found.files:
         return True
@@ -78,6 +81,7 @@ def run_batch(
 
 
 def _run(action: Any, raw: dict[str, Any], found: Any) -> None:
+    from max_cli.core.catalog.activity import record
     from max_cli.core.catalog.batch import run_each
 
     with Progress(
@@ -93,7 +97,9 @@ def _run(action: Any, raw: dict[str, Any], found: Any) -> None:
             progress.console.print(f"  {mark} {escape(path.name)}")
             progress.advance(bar)
 
+        started = time.monotonic()
         result = run_each(action, raw, on_file=on_file, batch=found)
+    record(action, raw, result, seconds=time.monotonic() - started, via="cli")
     failed = result.details.get("failed", [])
     if failed:
         log_error(escape(result.message))
@@ -127,6 +133,22 @@ def _confirmed(action: Any, count: int, force: bool) -> bool:
             "Go on?[/yellow]"
         )
     return True
+
+
+def _say_clashes(clashes: list[Path]) -> None:
+    """Files left out because their result would overwrite another's."""
+    if not clashes:
+        return
+    names = ", ".join(path.name for path in clashes[:LISTED_FAILURES])
+    more = (
+        f" and {len(clashes) - LISTED_FAILURES} more"
+        if len(clashes) > LISTED_FAILURES
+        else ""
+    )
+    console.print(
+        f"[yellow]Left out {escape(names)}{more}: its result would have the same "
+        "name as another file's. Run it on its own with -o.[/yellow]"
+    )
 
 
 def _say_found(count: int, done_already: list[Path]) -> None:

@@ -56,12 +56,14 @@ def _run(
     Bad input (a missing file, an unknown option) exits 1 before any work
     starts. Other failures print `fail_message` and return None.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     engine = _get_engine()
     try:
         if status:
             with console.status(status):
-                return operation(engine=engine, **kwargs)
-        return operation(engine=engine, **kwargs)
+                return run_recorded(operation, engine=engine, **kwargs)
+        return run_recorded(operation, engine=engine, **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(str(e))
         raise typer.Exit(1) from None

@@ -415,9 +415,11 @@ def _download_immediate(
     def _do_download() -> None:
         # The same operation the dashboard's Download page runs, so both record
         # the download in history and report the final files.
+        from max_cli.core.catalog.activity import run_recorded
         from max_cli.core.operations import grab as grab_ops
 
-        result = grab_ops.download(
+        result = run_recorded(
+            grab_ops.download,
             url=url,
             output=output_path,
             media_type="audio" if audio_only else "video",

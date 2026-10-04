@@ -462,12 +462,29 @@ def _download_executor(task: "TaskItem") -> dict[str, Any]:
     # Post-processing (merge, audio extraction) can rename or remove the
     # files yt-dlp reported, so keep only the ones still on disk.
     output_files = [name for name in finished_files if Path(name).is_file()]
+    size = sum(Path(name).stat().st_size for name in output_files)
+    _log_download(url, output_files, size)
     return {
         "output_path": str(out),
         "output_files": output_files,
-        "file_size": sum(Path(name).stat().st_size for name in output_files),
+        "file_size": size,
         "message": f"Downloaded: {url[:50]}",
     }
+
+
+def _log_download(url: str, output_files: list[str], size: int) -> None:
+    """A queued download in the activity log, which Home and History read."""
+    from max_cli.core.catalog import get_action
+    from max_cli.core.catalog.activity import record
+    from max_cli.core.operations.result import ActionResult
+
+    result = ActionResult(
+        True,
+        f"Downloaded {url}",
+        [Path(name) for name in output_files],
+        {"size_bytes": size},
+    )
+    record(get_action("grab.download"), {"url": url}, result, via="queue")
 
 
 from max_cli.core.engines.task_queue import (  # noqa: E402

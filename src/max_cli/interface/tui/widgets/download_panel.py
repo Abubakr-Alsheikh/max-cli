@@ -1123,13 +1123,23 @@ class DownloadPanel(Vertical):
 
     @on(Button.Pressed, "#btn-queue")
     def _on_queue(self) -> None:
+        from max_cli.common.exceptions import MaxError
         from max_cli.core.catalog.runner import enqueue_action
 
         all_values = self._validated()
         if all_values is None:
             return
         for values in all_values:
-            enqueue_action(self._action, values, title=self._title_for(values["url"]))
+            try:
+                enqueue_action(
+                    self._action, values, title=self._title_for(values["url"])
+                )
+            except MaxError as e:
+                self._set_status(
+                    Content.from_markup("[$error]$why[/$error]", why=str(e))
+                )
+                self.notify(str(e), severity="error")
+                return
         self._set_status(
             Content.from_markup(
                 f"[$success]Added {len(all_values)} to the queue.[/$success] "
@@ -1180,6 +1190,7 @@ class DownloadPanel(Vertical):
     def _run_job(self, job: DownloadJob) -> None:
         """Runs in a thread worker: wait for a slot, download, report back."""
         from max_cli.common.exceptions import OperationCancelled
+        from max_cli.core.catalog.activity import record
         from max_cli.core.catalog.runner import run_action
 
         while not self._slots.acquire(timeout=SLOT_POLL_SECONDS):
@@ -1217,6 +1228,7 @@ class DownloadPanel(Vertical):
                     int(status.get("eta") or 0),
                 )
 
+            started = time.monotonic()
             try:
                 result = run_action(
                     self._action,
@@ -1227,8 +1239,20 @@ class DownloadPanel(Vertical):
             except OperationCancelled:
                 self.app.call_from_thread(self._row_call, job, "set_cancelled")
             except Exception as e:
+                record(
+                    self._action,
+                    job.values,
+                    error=str(e),
+                    seconds=time.monotonic() - started,
+                )
                 self.app.call_from_thread(self._row_call, job, "set_failed", str(e))
             else:
+                record(
+                    self._action,
+                    job.values,
+                    result,
+                    seconds=time.monotonic() - started,
+                )
                 if result.output_files:
                     job.output_folder = result.output_files[0].parent
                 self.app.call_from_thread(

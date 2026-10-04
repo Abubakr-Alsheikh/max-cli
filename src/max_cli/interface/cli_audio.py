@@ -62,8 +62,10 @@ def _run(
     Bad input (a missing file, no tags given) exits 1 before any work. Other
     failures print `fail_message` and return None; `max` still exits 1.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     try:
-        return operation(**kwargs)
+        return run_recorded(operation, **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None

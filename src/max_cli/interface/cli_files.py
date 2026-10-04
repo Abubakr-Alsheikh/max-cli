@@ -54,8 +54,10 @@ def _run(
     Bad input (a missing file, not a folder) exits 1. Other failures print
     `fail_message` and return None; with no fail_message they exit 1.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     try:
-        return operation(**kwargs)
+        return run_recorded(operation, **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None

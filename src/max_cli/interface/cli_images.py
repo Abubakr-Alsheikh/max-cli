@@ -36,6 +36,7 @@ def _run(operation: Callable[..., "ActionResult"], label: str, **kwargs: Any) ->
     Bad input (a missing path, no size for resize) exits 1 before any work.
     """
     from max_cli.common.events import get_emitter
+    from max_cli.core.catalog.activity import run_recorded
     from max_cli.interface.event_subscriber import EventSubscriber
 
     emitter = get_emitter()
@@ -43,7 +44,9 @@ def _run(operation: Callable[..., "ActionResult"], label: str, **kwargs: Any) ->
     subscriber.subscribe()
     try:
         with subscriber.create_progress_context(0, f"{label}..."):
-            result = operation(engine=_get_engine(), emitter=emitter, **kwargs)
+            result = run_recorded(
+                operation, engine=_get_engine(), emitter=emitter, **kwargs
+            )
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(str(e))
         raise typer.Exit(1) from None

@@ -51,8 +51,10 @@ def _run(
     Other failures print `fail_message`; commands whose scripts rely on it
     exit 1 (exit_on_error), the rest return None and `max` exits 1 anyway.
     """
+    from max_cli.core.catalog.activity import run_recorded
+
     try:
-        return operation(engine=_get_engine(), **kwargs)
+        return run_recorded(operation, engine=_get_engine(), **kwargs)
     except (ResourceNotFoundError, ValidationError) as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None

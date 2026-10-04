@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from max_cli.common.atomic import atomic_write_json
+from max_cli.common.file_lock import FileLock
 from max_cli.common.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 # badge refresh reads. A short wait clears it.
 FILE_ATTEMPTS = 5
 FILE_RETRY_SECONDS = 0.05
+# Several processes write the log (the dashboard, CLI commands, the queue
+# worker): each save waits this long for the others.
+LOCK_SECONDS = 5
 
 
 @retry(
@@ -88,34 +92,66 @@ class ActivityLog:
         # A log that couldn't be read must never save: it would write its
         # empty list over the whole history.
         self._readable = True
+        # What this instance added or changed: a save merges only these into
+        # what's on disk, so writers in other processes and threads keep
+        # their entries.
+        self._changed: dict[str, ActivityEntry] = {}
+        self._cleared = False
         self._load()
 
     def _ensure_dir(self) -> None:
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     def _load(self) -> None:
+        self._entries = self._read() or []
+
+    def _read(self) -> Optional[list["ActivityEntry"]]:
+        """The entries on disk; None when the file can't be read."""
         if not self.LOG_FILE.exists():
-            return
+            return []
         try:
             data = json.loads(_read_text(self.LOG_FILE))
-            self._entries = [ActivityEntry.from_dict(e) for e in data]
+            return [ActivityEntry.from_dict(e) for e in data]
         except (json.JSONDecodeError, KeyError, TypeError):
-            self._entries = []
+            return []
         except PermissionError:
             logger.warning("Activity log locked; this change won't be logged")
             self._readable = False
+            return None
+
+    def _mark(self, entry: "ActivityEntry") -> None:
+        self._changed[entry.id] = entry
+        self._save()
 
     def _save(self) -> None:
-        """Write the log. Skipped when the file stays locked: the log is a
-        record, and failing here stopped the work that was being logged."""
+        """Merge this instance's changes into the log on disk and write it.
+        Skipped when the file stays locked: the log is a record, and failing
+        here stopped the work that was being logged."""
         if not self._readable:
             return
         self._ensure_dir()
-        data = [e.to_dict() for e in self._entries[: self.MAX_ENTRIES]]
+        lock = FileLock(self.LOG_FILE.with_name(self.LOG_FILE.stem + ".lock"))
+        if not lock.acquire(timeout=LOCK_SECONDS):
+            logger.warning("Activity log busy; this change wasn't saved")
+            return
         try:
-            _write_json(self.LOG_FILE, data)
+            on_disk = self._read()
+            if on_disk is None:
+                return
+            if self._cleared:
+                on_disk = []
+            merged = {entry.id: entry for entry in on_disk}
+            merged.update(self._changed)
+            self._entries = sorted(
+                merged.values(), key=lambda entry: entry.timestamp, reverse=True
+            )[: self.MAX_ENTRIES]
+            _write_json(self.LOG_FILE, [e.to_dict() for e in self._entries])
+            self._changed = {}
+            self._cleared = False
         except PermissionError:
             logger.warning("Activity log locked; this change wasn't saved")
+        finally:
+            lock.release()
 
     def start_entry(
         self,
@@ -125,7 +161,7 @@ class ActivityLog:
     ) -> ActivityEntry:
         entry = ActivityEntry(category=category, action=action, details=details)
         self._entries.insert(0, entry)
-        self._save()
+        self._mark(entry)
         return entry
 
     def complete_entry(
@@ -137,7 +173,7 @@ class ActivityLog:
         entry.status = status
         if result:
             entry.details.update(result)
-        self._save()
+        self._mark(entry)
 
     def add_entry(
         self,
@@ -155,7 +191,7 @@ class ActivityLog:
             duration_ms=duration_ms,
         )
         self._entries.insert(0, entry)
-        self._save()
+        self._mark(entry)
         return entry
 
     def get_entry(self, entry_id: str) -> Optional[ActivityEntry]:
@@ -206,5 +242,7 @@ class ActivityLog:
     def clear(self) -> int:
         count = len(self._entries)
         self._entries = []
+        self._changed = {}
+        self._cleared = True
         self._save()
         return count
