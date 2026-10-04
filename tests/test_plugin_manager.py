@@ -406,19 +406,100 @@ def test_register_plugin_and_info(plugin_dir, config_dir):
     assert manager.get_all_plugins() == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="discover_plugins also returns CLIPlugin imported into the plugin "
-    "module; load_all instantiates it and raises TypeError (abstract class), "
-    "so a plugin written like examples/plugins/hello_world.py breaks startup",
-)
 def test_load_all_with_example_plugin(plugin_dir, config_dir):
+    """Regression: the example imports CLIPlugin by name, and load_all used to
+    instantiate that abstract class and crash every `max` command."""
     _install_example_plugin(plugin_dir)
     manager = _manager(plugin_dir, config_dir)
 
     manager.load_all(_context())
 
     assert manager.list_plugins() == ["hello-world"]
+
+
+README_PLUGIN = """
+import typer
+
+from max_cli.plugins.base import CLIPlugin, EnginePlugin, Plugin
+
+
+class HelloPlugin(CLIPlugin):
+    def __init__(self) -> None:
+        super().__init__(name="hello", version="1.0.0", description="Say hello")
+
+    def register(self, app: typer.Typer) -> None:
+        pass
+
+
+plugin = HelloPlugin()
+"""
+
+
+def test_discovery_skips_imported_and_abstract_classes(plugin_dir, config_dir):
+    (plugin_dir / "hello.py").write_text(README_PLUGIN, encoding="utf-8")
+    (plugin_dir / "half.py").write_text(
+        "from max_cli.plugins import base\n\n\n"
+        "class HalfPlugin(base.CLIPlugin):\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    assert _discovered_names(_manager(plugin_dir, config_dir)) == ["HelloPlugin"]
+
+
+def test_load_all_uses_the_module_level_plugin_instance(plugin_dir, config_dir):
+    (plugin_dir / "hello.py").write_text(README_PLUGIN, encoding="utf-8")
+    manager = _manager(plugin_dir, config_dir)
+
+    manager.load_all(_context())
+
+    assert manager.get_plugin("hello") is sys.modules["max_cli_plugins.hello"].plugin
+
+
+def test_plugin_that_fails_to_start_is_reported_and_skipped(
+    plugin_dir, config_dir, caplog
+):
+    _write_plugin(plugin_dir, "good", "GoodPlugin", "good")
+    (plugin_dir / "angry.py").write_text(
+        "from max_cli.plugins import base\n\n\n"
+        "class AngryPlugin(base.CLIPlugin):\n"
+        "    def __init__(self):\n"
+        "        raise RuntimeError('no thanks')\n\n"
+        "    def register(self, app):\n"
+        "        pass\n",
+        encoding="utf-8",
+    )
+    manager = _manager(plugin_dir, config_dir)
+
+    with caplog.at_level("WARNING", logger="max_cli.plugins.manager"):
+        manager.load_all(_context())
+
+    assert manager.list_plugins() == ["good"]
+    broken = manager.get_all_plugins()["angry"]
+    assert broken.plugin is None
+    assert "no thanks" in broken.error
+    assert any("AngryPlugin" in record.getMessage() for record in caplog.records)
+
+
+def test_plugin_whose_priority_raises_still_loads(plugin_dir, config_dir):
+    (plugin_dir / "odd.py").write_text(
+        "from max_cli.plugins import base\n\n\n"
+        "class OddPlugin(base.CLIPlugin):\n"
+        "    def __init__(self):\n"
+        "        super().__init__(name='odd', version='1')\n\n"
+        "    @property\n"
+        "    def priority(self):\n"
+        "        raise ValueError('bad priority')\n\n"
+        "    def register(self, app):\n"
+        "        pass\n",
+        encoding="utf-8",
+    )
+    manager = _manager(plugin_dir, config_dir)
+
+    manager.load_all(_context())
+    manager.register_all(_context().app)
+
+    assert manager.list_plugins() == ["odd"]
 
 
 @pytest.mark.xfail(
