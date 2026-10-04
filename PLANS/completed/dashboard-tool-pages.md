@@ -1,6 +1,7 @@
 # Dashboard: a page per command group
 
-**Status:** in progress. Video (2026-09-30), PDF, Images, Files and Audio (2026-10-01) pages built; the Tools page is gone.
+**Status:** Completed
+**Updated:** 2026-10-04
 **Decided by:** the maintainer, 2026-09-30 ("lets build on top of this plan").
 
 ## Goal
@@ -41,10 +42,11 @@ Target sidebar: DO 1 Home, 2 Download, 3 Video, 4 Audio, 5 Images, 6 PDF, 7 File
 - [x] Extras on key 0 after the `tools` port (2026-10-02): QR code on the page, clipboard image saved under a dated name in Pictures with "Open on the Images page", copy a text file. Extras and Settings share the MORE group, so every page fits a 44-row window.
 - [x] The sidebar starts open with names and remembers whether you folded it (`sidebar_open`), the maintainer's choice (2026-10-02).
 - [x] AI page with the agent (2026-10-02): replaced Chat on key 8. Live steps, a dialog before risky actions, Open folder and Undo..., dry run, new chat. (The Tools page went with the Audio page.)
-- [ ] Results: a list of finished runs on each page, with Open.
+- [D] Results: a list of finished runs on each page, with Open. Moved to `dashboard-design-system.md`, R4.
 
 ## Decisions
 
 - Pages come from specs, not classes: a new group costs a spec and a `describe`.
 - The form's own file field stays visible; the FILE card fills it. You can still type another path there.
 - Page numbers in user text come from `SECTION_KEYS`; adding a page moves the keys.
+- 2026-10-04: Reconciled before the 1.0 release and moved to completed. Every group with catalog actions has its page; `ai` has the AI page with the agent instead of a tool page. The one open idea, a results list per page, moved to `dashboard-design-system.md`.

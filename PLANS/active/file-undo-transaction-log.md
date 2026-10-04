@@ -1,8 +1,8 @@
 # Plan: Undo / Transaction Log
 
 **Status:** In Progress
-**Priority:** P1
-**Updated:** 2026-09-25
+**Priority:** P2
+**Updated:** 2026-10-04
 **Related:** User Experience & Laziness (Feature 2B)
 
 ## Overview
@@ -1372,7 +1372,7 @@ All changes are **backward compatible**:
 
 ## Remaining
 
-- Fix the 11 mypy errors in `common/transaction_log.py`. All come from `Optional[Path]` values used without a `None` check in `undo()`. They count toward `mypy-baseline.txt`, so run `python scripts/mypy_baseline.py --update` after the fix.
+- Fix the 11 mypy errors in `common/transaction_log.py` (still 11 on 2026-10-04; type-only, since every recorded rename, move and delete has an `original_path`). All come from `Optional[Path]` values used without a `None` check in `undo()`. They count toward `mypy-baseline.txt`, so run `python scripts/mypy_baseline.py --update` after the fix.
 
 ## Decisions
 
@@ -1380,3 +1380,4 @@ All changes are **backward compatible**:
   - Each transaction group is its own file, `~/.max_cli/transactions/<group_id>.json`, written with `atomic_write_json`. `docs/commands/files.md` still names a single `transactions.json`.
   - `tests/test_file_organizer_transactions.py` was never created. `test_transaction_log.py` covers undo per operation type, and `test_cli_files.py` covers `order` then `undo`. A manual run on 2026-09-25 confirmed that undo reverses `smart_sort`, `delete_duplicates` and `secure_delete`, and that a second undo is a no-op.
   - Phase 7 ships: `AudioMetadataEngine.organize()` accepts a `transaction_log`.
+- 2026-10-04: Reconciled before the 1.0 release. The Activity page's Undo tab (`widgets/undo_panel.py`) and `TransactionLog.make_dirs` (`OP_MKDIR`) shipped since. `docs/commands/files.md` no longer names a single `transactions.json`.

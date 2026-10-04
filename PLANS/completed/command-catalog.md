@@ -1,8 +1,8 @@
 # Plan: One Command Catalog
 
-**Status:** In Progress (design approved)
+**Status:** Completed
 **Priority:** P1
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 **Parent:** `dashboard-first-ai-agent.md`, Step 2
 
 ## Goal
@@ -130,11 +130,11 @@ Each step is one PR, with tests first.
    - `files` (transaction log, `smart-sort`'s two engines). Done 2026-09-27, branch `feat/catalog-files`: 10 actions; mutating ones return `undo_group`. The Files page's Organize, Duplicates and Backup buttons open forms that ask first; Organize and Duplicates used to run at once;
    - `tools`. Done 2026-10-02, branch `feat/extras-palette-settings`: `share`, `paste`, `copy` in `core/operations/tools.py`. `paste` takes an `overwrite` option (`-f`, `--force` on the CLI) instead of a CLI-only `--force`, so the dashboard has nothing to confirm: an existing file stays unless you ask;
    - `audio` (the batch loop). Done 2026-10-01, branch `feat/audio-page`: 7 actions in `core/operations/audio.py`; `denoise` reuses `video.denoise`. Fixed on the way: `set --comment` on MP3 and `--composer` on M4A failed, `get` showed M4A's raw atom names, `batch --track N` wrote 0, `clear --keep-duration` did nothing (now hidden). `batch` and `organize` take folders and patterns; `organize --dry-run` is new;
-4. **`grab download`: next, by the maintainer's choice.**
+4. **`grab download`.** Done 2026-09-26 (`grab-page-redesign.md`, G1 and G5).
    - Split out a core `download` operation: retries, URL cleaning and playlist rules.
    - The CLI keeps its interactive prompt loop, and the dashboard's Download page calls the operation.
 5. **Agent tool views:** `list_groups`, `load_group` and JSON Schema. Test that the first prompt holds only the group list, and measure the tokens. This step feeds roadmap Step 4. Done 2026-10-02 in `core/agent/tools.py`: the prompt lists groups and action names (about 700 tokens), `load_group` returns the schemas.
-6. **Clean up.** Delete `command_registry.py` and `command_executor.py`, and fix the three small bugs above if an earlier step hasn't already.
+6. **Clean up.** Done. `command_registry.py` and `command_executor.py` were deleted on 2026-10-02 (commit cfe3ead). Of the three small bugs: `audio compress` uses `DEFAULT_AUDIO_COMPRESS_QUALITY`, and `--no-process` queues without starting the worker. The PDF compress quality of 75 survives only in the legacy `_pdf_compress_executor`, which nothing queues any more (see `global-task-queue.md`).
 
 ## Questions for the maintainer (answered 2026-09-26)
 
@@ -155,3 +155,7 @@ Each step is one PR, with tests first.
   - The Tools page lists every catalog action the dashboard may run. `ActionForm` builds each form, and the Files page's video Compress button opens the prefilled form instead of running with fixed settings.
   - The `video` entries and their special cases left `command_registry.py` and `command_executor.py`. The tests that covered them moved to `tests/test_catalog.py`.
 - 2026-09-26: The maintainer moved `grab` ahead of the other groups: "we will focus more then in the grab page to let it be more useful and flexible to work with and easier, because it's now the most important feature because it download from youtube, so I want to let the UI and UX be so good". Build step 4 comes next, together with a redesign of the Download page.
+- 2026-10-04: Reconciled before the 1.0 release and moved to completed. Every build step is done, and every dashboard action comes from the catalog. Not ported, by design or for later:
+  - `ai` (analyze, create, edit, search, extract): tracked in `dashboard-first-ai-agent.md`, Step 4.
+  - The rest of `grab` (queue, status, history, pot-setup), `config`, `queue` and `plugins`: interactive or bookkeeping commands with no form or agent use yet.
+  - Section 4, feature packs: waits for `feature-packs.md`.

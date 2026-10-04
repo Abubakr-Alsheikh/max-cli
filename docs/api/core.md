@@ -29,7 +29,7 @@ action.each_param()              # the file param a batch fills, or None
 
 | Function | What it does |
 |----------|--------------|
-| `expand_each(action, raw_args, recursive=False, redo=False)` | Turns files, folders and patterns into a `FileBatch`: `files` to run and `done_already` (results that exist) |
+| `expand_each(action, raw_args, recursive=False, redo=False)` | Turns files, folders and patterns into a `FileBatch`: `files` to run, `done_already` (results that exist) and `clashes` (results that would share a name with another file's) |
 | `run_each(action, raw_args, recursive=False, redo=False, on_file=None)` | Runs the files side by side and returns one summed `ActionResult`. `on_file(path, result, error)` hears about each file |
 | `enqueue_each(action, raw_args, recursive=False, redo=False)` | Queues one task per file; returns `(tasks, batch)` |
 | `is_batch(action, raw_args)` | True for several files, a folder or a pattern |

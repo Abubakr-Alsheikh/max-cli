@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Priority:** P1
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 
 ## Goal
 
@@ -36,21 +36,21 @@ Max started as a personal tool, and its commands are long and hard to remember f
   - The Downloads card that reads 0 (`grab`/`download` category mismatch).
   - AI chat blocking the UI.
 - [x] Every page scrolls (from `dashboard-ui-redesign.md`).
-- [ ] Wire or remove the dead System buttons (`interactive-tui-expansion.md`).
+- [x] OBSOLETE. Wire or remove the dead System buttons (`interactive-tui-expansion.md`). The System page is gone; Settings' Maintenance card replaced it.
 
 ### Step 2: One command catalog (single source of truth)
 The design and build order live in `command-catalog.md`.
-- [ ] Grow `interface/tui/command_registry.py` into one catalog in core that describes each action once. Each entry holds: its engine method, typed parameters with defaults from `core/presets.py`, whether it's destructive, and help text.
-- [ ] Generate from the catalog:
+- [x] DONE (`core/catalog`, `command-catalog.md`, completed). Grow `interface/tui/command_registry.py` into one catalog in core that describes each action once. Each entry holds: its engine method, typed parameters with defaults from `core/presets.py`, whether it's destructive, and help text.
+- [x] DONE. Generate from the catalog:
   - The dashboard forms (all parameters, see `dashboard-ui-redesign.md`).
   - The agent's tool definitions.
   - A drift test against the Typer commands.
-- [ ] Decide whether the Typer commands are generated from the catalog or only checked against it. Checking is the smaller step.
+- [x] Decided (Q1, 2026-09-26): only checked, by `tests/test_catalog_drift.py`.
 
 ### Step 3: New front door
 - [x] Bare `max` opens the dashboard when a person is at an interactive terminal (D2). `LazyTyperGroup.parse_args` does it; `textual` and `psutil` are required dependencies now, with `textual>=6.0.0` because older releases fail the dashboard tests (2026-09-26).
 - [x] `max <text>` routes to the agent (D1). `LazyTyperGroup.parse_args` turns a first word that isn't a command or option into `max ai ask "<all the words>"` (2026-10-02).
-- [ ] `max --help` and every existing command keep working unchanged.
+- [x] `max --help` and every existing command keep working unchanged (`tests/test_front_door.py`, `tests/test_lazy_groups.py`, the drift test).
 
 ### Step 4: Agent v2
 - [x] A tool-calling loop in core (`core/agent/`), 2026-10-02, branch `feat/ai-agent`:
@@ -75,20 +75,23 @@ The design and build order live in `command-catalog.md`.
 - [ ] Next tool ideas, not built: `ask_choice` (buttons on the AI page for a decision), image understanding for sorting photos by content (costs tokens per image; ask before many).
 - [x] Main AI and fallback (maintainer, 2026-10-03: OpenRouter's free credit ran out; fall back to Gemini's free API). `core/engines/ai_providers.py`: OpenAI or a custom URL, OpenRouter, Gemini and Ollama, each with its own key and model; a request that fails on the main AI goes to the fallback, which then stays in use for the session. Settings page (redesigned 2026-10-03 after the maintainer found the provider list duplicated and confusing): two slots, Main AI and Fallback, each showing only its provider's key, URL and a model picked from the provider's own list, with Test on the values on screen. `max config setup` asks for both and keeps the rest of the file.
 - [x] Gemini tool calls and parallel actions (maintainer, 2026-10-03: Gemini failed with "Function call is missing a thought_signature", and converting ten M4A files hit the 12-step limit). The agent sends back Gemini's `extra_content` on each tool call, and the fallback client adds Google's stand-in signature to calls another provider made. The actions of one turn run side by side (4 at most, in order when their paths overlap); the step limit counts model turns, with 40 actions per request. The Settings page's provider lists no longer bounce forever when both slots are set (that loop held a CPU core and made a first AI request on the dashboard wait over a minute). A CLI request still waits for its actions: a detached background run needs a queue that two processes can share (`queue.json` has only a thread lock).
-- [x] Smarter plans (maintainer, 2026-10-03: asked to convert M4A to MP3, the agent converted all 11 files again although 10 had MP3s from the request before, one per turn). `find_files` `missing` lists only the work left and names what it skipped; `run_action` `each` runs one action over a list of files side by side with one question. Replayed on gemini-flash-lite-latest: 4 turns, the done files skipped and named in the reply. Still open: `audio_convert` and other FFmpeg actions overwrite an existing output without asking (`-y`), from the CLI too.
-- [x] Batches and background jobs (maintainer, 2026-10-03: "support the batch tasks ... instead of one by one ... in the other places"; "we need to do" CLI background jobs). The task store is safe across processes (`common/file_lock.py`, `queue.lock`, `worker.lock`) and `max queue worker` runs queued work after the command returns; the CLI agent queues long jobs. 23 one-file commands take several files, a folder or a pattern (`core/catalog/batch.py`), skip finished files, and run four at a time; the CLI, the dashboard forms and the agent share it. Still open: images commands keep their own folder handling (no patterns or --recursive), and FFmpeg actions overwrite an existing output when you name one file.
+- [x] Smarter plans (maintainer, 2026-10-03: asked to convert M4A to MP3, the agent converted all 11 files again although 10 had MP3s from the request before, one per turn). `find_files` `missing` lists only the work left and names what it skipped; `run_action` `each` runs one action over a list of files side by side with one question. Replayed on gemini-flash-lite-latest: 4 turns, the done files skipped and named in the reply. The FFmpeg overwrite problem is a task of its own below.
+- [x] Batches and background jobs (maintainer, 2026-10-03: "support the batch tasks ... instead of one by one ... in the other places"; "we need to do" CLI background jobs). The task store is safe across processes (`common/file_lock.py`, `queue.lock`, `worker.lock`) and `max queue worker` runs queued work after the command returns; the CLI agent queues long jobs. 23 one-file commands take several files, a folder or a pattern (`core/catalog/batch.py`), skip finished files, and run four at a time; the CLI, the dashboard forms and the agent share it. Two gaps are tasks of their own below: `images` folder handling and FFmpeg overwrites.
+- [ ] **Before 1.0: FFmpeg actions overwrite an existing output without asking.** Every FFmpeg command passes `-y` (`core/engines/video_engine.py:54` and the rest, `audio_engine.py`), and the operations never check whether the output exists (`core/operations/video.py`, `compress`, `convert`, `to_audio`). Batches skip files whose result exists; one named file doesn't. Examples: `max video to-audio talk.mp4` replaces an existing `talk.mp3`; `max video convert clip.mkv` replaces an existing `clip.mp4`. These actions are `WRITES_NEW` (the default in `core/catalog/spec.py:111`), so neither the dashboard nor the agent asks. Fix: refuse or ask when the output exists, with `--force` (or an `overwrite` param like `tools paste`).
+- [ ] `images` commands keep their own folder handling: one TARGET (default `.`), no several files, patterns, `--recursive`, `--redo` or `--queue`, unlike the 23 batch actions (`max images compress --help`).
+- [ ] Show the full plan before the first step (Plan and confirm above).
 - [ ] Small local models: D5's simpler one-step mode. A model that can't call tools gets a clear error today.
-- [ ] The `ai` group (analyze, create, search ...) isn't in the catalog, so the agent can't call it yet.
+- [ ] The `ai` group (analyze, create, search ...) isn't in the catalog, so the agent and the dashboard can't call it yet.
 
 ### Step 5: Onboarding and packaging
 - [ ] A first-run wizard covering the API key (optional), FFmpeg and the download folder, with sensible defaults. It uses the arrow-key select menus from `feature-packs.md`, so you pick which settings to set up instead of typing answers.
-- [ ] Friendlier errors: "did you mean ...", plus a next step in every message.
+- [ ] Friendlier errors: "did you mean ...", plus a next step in every message. Today a mistyped group goes to the agent: `max vidoe compress a.mp4` runs `max ai ask "vidoe compress a.mp4"` (`core/cli/lazy_group.py:93`, `_is_request`), which fails without an AI set up instead of suggesting `video`.
 - [ ] Distribution for non-technical users, for example a Windows installer or a single executable. Research needed.
 
 ### Tests and docs
-- [ ] Routing tests for D1 and D2, including non-interactive terminals. D2 is covered in `tests/test_front_door.py`.
+- [x] Routing tests for D1 and D2, including non-interactive terminals: D1 in `tests/test_lazy_groups.py` (`test_text_that_isnt_a_command_goes_to_the_agent`), D2 in `tests/test_front_door.py`.
 - [x] Agent tests with a mocked model: tool selection, confirmation, refusal, dry run, limits (`tests/test_agent.py`, `tests/test_cli_ai.py`, `tests/interface/tui/test_ai_page.py`). Checked live against OpenRouter's `openrouter/free` on 2026-10-02.
-- [ ] README and `docs/`: a new "Getting started" built around `max` and plain-language requests.
+- [x] README and `docs/`: README's "Three ways to use Max" and "The AI agent", and `docs/usage.md`, start from `max` and plain-language requests (commit 14beb17).
 
 ## Related drafts
 
@@ -102,3 +105,4 @@ The design and build order live in `command-catalog.md`.
 
 - 2026-09-26: Drafted from the maintainer's idea: "`max` opens the dashboard, `max <text>` goes to an AI agent."
 - 2026-09-26: The maintainer answered D1-D5 (see above). Step 1 merged in PR #16.
+- 2026-10-04: Reconciled before the 1.0 release. Steps 1 to 3 are done. Open: the FFmpeg overwrite (a 1.0 blocker), `images` batch handling, the `ai` group in the catalog, small local models, and Step 5 (onboarding, friendlier errors, an installer).

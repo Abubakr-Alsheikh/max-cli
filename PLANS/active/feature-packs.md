@@ -2,7 +2,7 @@
 
 **Status:** Draft (idea captured; plan it later)
 **Priority:** P2
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 
 ## Goal
 
@@ -18,6 +18,7 @@ Each user turns on only the features they want, like image tools or media downlo
 - Command groups already load lazily (hardening D5). `core/cli/registry.py` has one entry per group, so turning a group on or off is a small change.
 - `plugin_commands_migration.md` plans to move heavy groups (`ai`, `video`, `grab`, `pdf`) into optional installs, so users don't download yt-dlp or PyMuPDF unless they need them. The maintainer put plugins on hold on 2026-09-25, and three plugin bugs stay deferred.
 - The dashboard sidebar comes from a fixed `SECTIONS` list in `widgets/sidebar.py`.
+- 2026-10-04: nothing here is built yet; it's a post-1.0 idea. Since this was written, the Settings page (`widgets/settings_panel.py`) replaced Config and System, and the agent lists every catalog group (`core/agent/tools.py`), so both are the places a feature switch would hook into.
 
 ## Ideas to plan later
 

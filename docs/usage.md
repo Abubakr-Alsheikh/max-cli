@@ -26,6 +26,8 @@ max files smart-sort ~/Downloads
 
 When you leave out a path, most commands use the current folder.
 
+A mistyped group such as `max vidoe compress a.mp4` stops with "Did you mean 'video'?". Other words that aren't a command go to the AI agent.
+
 ## Several files at once
 
 Commands that work on one file also take several files, a folder or a pattern. Max runs the files side by side and prints one summary at the end.
@@ -40,6 +42,8 @@ max pdf ocr scans/ --redo
 - `--recursive` looks in subfolders too.
 - A folder or a pattern skips files whose result already exists, and Max's own results. `--redo` runs them anyway. Files you name always run.
 - Max asks once before it overwrites anything.
+- Two files whose results would share a name (`clip.mov` and `clip.mp4`) don't both run: Max runs the first and names the others. Run those on their own with `-o`.
+- A name that exists is a file, even with brackets in it (`"Song [Live].mp4"`).
 - One failed file doesn't stop the others, and the command exits with code 1.
 
 Commands that take batches: the `max video` commands except `concat`, `record`, `stream` and `preview`; `max audio compress`, `denoise` and `clear`; `max pdf split`, `lock`, `rip`, `ocr`, `form-flatten` and `optimize`; `max files backup`. `max images` commands work on folders on their own.

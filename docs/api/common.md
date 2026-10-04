@@ -17,7 +17,7 @@
 | Module | Use it for |
 |--------|------------|
 | `transaction_log` | `TransactionLog` records file moves, renames and deletes so `max files undo` can reverse them |
-| `activity_log` | `ActivityLog` records every action the CLI, the dashboard and the agent run. The dashboard's Home and History read it |
+| `activity_log` | `ActivityLog` records every action the CLI, the dashboard, the queue worker and the agent run. Each save locks the file and merges, so several processes can write it. The dashboard's Home and History read it. `core/catalog/activity.py` has `run_recorded` and `record` for new callers |
 
 ## Running work
 

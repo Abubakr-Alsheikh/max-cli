@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Priority:** P1
-**Updated:** 2026-09-28
+**Updated:** 2026-10-04
 
 ## Goal
 
@@ -38,6 +38,7 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] Vendor `gfargo/tui-design-skill` (MIT) next to `textual-builder`. Read it in full, check it against Textual 8, add a Max override block and record it in `.claude/skills/THIRD_PARTY.md`.
 - [x] Add `textual-autocomplete` (path and URL completion in inputs) and `textual-plotext` (charts for Analytics and System). Both are MIT and support Python 3.9. `textual-dev` stays out.
 - [x] Order: smoothness fixes first (R0), then rules, theme, and page redesigns.
+- 2026-10-04: Reconciled before the 1.0 release. This plan now also holds the open items of `dashboard-ui-redesign.md` and `dashboard-tool-pages.md`, both completed. What's left is polish, not a 1.0 blocker.
 
 ## Tasks
 
@@ -52,12 +53,13 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [ ] The maintainer checks a real download and scrolling in Windows Terminal.
 
 ### R1: Design rules and checks
-- [ ] Vendor `tui-design-skill` (see Decisions).
+- [D] Vendor `tui-design-skill` (see Decisions). Not vendored: the in-house `max-tui-design` skill covers the same ground for this app. Vendor it only if a need shows up.
 - [x] Write `.claude/skills/max-tui-design/SKILL.md`: theme tokens, page anatomy, components, states, smoothness rules, CSS pitfalls, keyboard, PR checklist (2026-09-30). It supersedes the draft rules below.
 - [x] Point `AGENTS.md` at it.
 - [x] `scripts/tui_screenshot.py`: render any page with a throwaway home, optional sample data and the Jobs window.
 - [ ] Mechanical checks in `.claude/hooks/check_rules.py` for `interface/tui/`: no hex or named colours outside the theme; no `DataTable.clear(columns=True)` or `recompose()` in a `refresh_data`; progress callbacks throttled.
-- [ ] Every UI PR includes Pilot screenshots (SVG to PNG) of the pages it changes.
+- [x] Every UI PR includes Pilot screenshots of the pages it changes: step 1 of the `max-tui-design` PR checklist, rendered with `scripts/tui_screenshot.py`.
+- [ ] Snapshot tests for each page that fail on layout regressions (from `dashboard-ui-redesign.md`). Today only manual screenshots exist.
 
 ### R1.5: Sidebar and navigation (maintainer's choice, 2026-09-29: grouped, all 10 pages kept)
 - [x] Grouped list (Do, Track, Setup) with one-row items, arrow keys and Enter.
@@ -75,9 +77,9 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 ### R2: Theme and navigation
 - [x] One registered Max theme, `max-cyber` (`interface/tui/theme.py`), replaces the `$var` overrides in `app.py`. The Ctrl+P theme choice is remembered in `ui_prefs` (2026-09-29).
 - [ ] A light variant.
-- [ ] Page jumps and main actions in the command palette.
-- [ ] Footer shows each page's keys.
-- [ ] Style the page scrollbars from the theme (the track shows as a black bar).
+- [x] Page jumps and main actions in the command palette (`interface/tui/commands.py`, 2026-10-02).
+- [ ] Footer shows each page's keys. The app has a `Footer`, but most pages define no bindings of their own, so it shows only the app's keys.
+- [x] Style the page scrollbars from the theme (`scrollbar*` variables in `interface/tui/theme.py`).
 
 ### R3: Home and Download redesign
 - [x] Home: a command center with a futuristic look (maintainer's request, 2026-09-29).
@@ -100,9 +102,9 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
   - No Simple/Advanced switch: the OPTIONS card always shows (maintainer: it fits in its corner).
   - Check locks its button and shows a spinner with elapsed seconds until the site answers.
   - Found on the way: `test_cancel_stops_a_running_download` called `started.wait(5)`, which blocked the event loop, so the worker never started and the fake download looped forever. Likely the Python 3.9 hang seen under load in `ci_local --full`.
-- [ ] Mockups as screenshots for the maintainer's approval before building.
-- [ ] Then build, with empty, loading and error states for each section.
-- [ ] Path and URL autocomplete (`textual-autocomplete`).
+- [x] OBSOLETE. Mockups as screenshots for the maintainer's approval before building (Home and Download shipped after screenshot reviews).
+- [x] Then build, with empty, loading and error states for each section (Home launchpad in commit d52293c; Download in the second round above).
+- [ ] Path and URL autocomplete (`textual-autocomplete`). Not added: neither `textual-autocomplete` nor `textual-plotext` is in `pyproject.toml`. `widgets/charts.py` replaced plotext, so only autocomplete is still wanted. A new dependency needs the maintainer's yes.
 
 ### Queue in the dashboard (maintainer's report, 2026-09-29)
 - [x] Queued downloads stayed pending: nothing in the dashboard started the queue worker. The app now starts it on mount.
@@ -115,9 +117,12 @@ This plan replaces the "design standard" item in `dashboard-ui-redesign.md`.
 - [x] Pages review (maintainer, 2026-09-30): 10 pages became 8. Analytics went (Home shows the same numbers); Config and System became one Settings page (2026-09-30).
   - Settings shows only settings some code reads, with fitting controls, saves only changed keys, applies them at once, and flags a local `.env` that overrides them. Maintenance: versions, FFmpeg, data size, cache and 30-day undo cleanup, reset; each asks first.
   - Nine settings nothing read. Decided 2026-10-02: `CONFIRM_DESTRUCTIVE`, `MAX_RETRIES` and `DOWNLOAD_TIMEOUT` now work and sit in a SAFETY AND NETWORK card; the other six are deleted and listed in `config.REMOVED_SETTINGS`, which Maintenance, the dashboard's start and `max config validate` point out.
-- [ ] History becomes Activity: readable times, where the output went, Run again, and Undo for file changes.
-- [ ] Superseded by `dashboard-tool-pages.md` (maintainer, 2026-09-30): a page per command group instead of one Tools page and a "start from a file" Files page.
-- [ ] Move System's and Analytics' folder-size walks into a thread worker.
+- [x] History becomes Activity: readable times, where the output went, and Undo for file changes (the Activity page, 2026-10-02).
+- [ ] Run again from the History tab. The Queue tab's FINISHED list has Run again; History has only Clear.
+- [x] OBSOLETE. Superseded by `dashboard-tool-pages.md` (maintainer, 2026-09-30): a page per command group instead of one Tools page and a "start from a file" Files page. That plan is completed.
+- [x] Move System's and Analytics' folder-size walks into a thread worker (both pages are gone; Settings measures data size in a thread worker, `settings_panel.py:368`).
+- [ ] Results: a list of finished runs on each tool page, with Open (from `dashboard-tool-pages.md`). Today a form shows a one-line status and a toast; you find the output through Activity's History.
+- [ ] Keyboard and mouse parity, with visible focus, on every page (from `dashboard-ui-redesign.md`).
 
 ## The Max TUI rules (draft for R1; the maintained version is the `max-tui-design` skill)
 

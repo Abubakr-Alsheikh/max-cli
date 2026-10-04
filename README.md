@@ -124,6 +124,7 @@ max pdf ocr scans/ --redo                     # redo files that already have a r
 
 - A folder or a pattern skips files whose result already exists, and skips Max's own results (so `compress` doesn't compress `movie_compressed.mp4`). Add `--redo` to run them anyway. Files you name always run.
 - Max asks once before it overwrites anything, not once per file.
+- Two files whose results would share a name (`clip.mov` and `clip.mp4` both make `clip_compressed.mp4`) don't both run: Max runs the first and names the others.
 - If one file fails, the others still run, and the command exits with code 1.
 
 These commands take batches: every `max video` command except `concat`, `record`, `stream` and `preview`; `max audio compress`, `denoise` and `clear`; `max pdf split`, `lock`, `rip`, `ocr`, `form-flatten` and `optimize`; `max files backup`. `max images` commands took folders already. `max files shred` and `max pdf stamp` take one file on purpose.

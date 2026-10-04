@@ -1,8 +1,8 @@
 # Plan: TUI Dashboard Bugfix & UX Improvements
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** P0
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 **Related:** Interactive TUI Expansion (Feature 2C Phase 2)
 
 ## Overview
@@ -1279,3 +1279,4 @@ register_executor(TaskType.FILE_DUPLICATES, _file_duplicates_executor)
 - Success criterion 7 fails: mypy reports 11 errors in `src/max_cli/interface/tui/`. Two of them are live bugs: `config_panel.py:145` (`Label.renderable`, the search crash above) and `files_panel.py:218`, where `_on_filter` sets `Row.visible`, an attribute Textual ignores, so the Files filter box does nothing.
 - Issue 9 survives in a new form: `DownloadPanel` logs downloads to `ActivityLog` with `category="grab"`, while the History "Downloads" filter, `ActivityLog.get_stats()` and the Home Downloads card all expect `"download"`.
 - The hardening work replaced `DaemonManager` with `TaskManager` and split `media_engine.py` into `video_engine.py`, `audio_engine.py` and `stream_engine.py`. File and line references in the issue tables above predate that split.
+- 2026-10-04: Reconciled before the 1.0 release. Every checklist box is ticked or deferred. The panels this plan fixed (Config, System, Analytics, Chat, the old Files browser, the Tools panel) and `command_registry.py` and `command_executor.py` no longer exist: Settings, the per-group tool pages, the AI page and the command catalog replaced them. The file and line references in the issue tables describe that older code.

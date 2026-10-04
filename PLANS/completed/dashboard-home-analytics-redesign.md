@@ -1,8 +1,8 @@
 # Plan: Dashboard Home Redesign + Analytics Tab
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** P1
-**Updated:** 2026-09-25
+**Updated:** 2026-10-04
 **Related:** UX & Laziness (Feature 2C Phase 3)
 
 ## Overview
@@ -328,7 +328,7 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 
 - [x] `max dashboard` starts and Home tab shows system status bar
 - [x] CPU, Memory, Disk progress bars update every 2 seconds
-- [ ] Stats cards show correct counts. The Downloads card reads `ActivityLog.get_stats()["download"]`, but `DownloadPanel` logs through `CommandExecutor` with `category="grab"`, so the card stays at 0.
+- [x] OBSOLETE. Stats cards show correct counts (fixed 2026-09-26 by mapping `grab` to `download`; the card itself went with the Home launchpad redesign, see below). The Downloads card reads `ActivityLog.get_stats()["download"]`, but `DownloadPanel` logs through `CommandExecutor` with `category="grab"`, so the card stays at 0.
 - [D] Quick actions grid is 2x4, clickable, routes to correct tabs. Commit 9964cd6 kept three cards (Download Media, Smart Sort Files, Ask AI), the only ones with a section to route to. All three route correctly.
 - [x] Activity feed shows latest 10 entries with proper formatting
 - [x] Analytics tab shows live CPU/memory/disk numbers
@@ -342,7 +342,7 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 
 - [x] `max dashboard` launches with new Home tab layout
 - [x] Home tab shows live CPU, memory, disk progress bars
-- [ ] Home tab shows 4 stat cards with real data. All four cards (Commands, Downloads, Queue, Cached) render, but the Downloads count is wrong (see above).
+- [x] OBSOLETE. Home tab shows 4 stat cards with real data (replaced by the launchpad Home). All four cards (Commands, Downloads, Queue, Cached) render, but the Downloads count is wrong (see above).
 - [D] Home tab has 2x4 quick action grid. Replaced by three routable cards (see the checklist above).
 - [x] Analytics tab exists between Files and Config (now: a `Sidebar` section in that position)
 - [x] Analytics tab shows live system resources
@@ -352,8 +352,8 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 - [x] `psutil` is only imported inside methods, not at module level
 - [x] `ruff check`, `mypy`, and `pytest` all pass (mypy is clean on `home_panel.py`, `analytics_panel.py` and `system_panel.py`)
 - [x] `_format_bytes()` duplication replaced with `common.utils.format_size`
-- [ ] Tests: the three Testing Strategy tests (analytics panel render, home stats render, analytics section switch) do not exist yet.
-- [ ] Docs: `docs/commands/dashboard.md` and README.md do not mention the Home or Analytics sections.
+- [x] DONE for Home (`tests/interface/tui/test_home.py`, `test_home_stats.py`); OBSOLETE for Analytics, which is gone. Tests: the three Testing Strategy tests (analytics panel render, home stats render, analytics section switch) do not exist yet.
+- [x] DONE. `docs/commands/dashboard.md` has a Home page section; Analytics is gone. Docs: `docs/commands/dashboard.md` and README.md do not mention the Home or Analytics sections.
 
 ## Risks & Mitigations
 
@@ -370,3 +370,4 @@ Replace `_format_bytes()` with `from max_cli.common.utils import format_size` to
 - Home keeps three quick-action cards instead of a 2x4 grid, because only those three map to a dashboard section.
 - The Analytics storage block shows the transaction count on its "Logs" line.
 - Queue depth now comes from `get_task_manager()` (`core/engines/task_manager.py`), which replaced `DaemonManager`.
+- 2026-10-04: Reconciled before the 1.0 release and moved to completed. Analytics went in the 2026-09-30 pages review (Home shows the same numbers), and Home became a launchpad (commit d52293c) whose numbers come from `interface/tui/home_stats.py`. Open follow-up, tracked in `cli-dashboard-sync.md`: the Download page, CLI commands and queued tasks don't write to the activity log, so Home's Downloads count and week totals leave them out.
