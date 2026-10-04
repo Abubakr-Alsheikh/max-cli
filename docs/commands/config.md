@@ -124,6 +124,25 @@ max config import INPUT [--global | --local]
 
 - `--global` / `--local` - Write to the global config or to `.env` in the current folder (default: `--global`)
 
+## setup-font
+
+Install the font that gives the dashboard its page icons.
+
+```bash
+max config setup-font [--yes] [--force]
+```
+
+Max downloads CaskaydiaMono Nerd Font (3.6 MB): Cascadia Mono, Windows Terminal's own font, with icons added by the [Nerd Fonts](https://www.nerdfonts.com/) project under the SIL Open Font License. Max installs it for your user only, so you need no admin rights, and asks first.
+
+With Windows Terminal installed, Max then offers to make the font Windows Terminal's default. It keeps a copy of Terminal's settings next to them (`settings.json.max-backup`) and leaves the file alone if it has comments; Windows Terminal picks up the change at once. Open a new tab and run `max`: the pages show their icons.
+
+In another terminal, set CaskaydiaMono Nerd Font as its font yourself, then pick **Nerd Font** for **Page icons** on the dashboard's Settings page.
+
+**Options:**
+
+- `--yes`, `-y` - Do every step without asking
+- `--force`, `-f` - Download the font again even if it's installed
+
 ## setup-ffmpeg
 
 Download FFmpeg for your platform into `~/.max_cli/bin/` and check that it runs.

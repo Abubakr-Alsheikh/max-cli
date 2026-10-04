@@ -141,12 +141,14 @@ class NavItem(Widget, can_focus=True):
             f"bold {page_colour(self.section_id)}" if lit else "$text-muted",
         )
         bar = page_bar(self.section_id, lit)
+        glyph = page_glyph(self.section_id)
         if self.compact:
-            row = Content.assemble(bar, code, (badge, badge_style))
+            # Folded: the glyph says more than the code, when there is one.
+            mark = code if glyph is None else Content.assemble(" ", glyph)
+            row = Content.assemble(bar, mark, (badge, badge_style))
             # Centre by hand: content-align doesn't move text a widget renders.
             indent = max(0, (self.content_size.width - row.cell_length) // 2)
             return Content.assemble(" " * indent, row)
-        glyph = page_glyph(self.section_id)
         name = Content.assemble(
             bar,
             " ",

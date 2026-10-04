@@ -176,7 +176,7 @@ Type `max` (or `max dashboard`). In a script or a pipe, a bare `max` prints the 
 
 Forms take a file, a folder or a pattern, with **subfolders** and **redo** checkboxes for batches. Queueable forms can send the work to the queue. Other keys: `Ctrl+P` finds any action by name, `J` opens the jobs window, `?` shows help, `Ctrl+B` folds the sidebar to icons, `q` quits.
 
-Each page shows as a neon code in its own colour (`02 DOWNLOAD`), the same colour Home's charts use for it. With a [Nerd Font](https://www.nerdfonts.com/) in your terminal, **Page icons** in Settings adds a glyph before each name. See [Dashboard](docs/commands/dashboard.md).
+Each page shows as a neon code in its own colour (`02 DOWNLOAD`), the same colour Home's charts use for it. Run `max config setup-font` once for page icons: it installs a [Nerd Font](https://www.nerdfonts.com/) and sets it as Windows Terminal's font. See [Dashboard](docs/commands/dashboard.md).
 
 ## Safety: confirm, undo, back up
 
@@ -373,6 +373,7 @@ max config show
 max config save                              # make this folder's .env your global settings
 max config reset --local
 max config import cfg.json
+max config setup-font                        # icons for the dashboard's pages
 ```
 </details>
 

@@ -60,6 +60,12 @@ def isolated_home(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
+    # The dashboard's "auto" icons read Windows Terminal's settings when run
+    # inside it; tests see no terminal font, whoever runs them.
+    monkeypatch.delenv("WT_SESSION", raising=False)
+    from max_cli.common import terminal_font
+
+    terminal_font.terminal_has_nerd_font.cache_clear()
     monkeypatch.setattr(ffmpeg_resolver, "MAX_CLI_BIN_DIR", max_cli_dir / "bin")
     monkeypatch.setattr(
         ffmpeg_resolver,
