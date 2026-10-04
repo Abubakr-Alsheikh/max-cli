@@ -220,55 +220,48 @@ async def test_stack_chart_colours_each_kind():
 
 @pytest.mark.parametrize(
     ("style", "glyph"),
-    [("pixel", "\u2588"), ("nerd", "\U000f0567"), ("emoji", "\U0001f3ac")],
+    [("codes", None), ("nerd", "\U000f0567"), ("emoji", "\U0001f3ac")],
 )
-def test_page_icons_follow_the_setting(monkeypatch, style, glyph):
+def test_a_glyph_comes_only_with_the_nerd_or_emoji_setting(monkeypatch, style, glyph):
     from max_cli.config import settings
-    from max_cli.interface.tui.widgets.page_icons import (
-        ICON_COLUMNS,
-        ICON_ROWS,
-        page_icon,
-    )
+    from max_cli.interface.tui.widgets.page_icons import page_glyph
 
     monkeypatch.setattr(settings, "DASHBOARD_ICONS", style)
 
-    rows = page_icon("video")
+    shown = page_glyph("video")
 
-    assert any(glyph in row.plain for row in rows)
-    # The same block in every style, so labels line up.
-    assert len(rows) == ICON_ROWS
-    assert all(row.cell_length == ICON_COLUMNS for row in rows)
+    assert (shown.plain if shown is not None else None) == glyph
 
 
-def test_pixel_icons_draw_two_pixels_a_cell():
-    from max_cli.interface.tui.widgets.page_icons import draw
+@pytest.mark.parametrize(("key", "code"), [("2", "02"), ("0", "00"), (",", " ,")])
+def test_a_page_code_is_its_key_in_two_digits(key, code):
+    from max_cli.interface.tui.widgets.page_icons import page_code
 
-    (row,) = draw(("ab.a", "a..b"), "$primary")[:1]
-
-    # top a over bottom a: full; b over .: upper half in white; . over .: blank;
-    # a over b: upper half, page colour on white.
-    assert row.plain[:4] == "\u2588\u2580 \u2580"
-    styles = [str(span.style) for span in row.spans]
-    assert "$foreground" in styles and "$primary on $foreground" in styles
+    assert page_code(key) == code
 
 
-def test_a_page_icon_wears_the_colour_home_gives_its_kind(monkeypatch):
-    """Video is cyan in BY TYPE, so its icon is cyan in the sidebar too, and
+def test_a_page_bar_wears_the_colour_home_gives_its_kind():
+    """Video is cyan in BY TYPE, so its bar is cyan in the sidebar too, and
     faded when its page isn't open."""
-    from max_cli.config import settings
     from max_cli.interface.tui import home_stats
-    from max_cli.interface.tui.widgets.page_icons import DIM, page_colour, page_icon
+    from max_cli.interface.tui.widgets.page_icons import DIM, page_bar, page_colour
 
-    monkeypatch.setattr(settings, "DASHBOARD_ICONS", "pixel")
     cyan = home_stats.look("video").style
 
     assert page_colour("video") == cyan
-    lit = {str(span.style) for row in page_icon("video") for span in row.spans}
-    faded = {
-        str(span.style) for row in page_icon("video", dim=True) for span in row.spans
-    }
-    assert cyan in lit
-    assert f"{cyan} {DIM}" in faded
+    assert [str(span.style) for span in page_bar("video").spans] == [cyan]
+    assert [str(span.style) for span in page_bar("video", lit=False).spans] == [
+        f"{cyan} {DIM}"
+    ]
+
+
+def test_a_launch_tile_shows_the_code_name_and_purpose():
+    from max_cli.interface.tui.widgets.home_panel import HomePanel
+
+    label = HomePanel._launch_label("download", "Download", "video, music").plain
+
+    assert label.splitlines()[0].endswith("02  DOWNLOAD")
+    assert label.splitlines()[1].endswith("video, music")
 
 
 @pytest.mark.asyncio

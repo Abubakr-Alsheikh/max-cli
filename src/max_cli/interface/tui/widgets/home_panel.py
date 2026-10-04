@@ -39,7 +39,12 @@ from max_cli.interface.tui.widgets.charts import (
     Spark,
     StackChart,
 )
-from max_cli.interface.tui.widgets.page_icons import page_colour, page_icon
+from max_cli.interface.tui.widgets.page_icons import (
+    page_bar,
+    page_code,
+    page_colour,
+    page_glyph,
+)
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
 HISTORY_SAMPLES = 60  # 2 minutes of CPU history at one sample per refresh
@@ -150,7 +155,7 @@ class Launcher(Widget, can_focus=True):
 
     DEFAULT_CSS = """
     Launcher {
-        height: 5;
+        height: 4;
         text-wrap: nowrap;
         text-overflow: ellipsis;
         width: 1fr;
@@ -383,10 +388,10 @@ class HomePanel(Vertical):
     HomePanel.-narrow #home-launch-grid {
         grid-size: 2;
         grid-columns: 1fr 1fr;
-        height: 20;
+        height: 16;
     }
     HomePanel.-narrow #home-launch-card {
-        height: 23;
+        height: 19;
     }
     HomePanel.-narrow #home-tiles {
         grid-size: 2;
@@ -401,7 +406,7 @@ class HomePanel(Vertical):
         grid-columns: 2fr 1fr;
     }
     #home-launch-card {
-        height: 13;
+        height: 11;
         margin-bottom: 1;
     }
     #home-system-card {
@@ -411,7 +416,7 @@ class HomePanel(Vertical):
         grid-size: 4;
         grid-columns: 1fr 1fr 1fr 1fr;
         grid-gutter: 0 1;
-        height: 10;
+        height: 8;
     }
     #home-again {
         height: 1;
@@ -591,20 +596,22 @@ class HomePanel(Vertical):
 
     @staticmethod
     def _launch_label(section_id: str, name: str, purpose: str) -> Content:
-        """The page's icon, with its name, what it's for and its key."""
-        text = (
-            Content.styled(name, "bold"),
-            Content.styled(purpose, "$text-muted"),
-            Content.assemble(
-                ("key ", "$text-muted"),
-                (SECTION_KEYS[section_id], f"bold {page_colour(section_id)}"),
-            ),
+        """The page's bar down the left, its code and name, what it's for."""
+        bar = page_bar(section_id)
+        glyph = page_glyph(section_id)
+        code = page_code(SECTION_KEYS[section_id])
+        return Content.assemble(
+            bar,
+            " ",
+            (code, f"bold {page_colour(section_id)}"),
+            "  ",
+            *((glyph, " ") if glyph is not None else ()),
+            (name.upper(), "bold"),
+            "\n",
+            bar,
+            " " * (len(code) + 3),
+            (purpose, "$text-muted"),
         )
-        rows = [
-            Content.assemble(icon_row, "  ", line)
-            for icon_row, line in zip(page_icon(section_id), text)
-        ]
-        return Content("\n").join(rows)
 
     # --- refresh ------------------------------------------------------------------
 

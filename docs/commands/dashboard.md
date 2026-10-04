@@ -38,11 +38,11 @@ Badges next to a section show what needs a look: a green `2` on Download means t
 
 The dashboard remembers whether you left the sidebar open or folded. In a window narrower than 100 columns it always shows icons only.
 
-Each page has a pixel-art icon in its own colour, in the sidebar and on Home's launchpad. Video is cyan, Audio magenta, Downloads green and so on, the same colours Home's BY TYPE chart uses. The open page's icon is bright and the others are faded. **Page icons** on the Settings page picks the style:
+Each page shows as a neon code: a bar in the page's colour, the key that opens it as two digits, and its name (`02 DOWNLOAD`). Video is cyan, Audio magenta, Downloads green and so on, the same colours Home's BY TYPE chart uses. The open page's bar and code light up; the others are faded. **Page icons** on the Settings page can add a glyph before each name:
 
-- **Pixel art** (the default): drawn with block characters, so it works in any terminal font.
-- **Nerd Font**: one glyph per page. It needs a Nerd Font as your terminal's font, for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases; without one the glyphs show as boxes.
-- **Emoji**: colour emoji.
+- **Neon codes** (the default): no glyph, so it looks the same in any terminal font.
+- **Nerd Font**: a glyph per page in its colour. It needs a Nerd Font as your terminal's font, for example Cascadia Code NF from https://github.com/microsoft/cascadia-code/releases; without one the glyphs show as boxes.
+- **Emoji**: a colour emoji per page.
 
 ## Home page
 
@@ -198,7 +198,7 @@ The Settings page (`,`) edits the same settings as `max config`, saved in `~/.ma
   The fallback can't be the same provider as the main AI. Each provider keeps its own key: switching a slot to another provider and back keeps what you typed, and Save writes only the chosen providers' settings. If your OpenAI key was set up with OpenRouter's URL, switching to OpenRouter fills that key in. Images follow the same main AI and fallback: `max ai create` uses the main AI's image model, and the fallback's when the main one fails.
 - **Downloads:** the folder, format, quality, how many downloads run at once, metadata, and playlist links.
 - **Images:** the default quality and how many images run at once.
-- **Dashboard:** **Page icons**: pixel art, Nerd Font or emoji (see [Sections](#sections)).
+- **Dashboard:** **Page icons**: neon codes, Nerd Font or emoji (see [Sections](#sections)).
 - **Safety and network:** whether Max asks before it moves, overwrites or deletes files, how many more times the queue runs a task that failed, and how long a download waits for data.
 
 "Save changes" checks the values first, writes only the settings you changed and applies them at once; "Downloads at once" and "Page icons" apply the next time `max` starts. "Discard" drops your edits and shows the saved values again. An empty API key removes it from the file. If a `.env` file in the folder you started `max` from sets the same settings, it wins; Maintenance says so.

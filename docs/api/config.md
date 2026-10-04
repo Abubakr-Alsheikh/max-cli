@@ -36,7 +36,7 @@ from max_cli.config import settings
 | GRAB_STRIP_PLAYLIST | bool | True | A video link from a playlist gets only that video |
 | GRAB_INCLUDE_METADATA | bool | True | Embed title, artist and thumbnail |
 | GRAB_MAX_CONCURRENT | int | 3 | Dashboard downloads at once (1-8) |
-| DASHBOARD_ICONS | str | pixel | Sidebar and launchpad icons: `pixel` (pixel art in each page's colour), `nerd` (needs a Nerd Font in the terminal) or `emoji` |
+| DASHBOARD_ICONS | str | codes | Sidebar and launchpad: `codes` (a colour bar and the page's key code), or a glyph before each name: `nerd` (needs a Nerd Font in the terminal) or `emoji` |
 
 A value outside its range stops every command with a one-line message naming the setting.
 

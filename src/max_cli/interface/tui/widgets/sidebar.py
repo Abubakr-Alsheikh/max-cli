@@ -21,7 +21,12 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
 
-from max_cli.interface.tui.widgets.page_icons import ICON_ROWS, page_icon
+from max_cli.interface.tui.widgets.page_icons import (
+    page_bar,
+    page_code,
+    page_colour,
+    page_glyph,
+)
 
 # (page id, emoji, label), in sidebar order. The number keys follow this order.
 # The icons themselves are in page_icons.py.
@@ -98,12 +103,9 @@ class NavItem(Widget, can_focus=True):
         background: $boost;
         text-style: bold;
     }
+    /* The page's own bar marks it; the open one is lit and on a glow. */
     NavItem.-active {
-        background: $primary 25%;
-        border-left: outer $accent;
-        /* Full padding: a lone padding-left dropped the right padding. The
-           border takes one column, so the text stays where it was. */
-        padding: 0 2 0 1;
+        background: $primary 15%;
         text-style: bold;
     }
     """
@@ -124,38 +126,39 @@ class NavItem(Widget, can_focus=True):
         self.tooltip = f"{label}  ({SECTION_KEYS[section_id]})"
 
     def render(self) -> Content:
-        """The icon's rows; the key, the name and a badge on the middle one."""
+        """The page's bar, code and name, a badge at the right; folded, the
+        bar and the code."""
         badge = ""
         badge_style = ""
         if self.badge is not None:
             badge = f"{BADGE_SYMBOLS[self.badge.kind]}{self.badge.count}"
             badge_style = f"bold ${BADGE_COLOURS[self.badge.kind]}"
-        middle = ICON_ROWS // 2
-        rows = []
         # Full colour for the open page and the one under the mouse or
         # cursor; the rest faded.
         lit = self.has_class("-active") or self.mouse_hover or self.has_focus
-        for number, icon_row in enumerate(page_icon(self.section_id, dim=not lit)):
-            here = number == middle
-            if self.compact:
-                row = Content.assemble(icon_row, (badge if here else "", badge_style))
-                # Centre by hand: content-align doesn't move text a widget
-                # renders. Every row by the icon's width, so the rows line up.
-                indent = max(0, (self.content_size.width - icon_row.cell_length) // 2)
-                rows.append(Content.assemble(" " * indent, row))
-                continue
-            row = Content.assemble(
-                (f"{SECTION_KEYS[self.section_id]}  " if here else "   ", "dim"),
-                icon_row,
-                f"  {self.label}" if here else "",
-            )
-            if here:
-                # The badge sits against the right padding, so the right
-                # margin matches the left one whatever the label's length.
-                gap = max(1, self.content_size.width - row.cell_length - len(badge))
-                row = Content.assemble(row, " " * gap, (badge, badge_style))
-            rows.append(row)
-        return Content("\n").join(rows)
+        code = Content.styled(
+            page_code(SECTION_KEYS[self.section_id]),
+            f"bold {page_colour(self.section_id)}" if lit else "$text-muted",
+        )
+        bar = page_bar(self.section_id, lit)
+        if self.compact:
+            row = Content.assemble(bar, code, (badge, badge_style))
+            # Centre by hand: content-align doesn't move text a widget renders.
+            indent = max(0, (self.content_size.width - row.cell_length) // 2)
+            return Content.assemble(" " * indent, row)
+        glyph = page_glyph(self.section_id)
+        name = Content.assemble(
+            bar,
+            " ",
+            code,
+            "  ",
+            *((glyph, " ") if glyph is not None else ()),
+            self.label.upper(),
+        )
+        # The badge sits against the right padding, so the right margin
+        # matches the left one whatever the label's length.
+        gap = max(1, self.content_size.width - name.cell_length - len(badge))
+        return Content.assemble(name, " " * gap, (badge, badge_style))
 
     def action_open(self) -> None:
         self.post_message(self.Selected(self.section_id))
@@ -176,7 +179,7 @@ class Sidebar(Vertical):
         border-right: solid $border;
     }
     Sidebar.-compact {
-        width: 10;
+        width: 7;
     }
     /* These live here, not in NavItem's CSS: Textual scopes a widget's
        DEFAULT_CSS to that widget, so a rule starting at Sidebar never
