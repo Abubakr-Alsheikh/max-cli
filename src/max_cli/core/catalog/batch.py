@@ -31,7 +31,9 @@ from max_cli.core.engines.task_queue import TaskItem
 from max_cli.core.operations.result import ActionResult
 
 WILDCARDS = frozenset("*?[")
-OUTPUT_PARAM = "output"
+# Params that name where one file's result goes: a batch saves each result
+# next to its file instead.
+OUTPUT_PARAMS = ("output", "output_dir")
 # Files run side by side. FFmpeg uses several cores per file already, so
 # more than this only makes each one slower.
 BATCH_WORKERS = min(4, os.cpu_count() or 1)
@@ -92,11 +94,13 @@ def expand_each(
         listed = ", ".join(str(item) for item in items)
         raise ValidationError(f"{action.id}: no matching files in {listed}")
     many = len(items) > 1 or bool(found) or len(named) > 1
-    if many and not _is_empty(raw_args.get(OUTPUT_PARAM)):
-        raise ValidationError(
-            f"{action.id}: 'output' names one file. Leave it out to save each "
-            "result next to its file."
-        )
+    if many:
+        for name in OUTPUT_PARAMS:
+            if not _is_empty(raw_args.get(name)):
+                raise ValidationError(
+                    f"{action.id}: '{name}' names one file's result. Leave it "
+                    "out to save each result next to its file."
+                )
     done_already: list[Path] = []
     if action.output_name:
         outputs = {output_for(action, path, raw_args) for path in named + found}
@@ -114,7 +118,8 @@ def output_for(action: Action, path: Path, raw_args: Mapping[str, Any]) -> Path:
     """Where the action saves its result for `path` by default."""
     param = _each(action)
     raw = {**raw_args, param.name: str(path)}
-    raw.pop(OUTPUT_PARAM, None)
+    for name in OUTPUT_PARAMS:
+        raw.pop(name, None)
     values = coerce_args(action, raw)
     fields = {name: str(value) for name, value in values.items() if value is not None}
     fields.update(stem=path.stem, suffix=path.suffix)

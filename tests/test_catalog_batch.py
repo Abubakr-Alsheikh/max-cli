@@ -119,6 +119,15 @@ def test_one_output_name_cannot_hold_many_results(tmp_path):
         expand_each(VIDEO_COMPRESS, {"target": str(tmp_path), "output": "x.mp4"})
 
 
+def test_one_output_folder_cannot_hold_many_pdfs_images(tmp_path):
+    # Each PDF names its images page1_img1.png...: they'd overwrite each other.
+    _files(tmp_path, "a.pdf", "b.pdf")
+    rip = get_action("pdf.rip")
+
+    with pytest.raises(ValidationError, match="'output_dir' names one"):
+        expand_each(rip, {"target": str(tmp_path), "output_dir": "imgs"})
+
+
 def test_nothing_found_says_where_it_looked(tmp_path):
     with pytest.raises(ValidationError, match="no matching files"):
         expand_each(VIDEO_COMPRESS, {"target": str(tmp_path / "*.mp4")})
