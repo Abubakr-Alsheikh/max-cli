@@ -56,6 +56,10 @@ DECLINED_NOTE = (
     "The user said no, so it didn't run. Don't run it again unless they ask."
 )
 NOT_RUN_NOTE = "Not run: the action limit for this request was reached."
+CLASH_NOTE = (
+    "Not run: its result would have the same name as another file's. "
+    "Run it on its own with an output name."
+)
 MAX_EACH = 100  # files one run_action call may list in `each`
 MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
 
@@ -240,6 +244,14 @@ class _Batch:
             },
             ensure_ascii=False,
         )[:MAX_RESULT_CHARS]
+
+
+def _lists_files(item: str) -> bool:
+    """A folder or a pattern: reading it lists the files in it."""
+    from max_cli.core.catalog.batch import WILDCARDS
+
+    path = Path(item).expanduser()
+    return path.is_dir() or bool(WILDCARDS & set(path.name))
 
 
 def _done_already(names: tuple[str, ...]) -> dict[str, Any]:
@@ -651,7 +663,10 @@ class Agent:
             return DECLINED_NOTE
 
         if queue and self.can_queue and action.queueable:
-            task = enqueue_action(action, given)
+            try:
+                task = enqueue_action(action, given)
+            except MaxError as e:
+                return f"Error: couldn't queue it: {e}"
             self._report(
                 reply,
                 Step(
@@ -751,17 +766,28 @@ class Agent:
         if param is None:
             return f"Error: {action_id} takes no file, so 'each' doesn't fit it."
         done_already: list[Path] = []
+        refused: list[tuple[str, str]] = []
         if action.each_param() is not None:
             # Folders and patterns become files, finished ones left out.
             from max_cli.core.catalog.batch import expand_each
 
             wanted = each or given.get(param.name)
+            # Check folders and patterns before reading them: listing one
+            # outside the scope would show the model its file names. Named
+            # files get their own check below.
+            asked = wanted if isinstance(wanted, list) else [wanted]
+            outside = self.scope.outside(
+                str(item) for item in asked if item and _lists_files(str(item))
+            )
+            if outside:
+                return f"Error: {', '.join(outside)} is outside the folders I may use."
             try:
                 found = expand_each(action, {**given, param.name: wanted})
             except MaxError as e:
                 return f"Error: {e}"
             each = [str(path) for path in found.files]
             done_already = found.done_already
+            refused = [(path.name, CLASH_NOTE) for path in found.clashes]
             if not each:
                 return json.dumps(
                     {
@@ -777,7 +803,6 @@ class Agent:
             return f"Error: 'each' takes at most {MAX_EACH} files; split the list."
         label = f"{action.group} {action.name}"
         checked: list[tuple[str, ActionCall, dict[str, Any], tuple[Path, ...]]] = []
-        refused: list[tuple[str, str]] = []
         for number, path in enumerate(each):
             file_given = {**given, param.name: [path] if param.multiple else path}
             try:
@@ -842,7 +867,10 @@ class Agent:
             from max_cli.core.catalog.runner import enqueue_action
 
             for each_id, call, file_given, _paths_found in checked:
-                enqueue_action(action, file_given)
+                try:
+                    enqueue_action(action, file_given)
+                except MaxError as e:
+                    return f"Error: couldn't queue the files: {e}"
                 self._report(
                     reply,
                     Step(

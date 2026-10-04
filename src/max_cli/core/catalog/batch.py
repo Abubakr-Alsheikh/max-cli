@@ -10,6 +10,10 @@ caller may give several files, a folder or a pattern such as *.m4a.
   (the action's `output_name`), and so are Max's own earlier outputs
   (`a_compressed.mp4` next to `a.mp4`). `redo` keeps them.
 - Files named one by one always run: the caller asked for each of them.
+- Two files whose results would share a name (clip.mov and clip.mp4 both
+  make clip_compressed.mp4) can't both run: the first one does, the others
+  are listed in `clashes`.
+- A name that exists is a file, even with [ ] in it ("Song [Live].mp4").
 
 `run_each` runs the files side by side and sums them up in one
 ActionResult; `enqueue_each` queues one task per file.
@@ -47,11 +51,13 @@ class FileBatch:
 
     files: list[Path]
     done_already: list[Path] = field(default_factory=list)  # their result exists
+    # Left out: their result would take the name of another file's result.
+    clashes: list[Path] = field(default_factory=list)
     many: bool = False  # a folder, a pattern or several files: not one file
 
     @property
     def total(self) -> int:
-        return len(self.files) + len(self.done_already)
+        return len(self.files) + len(self.done_already) + len(self.clashes)
 
 
 def is_batch(action: Action, raw_args: Mapping[str, Any]) -> bool:
@@ -111,7 +117,29 @@ def expand_each(
                 path for path in found if output_for(action, path, raw_args).exists()
             ]
             found = [path for path in found if path not in done_already]
-    return FileBatch(_unique(named + found), done_already, many)
+    files = _unique(named + found)
+    clashes: list[Path] = []
+    if action.output_name and len(files) > 1:
+        files, clashes = _split_clashes(action, files, raw_args)
+    return FileBatch(files, done_already, clashes=clashes, many=many)
+
+
+def _split_clashes(
+    action: Action, files: list[Path], raw_args: Mapping[str, Any]
+) -> tuple[list[Path], list[Path]]:
+    """The files to run, and the ones whose result would land on an earlier
+    file's result: run side by side, they'd write one file at once."""
+    taken: set[Path] = set()
+    kept: list[Path] = []
+    clashes: list[Path] = []
+    for path in files:
+        result = output_for(action, path, raw_args)
+        if result in taken:
+            clashes.append(path)
+        else:
+            taken.add(result)
+            kept.append(path)
+    return kept, clashes
 
 
 def output_for(action: Action, path: Path, raw_args: Mapping[str, Any]) -> Path:
@@ -176,12 +204,17 @@ def summarize(
     parts = [f"{len(worked)} of {batch.total} files done"]
     if batch.done_already:
         parts.append(f"{len(batch.done_already)} had their result already")
+    if batch.clashes:
+        parts.append(
+            f"{len(batch.clashes)} left out: another file's result has the same name"
+        )
     if failed:
         parts.append(f"{len(failed)} failed")
     if not batch.files:
         message = f"Nothing to do: all {batch.total} files have their result already."
     else:
         message = f"{action.group} {action.name}: " + ", ".join(parts) + "."
+    saved = sum(_saved_bytes(result) for _path, result in worked if result)
     return ActionResult(
         not failed,
         message,
@@ -189,9 +222,25 @@ def summarize(
         {
             "done": [str(path) for path, _result in worked],
             "done_already": [str(path) for path in batch.done_already],
+            "clashes": [str(path) for path in batch.clashes],
             "failed": failed,
+            # Home's SPACE SAVED counts it, as it counts one compressed file.
+            **({"saved_bytes": saved} if saved else {}),
         },
     )
+
+
+SIZE_PAIRS = (("input_size", "output_size"), ("original_size", "new_size"))
+
+
+def _saved_bytes(result: ActionResult) -> int:
+    """Bytes one file's run took off (compress, optimize ...), 0 if none."""
+    details = result.details or {}
+    for before_key, after_key in SIZE_PAIRS:
+        before, after = details.get(before_key), details.get(after_key)
+        if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+            return max(0, int(before - after))
+    return 0
 
 
 def enqueue_each(
@@ -235,18 +284,23 @@ def _items(value: Any) -> list[Any]:
 
 
 def _is_pattern(path: Path) -> bool:
-    return bool(WILDCARDS & set(path.name))
+    """A name with wildcards that names nothing itself: "Song [Live].mp4"
+    is a file when it exists, and a pattern only when it doesn't."""
+    return bool(WILDCARDS & set(path.name)) and not path.exists()
 
 
 def _folder_files(folder: Path, param: Param, recursive: bool) -> list[Path]:
-    entries = folder.rglob("*") if recursive else folder.iterdir()
-    return sorted(
-        entry
-        for entry in entries
-        if entry.is_file()
-        and not _hidden(entry, folder)
-        and (not param.kinds or kind_of(entry) in param.kinds)
-    )
+    try:
+        entries = folder.rglob("*") if recursive else folder.iterdir()
+        return sorted(
+            entry
+            for entry in entries
+            if entry.is_file()
+            and not _hidden(entry, folder)
+            and (not param.kinds or kind_of(entry) in param.kinds)
+        )
+    except OSError as e:
+        raise ValidationError(f"Can't read the folder {folder}: {e}") from e
 
 
 def _pattern_files(pattern: Path, recursive: bool) -> list[Path]:

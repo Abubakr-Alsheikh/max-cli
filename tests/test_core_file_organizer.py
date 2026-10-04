@@ -301,6 +301,19 @@ class TestBackupRestore:
         restored = organizer.restore_backup(legacy, tmp_path / "out")
         assert restored.read_text(encoding="utf-8") == "old"
 
+    def test_two_files_with_one_name_keep_two_backups(self, organizer, tmp_path):
+        """A batch backed up a/notes.txt and b/notes.txt in the same second:
+        the second copy replaced the first."""
+        firsts = []
+        for folder, text in (("a", "first"), ("b", "second")):
+            (tmp_path / folder).mkdir()
+            note = tmp_path / folder / "notes.txt"
+            note.write_text(text, encoding="utf-8")
+            firsts.append(organizer.create_backup(note))
+
+        assert firsts[0] != firsts[1]
+        assert [b.read_text(encoding="utf-8") for b in firsts] == ["first", "second"]
+
     def test_metadata_files_are_not_listed_as_backups(self, organizer, original):
         organizer.create_backup(original)
 

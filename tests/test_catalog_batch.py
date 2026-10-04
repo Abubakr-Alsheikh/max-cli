@@ -204,3 +204,76 @@ def test_enqueue_each_queues_one_task_per_file(tmp_path):
     assert len(tasks) == 2 and found.total == 2
     queued = [task.payload["args"]["target"] for task in get_task_manager().get_all()]
     assert sorted(Path(target).name for target in queued) == ["a.mp4", "b.mp4"]
+
+
+def test_a_queued_task_keeps_absolute_paths(tmp_path, monkeypatch):
+    """A worker started in another folder read "a.mp4" from there."""
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    _files(tmp_path, "a.mp4")
+    monkeypatch.chdir(tmp_path)
+
+    batch.enqueue_each(VIDEO_COMPRESS, {"target": "a.mp4"})
+
+    (task,) = get_task_manager().get_all()
+    assert Path(task.payload["args"]["target"]) == tmp_path / "a.mp4"
+
+
+def test_a_file_name_with_brackets_is_a_file_not_a_pattern(tmp_path):
+    """YouTube titles: "[Official Video]" read as a pattern picked "a 1.mp4"."""
+    song, _other = _files(tmp_path, "a [1].mp4", "a 1.mp4")
+
+    assert not batch.is_batch(VIDEO_COMPRESS, {"target": str(song)})
+    found = expand_each(VIDEO_COMPRESS, {"target": [str(song)]})
+
+    assert found.files == [song]
+
+
+def test_brackets_still_make_a_pattern_when_nothing_has_that_name(tmp_path):
+    _files(tmp_path, "a1.mp4", "a2.mp4", "b1.mp4")
+
+    found = expand_each(VIDEO_COMPRESS, {"target": str(tmp_path / "a[12].mp4")})
+
+    assert [path.name for path in found.files] == ["a1.mp4", "a2.mp4"]
+
+
+def test_files_whose_results_share_a_name_run_once(tmp_path, monkeypatch):
+    """clip.mov and clip.mp4 both make clip_compressed.mp4: side by side they
+    wrote one file at once and reported both done."""
+    _files(tmp_path, "clip.mov", "clip.mp4", "other.mp4")
+    ran = _fake_runs(monkeypatch)
+
+    result = run_each(VIDEO_COMPRESS, {"target": str(tmp_path)})
+
+    assert sorted(ran) == ["clip.mov", "other.mp4"]
+    assert result.details["clashes"] == [str(tmp_path / "clip.mp4")]
+    assert "1 left out: another file's result has the same name" in result.message
+
+
+def test_a_batch_adds_up_the_space_it_saved(tmp_path, monkeypatch):
+    _files(tmp_path, "a.mp4", "b.mp4")
+    sizes = {"a.mp4": (1000, 400), "b.mp4": (500, 600)}  # b grew: saves nothing
+
+    def fake(action, args, **kwargs):
+        before, after = sizes[Path(args["target"]).name]
+        return ActionResult(
+            True, "ok", details={"input_size": before, "output_size": after}
+        )
+
+    monkeypatch.setattr(runner, "run_action", fake)
+
+    result = run_each(VIDEO_COMPRESS, {"target": str(tmp_path)})
+
+    assert result.details["saved_bytes"] == 600
+
+
+def test_an_unreadable_folder_is_a_clear_error(tmp_path, monkeypatch):
+    _files(tmp_path, "a.mp4")
+
+    def refuse(self):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(Path, "iterdir", refuse)
+
+    with pytest.raises(ValidationError, match="Can't read the folder"):
+        expand_each(VIDEO_COMPRESS, {"target": str(tmp_path)})

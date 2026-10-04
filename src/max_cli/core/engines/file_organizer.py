@@ -55,6 +55,21 @@ def _is_plain_name(value: object) -> bool:
     )
 
 
+def _reserve_name(folder: Path, stem: str, suffix: str) -> Path:
+    """A new file `stem` + `suffix` in `folder`, or `stem_2` ... when taken.
+    Creating it claims the name, so two backups made in the same second
+    (two notes.txt from a batch) never write one file."""
+    number = 1
+    while True:
+        name = f"{stem}{suffix}" if number == 1 else f"{stem}_{number}{suffix}"
+        candidate = folder / name
+        try:
+            with open(candidate, "xb"):
+                return candidate
+        except FileExistsError:
+            number += 1
+
+
 class FileOrganizer:
     """
     Core logic for organizing and renaming files.
@@ -374,8 +389,9 @@ class FileOrganizer:
 
         backup_dir = self.get_backup_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"{path.stem}_{label}_{timestamp}{path.suffix}"
-        backup_path = backup_dir / backup_name
+        backup_path = _reserve_name(
+            backup_dir, f"{path.stem}_{label}_{timestamp}", path.suffix
+        )
 
         shutil.copy2(path, backup_path)
         atomic_write_json(

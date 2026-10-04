@@ -878,3 +878,35 @@ def test_nothing_left_to_do_runs_nothing(tmp_path, monkeypatch):
     assert summary["files"] == 0
     assert summary["done_already"] == ["a.m4a"]
     assert seen["most"] == 0
+
+
+def test_a_folder_outside_the_scope_is_not_listed(tmp_path, monkeypatch):
+    """Reading it first sent the model the outside files' names."""
+    seen = _track_runs(monkeypatch)
+    work = tmp_path / "work"
+    work.mkdir()
+    secret = tmp_path / "private"
+    secret.mkdir()
+    (secret / "salary-2026.m4a").write_bytes(b"\0")
+    model = ScriptedModel(*_convert({"target": str(secret), "format": "mp3"}))
+
+    _agent(model, work).ask("convert them")
+
+    answer = model.requests[2]["messages"][-1]["content"]
+    assert "outside the folders I may use" in answer
+    assert "salary" not in answer
+    assert seen["most"] == 0
+
+
+def test_files_whose_results_share_a_name_run_once_for_the_agent(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    for name in ("song.wav", "song.flac"):
+        (tmp_path / name).write_bytes(b"\0")
+    model = ScriptedModel(*_convert({"target": str(tmp_path), "format": "mp3"}))
+
+    _agent(model, tmp_path).ask("convert them")
+
+    summary = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert summary["worked"] == 1
+    assert summary["failed"][0]["file"] == "song.wav"
+    assert "same name" in summary["failed"][0]["error"]
