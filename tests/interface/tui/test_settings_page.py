@@ -179,7 +179,8 @@ async def test_reset_asks_then_removes_the_settings_file(answer, reset):
     async with app.run_test(size=SIZE) as pilot:
         await _settle(app, pilot)
         app.query_one("#btn-reset-settings", Button).press()
-        await pilot.pause()
+        # Under load one pause wasn't enough for the dialog to build its buttons.
+        await wait_until(pilot, lambda: app.screen.query_one(answer, Button))
         assert isinstance(app.screen, ConfirmDialog)
         app.screen.query_one(answer, Button).press()
         await _settle(app, pilot)
@@ -194,7 +195,9 @@ async def test_clear_cache_asks_first():
         async with app.run_test(size=SIZE) as pilot:
             await _settle(app, pilot)
             app.query_one("#btn-clear-cache", Button).press()
-            await pilot.pause()
+            await wait_until(
+                pilot, lambda: app.screen.query_one("#confirm-yes", Button)
+            )
             app.screen.query_one("#confirm-yes", Button).press()
             await _settle(app, pilot)
 
