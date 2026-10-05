@@ -1,6 +1,5 @@
 """Regression tests for the dashboard P0 bugs (tui-bugfix-and-ux-improvements.md)."""
 
-
 import pytest
 
 
@@ -75,3 +74,21 @@ async def test_refresh_timer_survives_shutdown():
 
         app._refresh_active_panel()
         app.action_refresh()
+
+
+@pytest.mark.asyncio
+async def test_badge_timer_survives_the_sidebar_emptying_on_shutdown():
+    """The badge timer fired after the sidebar's pages were removed but before
+    the sidebar was: NoMatches for #nav-activity failed a Windows CI run."""
+    from max_cli.interface.tui.app import MaxDashboardApp
+    from max_cli.interface.tui.widgets.sidebar import Badge, NavItem, Sidebar
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        sidebar = app.query_one(Sidebar)
+        await app.query(NavItem).remove()
+
+        sidebar.set_badge("activity", Badge("failed", 3))
+        assert sidebar.badge("activity") == Badge("failed", 3)  # kept, not drawn
+        app._refresh_badges()  # the timer's own call: must not raise either

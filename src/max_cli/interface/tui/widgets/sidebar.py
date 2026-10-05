@@ -367,8 +367,9 @@ class Sidebar(Vertical):
             self._badges.pop(section_id, None)
         else:
             self._badges[section_id] = badge
-        if self.is_mounted:
-            item = self._item(section_id)
+        # The 2-second badge timer can fire while the app shuts down, after
+        # the pages are removed and before the sidebar is: no item, no redraw.
+        for item in self.query(f"#nav-{section_id}").results(NavItem):
             item.badge = badge
             item.refresh()
 
