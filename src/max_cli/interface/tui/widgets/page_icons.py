@@ -7,7 +7,9 @@ clashed with the theme and thin symbols were hard to read, while text and
 a bar render the same in every font.
 
 DASHBOARD_ICONS adds a glyph before the name: "nerd" (needs a Nerd Font in
-the terminal) or "emoji". "codes", the default, adds none.
+the terminal) or "emoji"; "codes" adds none. "auto", the default, shows the
+Nerd Font glyphs when Windows Terminal's font is a Nerd Font
+(`max config setup-font` installs one) and none otherwise.
 
 Use only the theme's own colour variables here: a custom one breaks when
 you switch themes.
@@ -17,7 +19,7 @@ from typing import Optional
 
 from textual.content import Content
 
-CODES_STYLE, NERD_STYLE, EMOJI_STYLE = "codes", "nerd", "emoji"
+AUTO_STYLE, CODES_STYLE, NERD_STYLE, EMOJI_STYLE = "auto", "codes", "nerd", "emoji"
 BAR = "▍"  # left three-eighths block: a thin bar in the page's colour
 # A page that isn't open shows its bar at this strength, so the open one
 # stands out.
@@ -93,6 +95,10 @@ def page_glyph(section_id: str) -> Optional[Content]:
     from max_cli.config import settings
 
     style = settings.DASHBOARD_ICONS
+    if style == AUTO_STYLE:
+        from max_cli.common.terminal_font import terminal_has_nerd_font
+
+        style = NERD_STYLE if terminal_has_nerd_font() else CODES_STYLE
     if style == NERD_STYLE and section_id in NERD_ICONS:
         return Content.styled(NERD_ICONS[section_id], page_colour(section_id))
     if style == EMOJI_STYLE and section_id in EMOJI_ICONS:

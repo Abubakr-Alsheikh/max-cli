@@ -76,10 +76,10 @@ class Settings(BaseSettings):
     )  # dashboard downloads at once
 
     # --- DASHBOARD ---
-    # Page icons: "codes" (a colour bar and the page's key code), or a glyph
-    # before each name: "nerd" (needs a Nerd Font such as Cascadia Code NF as
-    # the terminal's font) or "emoji".
-    DASHBOARD_ICONS: str = "codes"
+    # Page icons: "auto" (Nerd Font glyphs when Windows Terminal's font is a
+    # Nerd Font, see `max config setup-font`), "codes" (a colour bar and the
+    # page's key code only), "nerd" (always the glyphs) or "emoji".
+    DASHBOARD_ICONS: str = "auto"
 
     class Config:
         env_file = [str(Path.home() / ".max_config.env"), ".env"]

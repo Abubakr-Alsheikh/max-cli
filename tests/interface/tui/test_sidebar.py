@@ -275,3 +275,26 @@ async def test_collapsed_icons_are_centred_in_a_narrow_strip():
             shown = text.cell_length - indent
             assert item.content_region == item.region, item.section_id
             assert indent == (item.content_size.width - shown) // 2
+
+
+@pytest.mark.asyncio
+async def test_a_page_lit_by_the_mouse_fades_when_the_mouse_leaves():
+    """The bar and the code stayed bright after the pointer moved on: the
+    item picks its colours when it draws, and nothing redrew it."""
+    from max_cli.interface.tui.widgets.sidebar import NavItem
+
+    app = MaxDashboardApp()
+    async with app.run_test(size=WIDE) as pilot:
+        video = app.query_one("#nav-video", NavItem)
+        redraws = []
+        real_refresh = video.refresh
+        video.refresh = lambda *a, **k: redraws.append(1) or real_refresh(*a, **k)  # type: ignore[method-assign]  # spy
+
+        await pilot.hover("#nav-video")
+        await pilot.pause()
+        lit = len(redraws)
+        await pilot.hover("#home-ask-input")
+        await pilot.pause()
+
+    assert lit >= 1, "entering didn't redraw the item"
+    assert len(redraws) > lit, "leaving didn't redraw the item"

@@ -122,10 +122,15 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
                 "DASHBOARD_ICONS",
                 "Page icons",
                 "choice",
-                "Neon codes work in any terminal. Nerd Font icons need a Nerd Font "
-                "(e.g. Cascadia Code NF) as your terminal's font; without one they "
-                "show as boxes. Applies the next time max starts.",
-                (("Neon codes", "codes"), ("Nerd Font", "nerd"), ("Emoji", "emoji")),
+                "Auto shows Nerd Font icons when Windows Terminal uses a Nerd Font "
+                "(max config setup-font installs one). Nerd Font icons show as "
+                "boxes without one. Applies the next time max starts.",
+                (
+                    ("Auto", "auto"),
+                    ("Neon codes", "codes"),
+                    ("Nerd Font", "nerd"),
+                    ("Emoji", "emoji"),
+                ),
                 wide=True,
             ),
         ),

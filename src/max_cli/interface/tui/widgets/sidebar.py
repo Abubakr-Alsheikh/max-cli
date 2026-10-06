@@ -141,12 +141,14 @@ class NavItem(Widget, can_focus=True):
             f"bold {page_colour(self.section_id)}" if lit else "$text-muted",
         )
         bar = page_bar(self.section_id, lit)
+        glyph = page_glyph(self.section_id)
         if self.compact:
-            row = Content.assemble(bar, code, (badge, badge_style))
+            # Folded: the glyph says more than the code, when there is one.
+            mark = code if glyph is None else Content.assemble(" ", glyph)
+            row = Content.assemble(bar, mark, (badge, badge_style))
             # Centre by hand: content-align doesn't move text a widget renders.
             indent = max(0, (self.content_size.width - row.cell_length) // 2)
             return Content.assemble(" " * indent, row)
-        glyph = page_glyph(self.section_id)
         name = Content.assemble(
             bar,
             " ",
@@ -166,6 +168,21 @@ class NavItem(Widget, can_focus=True):
     def on_click(self, event: Click) -> None:
         event.stop()
         self.action_open()
+
+    # render() lights the bar and the code for the item under the mouse or
+    # the cursor. Nothing else redraws it when those change, so the item
+    # stayed lit after the mouse moved on.
+    def on_enter(self) -> None:
+        self.refresh()
+
+    def on_leave(self) -> None:
+        self.refresh()
+
+    def on_focus(self) -> None:
+        self.refresh()
+
+    def on_blur(self) -> None:
+        self.refresh()
 
 
 class Sidebar(Vertical):
@@ -350,8 +367,9 @@ class Sidebar(Vertical):
             self._badges.pop(section_id, None)
         else:
             self._badges[section_id] = badge
-        if self.is_mounted:
-            item = self._item(section_id)
+        # The 2-second badge timer can fire while the app shuts down, after
+        # the pages are removed and before the sidebar is: no item, no redraw.
+        for item in self.query(f"#nav-{section_id}").results(NavItem):
             item.badge = badge
             item.refresh()
 
