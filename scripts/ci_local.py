@@ -41,6 +41,9 @@ WORK_DIR = REPO_ROOT / ".ci-venvs"
 LOG_DIR = WORK_DIR / "logs"
 STAMP_NAME = "ci-local.json"
 ZERO_SHA = "0" * 40
+# A push that changes none of these skips the check: GitHub CI tests it.
+PACKAGE_PATHS = ("src/", "pyproject.toml")
+BASE_BRANCH = "origin/main"
 FAILURE_TAIL_LINES = 40
 HOOK_MARKER = "Installed by scripts/ci_local.py"
 HOOK_SCRIPT = f"""#!/bin/sh
@@ -346,6 +349,31 @@ def _pushed_commit(local_ref: str, sha: str) -> str:
     return sha
 
 
+def pushes_package_changes(ref_lines: list[str]) -> bool:
+    """True when a pushed commit changes src/ or pyproject.toml.
+
+    A new branch or tag counts from where it left main. When git can't say,
+    it counts as a change.
+    """
+    for line in ref_lines:
+        fields = line.split()
+        if len(fields) != 4 or fields[1] == ZERO_SHA:
+            continue
+        local_sha, remote_sha = fields[1], fields[3]
+        try:
+            base = (
+                remote_sha
+                if remote_sha != ZERO_SHA
+                else git("merge-base", BASE_BRANCH, local_sha)
+            )
+            changed = git("diff", "--name-only", f"{base}..{local_sha}").splitlines()
+        except subprocess.CalledProcessError:
+            return True
+        if any(name.startswith(PACKAGE_PATHS) for name in changed):
+            return True
+    return False
+
+
 def pre_push(ref_lines: list[str]) -> int:
     """Git passes one line per pushed ref: local_ref local_sha remote_ref remote_sha."""
     pushed = {
@@ -355,6 +383,9 @@ def pre_push(ref_lines: list[str]) -> int:
     }
     pushed.discard(ZERO_SHA)  # deleting a remote branch pushes no code
     if not pushed or pushed == {read_stamp().get("head")}:
+        return 0
+    if not pushes_package_changes(ref_lines):
+        print("ci_local: no changes to src/ or pyproject.toml; GitHub CI checks them.")
         return 0
     if pushed != {git("rev-parse", "HEAD")}:
         print("ci_local: you are pushing a commit that is not checked out.")

@@ -70,6 +70,7 @@ def fake_repo(monkeypatch, tmp_path):
     )
     checks: list[bool] = []
     monkeypatch.setattr(ci_local, "check", lambda full: checks.append(full) or 0)
+    monkeypatch.setattr(ci_local, "pushes_package_changes", lambda lines: True)
     return stamp, checks
 
 
@@ -78,6 +79,13 @@ def _push_line(sha: str) -> str:
 
 
 class TestPrePush:
+    def test_skips_a_push_that_leaves_the_package_alone(self, fake_repo, monkeypatch):
+        _, checks = fake_repo
+        monkeypatch.setattr(ci_local, "pushes_package_changes", lambda lines: False)
+
+        assert ci_local.pre_push([_push_line(HEAD_SHA)]) == 0
+        assert checks == []
+
     def test_skips_a_commit_that_already_passed(self, fake_repo):
         stamp, checks = fake_repo
         stamp.write_text(
