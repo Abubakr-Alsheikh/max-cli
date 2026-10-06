@@ -306,6 +306,7 @@ max grab download URL                        # video, best quality
 max grab download URL -a                     # audio only
 max grab download URL -q h                   # ss=360p s=480p m=720p h=1080p x=4K
 max grab download URL -o ./my-videos
+max grab download URL -a --sort-into artist/album   # a playlist as an album, tracks numbered
 max grab download                            # interactive: paste links one by one
 max grab queue                               # pending downloads
 max grab history

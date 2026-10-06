@@ -741,6 +741,49 @@ async def test_options_are_compact_and_reach_the_download():
     assert download.call_args.kwargs["subtitles"] is True
 
 
+@pytest.mark.asyncio
+async def test_tags_reach_the_download_and_the_folder_choice_is_kept():
+    from textual.widgets import Checkbox, Select
+
+    with patch(DOWNLOAD, return_value=OK) as download:
+        app = PanelApp()
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _settle(app, pilot)
+            app.query_one("#dl-tags #field-artist", Input).value = "Me"
+            app.query_one("#dl-tags #field-album", Input).value = "Mine"
+            app.query_one("#dl-tags #field-sort_into", Select).value = "artist/album"
+            app.query_one("#dl-tags #field-track_numbers", Checkbox).value = False
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+
+        again = PanelApp()
+        async with again.run_test(size=(140, 60)) as pilot:
+            await _settle(again, pilot)
+            artist = again.query_one("#dl-tags #field-artist", Input).value
+            sort_into = again.query_one("#dl-tags #field-sort_into", Select).value
+            numbers = again.query_one("#dl-tags #field-track_numbers", Checkbox).value
+
+    sent = download.call_args.kwargs
+    assert (sent["artist"], sent["album"]) == ("Me", "Mine")
+    assert sent["sort_into"] == "artist/album"
+    assert sent["track_numbers"] is False
+    # Folders and numbering are kept for next time; the artist isn't.
+    assert (artist, sort_into, numbers) == ("", "artist/album", False)
+
+
+@pytest.mark.asyncio
+async def test_a_checked_playlist_says_what_the_files_get():
+    app = PanelApp()
+    with patch(PROBE, return_value=PLAYLIST):
+        async with app.run_test(size=(110, 60)) as pilot:
+            await _check(app, pilot)
+            hint = str(app.query_one("#dl-tags-hint", Static).render())
+
+    assert "My Mix" in hint
+    assert "1-4" in hint
+
+
 # --- transfers ---------------------------------------------------------------
 
 

@@ -92,3 +92,14 @@ def sibling_path(
     else:
         new_extension = f".{extension.lstrip('.')}"
     return input_path.parent / f"{input_path.stem}{suffix}{new_extension}"
+
+
+# --- grab download: folders to sort downloads into ---------------------------
+DOWNLOAD_SORT_NONE = "none"
+DOWNLOAD_SORT_ALBUM = "album"
+DOWNLOAD_SORT_ARTIST_ALBUM = "artist/album"
+DOWNLOAD_SORT_CHOICES = (
+    DOWNLOAD_SORT_NONE,
+    DOWNLOAD_SORT_ALBUM,
+    DOWNLOAD_SORT_ARTIST_ALBUM,
+)

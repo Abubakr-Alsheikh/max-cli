@@ -6,6 +6,9 @@
   each.
 - The OPTIONS card beside the preview holds every other `grab download`
   option, taken from the command catalog, in a few rows.
+- The TAGS card sets the artist, album, genre and year written into the
+  files, numbers a playlist's tracks by their place in it, and can save into
+  Album or Artist/Album folders.
 - Check locks its button and shows a spinner with the seconds so far,
   until the site answers.
 - Each download gets a row with progress and a Cancel that really stops it.
@@ -47,7 +50,12 @@ from max_cli.core.catalog import get_action
 from max_cli.core.engines.download_history import DownloadHistory
 from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.text import markup, relative_time
-from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
+from max_cli.interface.tui.ui_prefs import (
+    DOWNLOAD_FOLDER_PREF,
+    download_folder,
+    load_prefs,
+    save_pref,
+)
 from max_cli.interface.tui.widgets.action_form import ActionForm
 from max_cli.interface.tui.widgets.charts import Meter
 from max_cli.interface.tui.widgets.jobs_drawer import JobsDrawer
@@ -64,6 +72,19 @@ ADVANCED_FIELDS = (
     "strip_playlist",
     "player_client",
 )
+# The TAGS card: what goes into the files, and the folders they go in.
+TAG_FIELDS = (
+    "artist",
+    "album",
+    "genre",
+    "year",
+    "sort_into",
+    "track_numbers",
+    "split_title",
+)
+# TAGS choices kept for next time. Artist and album belong to one download.
+REMEMBERED_TAG_FIELDS = ("sort_into", "track_numbers", "split_title")
+TAGS_PREF = "download_tags"
 LINK_PATTERN = re.compile(r"https?://\S+")
 AUTO_CHECK_SECONDS = 0.6
 # At most this often per download. Every update is a repaint, and on Windows
@@ -79,7 +100,6 @@ SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 SPINNER_SECONDS = 0.12
 # After this long, say why a check can take a while.
 SLOW_CHECK_SECONDS = 8
-FOLDER_PREF = "download_folder"
 FORMAT_PREF = "download_format"
 
 HISTORY_LIMIT = 500
@@ -99,6 +119,10 @@ FACT_KEY_WIDTH = 11
 SUBTITLES_SHOWN = 4
 SEPARATOR = "  ·  "
 FORBIDDEN_MARK = "403"
+TAGS_HINT = (
+    "Empty fields keep what the site says. A playlist gives the album "
+    "its name and numbers the tracks."
+)
 
 
 @dataclass
@@ -571,7 +595,11 @@ class DownloadPanel(Vertical):
         height: auto;
         max-height: 14;
     }
-    #dl-advanced ActionForm {
+    #dl-tags-hint {
+        color: $text-muted;
+        margin: 1 0;
+    }
+    #dl-advanced ActionForm, #dl-tags ActionForm {
         height: auto;
         padding: 0;
         margin-bottom: 1;
@@ -663,11 +691,7 @@ class DownloadPanel(Vertical):
                 yield Button("Check", id="btn-check")
             with Horizontal(id="dl-folder-row"):
                 yield Label("Save to", classes="field-name")
-                yield Input(
-                    value=load_prefs().get(FOLDER_PREF)
-                    or str(settings.GRAB_DEFAULT_PATH),
-                    id="dl-output",
-                )
+                yield Input(value=str(download_folder()), id="dl-output")
                 yield Button("Change...", id="btn-browse-output")
             yield Static("", id="dl-duplicate")
 
@@ -691,6 +715,9 @@ class DownloadPanel(Vertical):
                     yield ActionForm(
                         self._action, include=ADVANCED_FIELDS, compact=True
                     )
+                with Vertical(id="dl-tags", classes="card"):
+                    yield Static(TAGS_HINT, id="dl-tags-hint")
+                    yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
 
             with Vertical(id="dl-output-card", classes="card"):
                 yield Label("FORMAT", classes="field-caption")
@@ -762,6 +789,8 @@ class DownloadPanel(Vertical):
         self.query_one("#dl-preview").border_title = "PREVIEW"
         self.query_one("#dl-output-card").border_title = "OUTPUT"
         self.query_one("#dl-advanced").border_title = "OPTIONS"
+        self.query_one("#dl-tags").border_title = "TAGS"
+        self._restore_tag_choices()
         self.query_one("#dl-transfers").border_title = "TRANSFERS"
         self.query_one("#dl-tools").border_title = "TOOLS"
         self.query_one("#dl-duplicate").display = False
@@ -1004,6 +1033,7 @@ class DownloadPanel(Vertical):
             self._show_playlist(False)
         self._set_choices_for(media)
         self._set_preview(Content(media.title), media_facts(media))
+        self._show_tags_hint(media)
 
     # --- playlist ---------------------------------------------------------
 
@@ -1072,11 +1102,43 @@ class DownloadPanel(Vertical):
             items = playlist_items(selected, len(self._media.entries))
             if items:
                 values["playlist_items"] = items
-        form = self.query_one("#dl-advanced ActionForm", ActionForm)
-        for name, value in form.values().items():
-            if value not in (None, ""):
-                values[name] = value
+        for form in self.query(ActionForm):
+            for name, value in form.values().items():
+                if value not in (None, ""):
+                    values[name] = value
         return values
+
+    # --- tags -------------------------------------------------------------
+
+    def _tags_form(self) -> ActionForm:
+        return self.query_one("#dl-tags ActionForm", ActionForm)
+
+    def _restore_tag_choices(self) -> None:
+        saved = load_prefs().get(TAGS_PREF)
+        if not isinstance(saved, dict):
+            return
+        form = self._tags_form()
+        for name in REMEMBERED_TAG_FIELDS:
+            if name in saved:
+                form.set_value(name, saved[name])
+
+    def _remember_tag_choices(self) -> None:
+        chosen = self._tags_form().values()
+        save_pref(TAGS_PREF, {name: chosen[name] for name in REMEMBERED_TAG_FIELDS})
+
+    def _show_tags_hint(self, media: Any) -> None:
+        """Say what a checked playlist gives the files when the fields are empty."""
+        hint = self.query_one("#dl-tags-hint", Static)
+        if media is None or not media.is_playlist:
+            hint.update(TAGS_HINT)
+            return
+        hint.update(
+            Content.assemble(
+                ("Empty album: ", "$text-muted"),
+                (media.title, "bold $primary"),
+                (f"{SEPARATOR}tracks numbered 1-{len(media.entries)}", "$text-muted"),
+            )
+        )
 
     def _set_status(self, text: "str | Content") -> None:
         self.query_one("#dl-status", Static).update(text)
@@ -1114,7 +1176,8 @@ class DownloadPanel(Vertical):
             return
         folder = self.query_one("#dl-output", Input).value.strip()
         if folder:
-            save_pref(FOLDER_PREF, folder)
+            save_pref(DOWNLOAD_FOLDER_PREF, folder)
+        self._remember_tag_choices()
         for values in all_values:
             self._start_job(values)
         self.query_one("#dl-tabs", TabbedContent).active = "tab-active"
@@ -1129,6 +1192,7 @@ class DownloadPanel(Vertical):
         all_values = self._validated()
         if all_values is None:
             return
+        self._remember_tag_choices()
         for values in all_values:
             try:
                 enqueue_action(
@@ -1156,6 +1220,7 @@ class DownloadPanel(Vertical):
         self._checked_text = ""
         self.query_one("#dl-url", Input).value = ""
         self._show_playlist(False)
+        self._show_tags_hint(None)
         self._set_preview("Paste another link, or several.", "")
 
     def _title_for(self, url: str) -> str:
@@ -1318,7 +1383,7 @@ class DownloadPanel(Vertical):
     def _open_folder(folder: Any) -> None:
         from max_cli.common.utils import open_in_file_manager
 
-        open_in_file_manager(Path(folder or settings.GRAB_DEFAULT_PATH).expanduser())
+        open_in_file_manager(Path(folder).expanduser() if folder else download_folder())
 
     # --- folder -----------------------------------------------------------
 

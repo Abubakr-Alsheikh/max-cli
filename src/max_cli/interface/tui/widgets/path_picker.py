@@ -44,7 +44,7 @@ from textual.widgets.option_list import Option
 
 from max_cli.common.file_kinds import AUDIO, IMAGE, KIND_SUFFIXES, PDF, VIDEO, kind_of
 from max_cli.common.utils import format_size
-from max_cli.interface.tui.ui_prefs import load_prefs, save_pref
+from max_cli.interface.tui.ui_prefs import download_folder, load_prefs, save_pref
 from max_cli.interface.tui.workers import show_from_worker
 
 PREF_LAST_FOLDER = "picker_last_folder"
@@ -106,7 +106,6 @@ def list_folder(
     *,
     show_hidden: bool = False,
     suffixes: Optional[frozenset[str]] = None,
-    folders_only: bool = False,
 ) -> list[Entry]:
     """A folder's contents, folders first, each part sorted by name. Raises
     OSError (PermissionError, FileNotFoundError ...) when it can't be read."""
@@ -117,12 +116,10 @@ def list_folder(
                 if not show_hidden and _is_hidden(item):
                     continue
                 is_dir = item.is_dir()
-                if not is_dir and (
-                    folders_only
-                    or (
-                        suffixes is not None
-                        and Path(item.name).suffix.lower() not in suffixes
-                    )
+                if (
+                    not is_dir
+                    and suffixes is not None
+                    and Path(item.name).suffix.lower() not in suffixes
                 ):
                     continue
                 info = item.stat()
@@ -152,13 +149,12 @@ def drives() -> list[Path]:
 
 
 def places() -> list[tuple[str, Path]]:
-    """Home, the usual folders under it that exist, and Max's download folder."""
+    """Home, the usual folders under it that exist, and the folder the
+    Download page saves into."""
     home = Path.home()
     found = [("Home", home)]
     found += [(name, home / name) for name in KNOWN_FOLDERS if (home / name).is_dir()]
-    from max_cli.config import settings
-
-    downloads = Path(settings.GRAB_DEFAULT_PATH).expanduser()
+    downloads = download_folder()
     if downloads.is_dir() and downloads not in {path for _name, path in found}:
         found.append(("Max downloads", downloads))
     return found
@@ -354,9 +350,9 @@ class PathPicker(ModalScreen[Optional[Path]]):
     ) -> None:
         super().__init__()
         self._mode = mode
-        self._file_types = (
-            FILE_TYPES.get(file_types or "") if mode != PickMode.FOLDER else None
-        )
+        # A folder picker lists these files too, dimmed, so you can see which
+        # folder holds your songs; only folders can be picked.
+        self._file_types = FILE_TYPES.get(file_types or "")
         self._folder = start_folder(start)
         self._focus_name = ""  # a row to put the cursor on once the list is in
         self._save_name = ""
@@ -515,9 +511,8 @@ class PathPicker(ModalScreen[Optional[Path]]):
             if self._file_types
             else None
         )
-        folders_only = self._mode == PickMode.FOLDER
         self.run_worker(
-            lambda: self._read(folder, show_hidden, suffixes, folders_only),
+            lambda: self._read(folder, show_hidden, suffixes),
             thread=True,
             exclusive=True,
             group="picker-list",
@@ -532,15 +527,9 @@ class PathPicker(ModalScreen[Optional[Path]]):
         folder: Path,
         show_hidden: bool,
         suffixes: Optional[frozenset[str]],
-        folders_only: bool,
     ) -> None:
         try:
-            entries = list_folder(
-                folder,
-                show_hidden=show_hidden,
-                suffixes=suffixes,
-                folders_only=folders_only,
-            )
+            entries = list_folder(folder, show_hidden=show_hidden, suffixes=suffixes)
         except OSError as e:
             show_from_worker(self, self._show_error, folder, e)
             return
@@ -577,7 +566,7 @@ class PathPicker(ModalScreen[Optional[Path]]):
                 table.add_row(
                     # Text, not str: a str cell is read as markup, and
                     # Content cells measured two columns wide.
-                    Text(f"{_icon(entry)} {entry.name}"),
+                    Text(f"{_icon(entry)} {entry.name}", style=self._row_style(entry)),
                     "" if entry.is_dir else format_size(entry.size),
                     _when(entry.modified, now) if entry.modified else "",
                     key=str(entry.path),
@@ -590,6 +579,10 @@ class PathPicker(ModalScreen[Optional[Path]]):
                 table.move_cursor(row=1, animate=False)  # past ".."
         self._set_status(self._summary(matching, text))
         self._show_selected()
+
+    def _row_style(self, entry: Entry) -> str:
+        """Files in a folder picker are there to look at, not to pick."""
+        return "dim" if self._mode == PickMode.FOLDER and not entry.is_dir else ""
 
     def _row_of(self, name: str) -> Optional[int]:
         if not name:
@@ -604,13 +597,12 @@ class PathPicker(ModalScreen[Optional[Path]]):
         folders = sum(1 for entry in shown if entry.is_dir)
         files = len(shown) - folders
         parts = [f"{folders} folder{'s' if folders != 1 else ''}"]
-        if self._mode != PickMode.FOLDER:
-            kind = (
-                self._file_types[0]
-                if self._file_types and not self._show_all()
-                else "files"
-            )
-            parts.append(f"{files} {kind if files != 1 else kind.rstrip('s')}")
+        kind = (
+            self._file_types[0]
+            if self._file_types and not self._show_all()
+            else "files"
+        )
+        parts.append(f"{files} {kind if files != 1 else kind.rstrip('s')}")
         if filter_text:
             parts.append(f'matching "{filter_text}"')
         if len(shown) > MAX_ROWS:
@@ -643,6 +635,12 @@ class PathPicker(ModalScreen[Optional[Path]]):
                 (path.name, "bold $primary"),
                 ("  ·  Enter opens it", "$text-muted"),
             )
+        elif self._mode == PickMode.FOLDER:
+            text = Content.assemble(
+                ("In this folder  ", "$text-muted"),
+                (path.name, "bold"),
+                (f"  ·  {self._ok_label()} picks it", "$text-muted"),
+            )
         else:
             entry = next((e for e in self._entries if e.path == path), None)
             size = format_size(entry.size) if entry else ""
@@ -666,7 +664,7 @@ class PathPicker(ModalScreen[Optional[Path]]):
             self._open(path)
         elif self._mode == PickMode.SAVE:
             self.query_one("#picker-name", Input).value = path.name
-        else:
+        elif self._mode == PickMode.FILE:
             self._choose(path)
 
     # --- typing ----------------------------------------------------------------

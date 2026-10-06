@@ -1,9 +1,10 @@
+import dataclasses
 import shutil
 import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
 from rich import box
@@ -15,7 +16,15 @@ from max_cli.common.events import get_emitter
 from max_cli.common.logger import console, log_error, log_success
 from max_cli.config import settings
 from max_cli.core.engines.network_engine import POT_PROVIDER_PACKAGE
+from max_cli.core.presets import (
+    DOWNLOAD_SORT_ALBUM,
+    DOWNLOAD_SORT_ARTIST_ALBUM,
+    DOWNLOAD_SORT_NONE,
+)
 from max_cli.interface.event_subscriber import EventSubscriber
+
+if TYPE_CHECKING:
+    from max_cli.core.engines.download_tags import DownloadTags
 
 app = typer.Typer(help="Download media from various platforms.")
 
@@ -34,6 +43,14 @@ class PlayerClient(str, Enum):
     ANDROID = "android"
     MWEB = "mweb"
     TV_EMBEDDED = "tv_embedded"
+
+
+class SortInto(str, Enum):
+    """Folders accepted by --sort-into (presets.DOWNLOAD_SORT_CHOICES)."""
+
+    none = DOWNLOAD_SORT_NONE
+    album = DOWNLOAD_SORT_ALBUM
+    artist_album = DOWNLOAD_SORT_ARTIST_ALBUM
 
 
 def _get_engine():
@@ -164,6 +181,36 @@ def download_media(
         help="YouTube player client override (fixes HTTP 403/SABR errors).",
         case_sensitive=False,
     ),
+    artist: Optional[str] = typer.Option(
+        None, "--artist", help="Artist to write into every file."
+    ),
+    album: Optional[str] = typer.Option(
+        None,
+        "--album",
+        help="Album to write into every file. Default: the playlist's name.",
+    ),
+    genre: Optional[str] = typer.Option(
+        None, "--genre", help="Genre to write into every file."
+    ),
+    year: Optional[str] = typer.Option(
+        None, "--year", help="Year to write into every file."
+    ),
+    track_numbers: bool = typer.Option(
+        True,
+        "--track-numbers/--no-track-numbers",
+        help="Number a playlist's files by their place in it.",
+    ),
+    split_title: bool = typer.Option(
+        True,
+        "--split-title/--no-split-title",
+        help='Read the artist from titles like "Artist - Song".',
+    ),
+    sort_into: SortInto = typer.Option(
+        SortInto.none,
+        "--sort-into",
+        help="Save into Album/ or Artist/Album/ folders.",
+        case_sensitive=False,
+    ),
 ):
     """
     Download media using saved preferences or overrides.
@@ -173,10 +220,22 @@ def download_media(
         max grab download https://youtube.com/watch?v=...   # Download directly
         max grab download -v https://...                    # Force video
         max grab download -a https://...                    # Audio only
+        max grab download -a --sort-into artist/album <playlist link>
     """
+    from max_cli.core.engines.download_tags import DownloadTags
+
     final_quality = quality if quality else settings.GRAB_QUALITY
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA
     player_client_name = player_client.value if player_client else None
+    tags = DownloadTags(
+        artist=artist or None,
+        album=album or None,
+        genre=genre or None,
+        year=year or None,
+        track_numbers=track_numbers,
+        split_title=split_title,
+        sort_into=sort_into.value,
+    )
 
     is_audio = audio
     if video:
@@ -244,6 +303,7 @@ def download_media(
                     subtitles=subtitles,
                     custom_height=resolution,
                     player_client=player_client_name,
+                    tags=tags,
                 )
                 if task_id:
                     queued_ids.append(task_id)
@@ -287,6 +347,7 @@ def download_media(
             resolution,
             progress,
             player_client_name,
+            tags=tags,
         )
         if queue and no_process:
             console.print("[dim]Queued. Run 'max queue process' to start it.[/dim]")
@@ -317,6 +378,7 @@ def _add_to_queue_or_download(
     custom_height: Optional[int] = None,
     show_progress: bool = True,
     player_client: Optional[str] = None,
+    tags: Optional["DownloadTags"] = None,
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if queue_enabled:
@@ -331,6 +393,7 @@ def _add_to_queue_or_download(
             subtitles=subtitles,
             custom_height=custom_height,
             player_client=player_client,
+            tags=tags,
         )
     else:
         eng = _get_engine()
@@ -348,6 +411,7 @@ def _add_to_queue_or_download(
             quality_label=str(q_info["label"]),
             show_progress=show_progress,
             player_client=player_client,
+            tags=tags,
         )
 
 
@@ -364,6 +428,7 @@ def _download_immediate(
     quality_label: str = "",
     show_progress: bool = True,
     player_client: Optional[str] = None,
+    tags: Optional["DownloadTags"] = None,
 ) -> None:
     """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
@@ -432,6 +497,7 @@ def _download_immediate(
             strip_playlist=False,  # the caller already cleaned the URL
             player_client=player_client or "auto",
             engine=_get_engine(),
+            **(dataclasses.asdict(tags) if tags else {}),
         )
         for saved in result.output_files:
             # Plain Text: titles like "Song [red]" are not markup. No wrapping,

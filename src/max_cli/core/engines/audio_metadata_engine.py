@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from max_cli.core.engines.download_tags import v1_track_is_comment
+
 if TYPE_CHECKING:
     from max_cli.common.transaction_log import TransactionLog
 
@@ -112,13 +114,38 @@ def _open_easy(path: Path) -> Any:
     return MutagenFile(path, easy=True)
 
 
+def _drop_false_track(path: Path, tags: Any) -> None:
+    """Forget a track number mutagen read from an ID3v1.0 comment.
+
+    ffmpeg fills the ID3v1 comment of downloaded MP3s with a link, and mutagen
+    takes its last byte for the track ("?" gave every song track 63). The
+    number is real only when the ID3v2 tag holds one too.
+    """
+    from mutagen import id3
+
+    if tags is None or not v1_track_is_comment(path):
+        return
+    try:
+        if id3.ID3(path, load_v1=False).getall("TRCK"):
+            return
+    except id3.ID3NoHeaderError:
+        pass
+    if isinstance(tags, id3.ID3):
+        tags.delall("TRCK")
+    elif "tracknumber" in tags:
+        del tags["tracknumber"]
+
+
 def _open_for_tagging(path: Path) -> Any:
-    """Open `path` with tags ready to edit (easy key names where possible)."""
+    """Open `path` with tags ready to edit (easy key names where possible).
+
+    Saving rewrites the ID3v1 tag from these, so a false track goes away."""
     audio = _open_easy(path)
     if audio is None:
         raise ValueError(f"Unable to read file: {path}")
     if audio.tags is None:
         audio.add_tags()
+    _drop_false_track(path, audio.tags)
     return audio
 
 
@@ -185,6 +212,7 @@ class AudioMetadataEngine:
             audio = _open_easy(file_path)
         if audio is None:
             raise ValueError(f"Unable to read metadata from: {file_path}")
+        _drop_false_track(file_path, audio.tags)
 
         found: dict[str, str] = {}
         if isinstance(audio.tags, id3.ID3):

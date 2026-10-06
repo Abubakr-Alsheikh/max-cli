@@ -5,6 +5,7 @@ calls it after phase G5; until then the drift test skips this group's CLI.
 """
 
 from max_cli.core.catalog.spec import Action, Group, Param, ParamKind, Setting
+from max_cli.core.presets import DOWNLOAD_SORT_CHOICES, DOWNLOAD_SORT_NONE
 
 OPS = "max_cli.core.operations.grab"
 QUALITY_CHOICES = ("ss", "s", "m", "h", "x")
@@ -107,6 +108,61 @@ GROUP = Group(
                     choices=PLAYER_CLIENTS,
                     cli=("--player-client",),
                     advanced=True,
+                ),
+                Param(
+                    "artist",
+                    ParamKind.TEXT,
+                    "Artist to write into every file. Empty: what the site says.",
+                    default=None,
+                    cli=("--artist",),
+                ),
+                Param(
+                    "album",
+                    ParamKind.TEXT,
+                    "Album to write into every file. Empty: the site's album, "
+                    "or the playlist's name.",
+                    default=None,
+                    cli=("--album",),
+                ),
+                Param(
+                    "genre",
+                    ParamKind.TEXT,
+                    "Genre to write into every file.",
+                    default=None,
+                    cli=("--genre",),
+                    advanced=True,
+                ),
+                Param(
+                    "year",
+                    ParamKind.TEXT,
+                    "Year to write into every file, e.g. 2024.",
+                    default=None,
+                    cli=("--year",),
+                    advanced=True,
+                ),
+                Param(
+                    "track_numbers",
+                    ParamKind.BOOL,
+                    "Number a playlist's files by their place in it (3/43).",
+                    default=True,
+                    advanced=True,
+                ),
+                Param(
+                    "split_title",
+                    ParamKind.BOOL,
+                    'Read the artist from titles like "Artist - Song" when the '
+                    "site names none.",
+                    default=True,
+                    advanced=True,
+                ),
+                Param(
+                    "sort_into",
+                    ParamKind.CHOICE,
+                    "Save into folders: album (Album/) or artist/album "
+                    "(Artist/Album/).",
+                    default=DOWNLOAD_SORT_NONE,
+                    choices=DOWNLOAD_SORT_CHOICES,
+                    cli=("--sort-into",),
                 ),
             ),
             queueable=True,
