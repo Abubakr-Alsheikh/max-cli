@@ -33,11 +33,15 @@ class TransactionLog:
 
     MAX_GROUPS = 50
     RETENTION_DAYS = 30
+    # Groups sort by timestamp. Windows' clock can tick in ~15 ms steps, so
+    # two groups made back to back got one timestamp and undo could pick the
+    # older one; each new group here comes at least a microsecond later.
+    _last_stamp: Optional[datetime] = None
 
     def __init__(self, command: str, storage_dir: Optional[Path] = None) -> None:
         self.group_id = self._generate_id()
         self.command = command
-        self.timestamp = datetime.now().isoformat()
+        self.timestamp = self._next_stamp().isoformat()
         self.operations: list[dict] = []
         self.status = "completed"
         self.undo_status: Optional[str] = None
@@ -303,6 +307,16 @@ class TransactionLog:
                 f.unlink()
                 count += 1
         return count
+
+    @classmethod
+    def _next_stamp(cls) -> datetime:
+        """Now, or a microsecond after the last group's time if the clock
+        hasn't moved on since."""
+        stamp = datetime.now()
+        if cls._last_stamp is not None and stamp <= cls._last_stamp:
+            stamp = cls._last_stamp + timedelta(microseconds=1)
+        TransactionLog._last_stamp = stamp
+        return stamp
 
     @staticmethod
     def _generate_id() -> str:
