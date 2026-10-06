@@ -5,9 +5,10 @@ file, before yt-dlp names it, so the same fields can sort the files into
 folders. `fix_id3v1` repairs the old ID3v1 tag ffmpeg adds to MP3s.
 
 Why ID3v1 needs a repair: ffmpeg writes the link into its 30-byte comment.
-`https://www.youtube.com/watch?` fills all 30 bytes, and ID3v1.1 readers
-(mutagen, Windows Explorer) take the last byte as the track number: "?" is
-63, so every downloaded song showed track 63.
+`https://www.youtube.com/watch?` fills all 30 bytes, and readers that take
+every ID3v1 tag for ID3v1.1 (mutagen before 1.48 among them) read the last
+byte as the track number: "?" is 63, so every downloaded song showed
+track 63.
 """
 
 from dataclasses import dataclass

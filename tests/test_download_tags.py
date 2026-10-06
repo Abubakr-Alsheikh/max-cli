@@ -209,13 +209,13 @@ def test_a_slash_in_an_album_name_makes_no_extra_folder(tmp_path):
 # --- ID3v1 ---------------------------------------------------------------------------
 
 
-def test_the_link_in_the_id3v1_comment_reads_as_track_63(tmp_path):
-    from mutagen.id3 import ID3
-
+def test_the_link_fills_the_byte_id3v1_1_keeps_the_track_in(tmp_path):
+    # mutagen before 1.48 read this byte as track 63; 1.48 checks the flag.
     song = _youtube_mp3(tmp_path / "song.mp3")
+    track_byte = song.read_bytes()[-2]  # the genre byte comes last
 
     assert v1_track_is_comment(song)
-    assert str(ID3(song)["TRCK"]) == str(QUESTION_MARK)
+    assert track_byte == QUESTION_MARK
 
 
 def test_fix_id3v1_removes_the_false_track_and_keeps_the_tags(tmp_path):

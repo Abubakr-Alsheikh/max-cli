@@ -58,7 +58,7 @@ With metadata on (the default), Max writes tags into each file: the title, the a
 - **Track:** the item's place in the playlist and the playlist's length (`3/43`). Picking items with `--index 3,5` keeps their real places.
 - **Folders:** `--sort-into artist/album` saves into `Artist/Album/`, and `--sort-into album` into `Album/`. A file without an album stays in the artist's folder or the output folder.
 
-Older versions showed track **63** on every downloaded MP3. ffmpeg wrote the link into the old ID3v1 tag, and players read its last character, `?`, as track 63. Max now rewrites that tag after each download, and `max audio` commands ignore the false number. To fix files you already have, renumber them: `max audio batch "<folder>" --start 1`.
+Older versions showed track **63** on every downloaded MP3. ffmpeg wrote the link into the old ID3v1 tag, and some readers, Max's own tag reader among them, took its last character, `?`, for track 63. Max now rewrites that tag after each download, and `max audio` commands ignore the false number. To fix files you already have, renumber them: `max audio batch "<folder>" --start 1`.
 
 `max net` is an old, hidden name for the `max grab` group. It still works, but new scripts should use `max grab`.
 

@@ -12,7 +12,7 @@
 
 ### Fixed
 
-- Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and players read its last character, `?`, as track 63. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
+- Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and some readers, Max's own among them (mutagen before 1.48), took its last character, `?`, for track 63. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
 - The Browse window's **Max downloads** place opens the folder the Download page saves into, not the empty folder of the Save to setting. Folder pickers list the page's files too, dimmed, so a folder of songs no longer looks empty.
 
 ## 1.0.0 (2026-10-06)
