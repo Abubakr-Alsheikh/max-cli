@@ -356,3 +356,28 @@ def test_undo_removes_made_folders_only_when_empty(tmp_path):
     assert not (tmp_path / "a").exists()
     assert (tmp_path / "c" / "new.txt").exists()
     assert "Kept folder with files in it: c" in steps
+
+
+def test_groups_made_on_one_clock_tick_keep_their_order(txn_storage, monkeypatch):
+    """Windows' clock can tick in ~15 ms steps: two groups got one timestamp,
+    and undo picked the older one by its random name (a CI failure)."""
+    import datetime as real
+
+    from max_cli.common import transaction_log
+
+    frozen = real.datetime(2026, 10, 6, 16, 8, 48, 123000)
+
+    class FrozenClock(real.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    monkeypatch.setattr(transaction_log, "datetime", FrozenClock)
+    first = TransactionLog("files order", txn_storage)
+    first.save()
+    second = TransactionLog("files order", txn_storage)
+    second.save()
+
+    newest = TransactionLog.list_groups(txn_storage)[0]
+    assert second.timestamp > first.timestamp
+    assert newest["group_id"] == second.group_id

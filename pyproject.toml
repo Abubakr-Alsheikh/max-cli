@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0"]  # 77: the license as an SPDX expression
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,24 @@ version = "1.0.0"
 description = "The Local, Fast, & Lazy Terminal Assistant for high-performance tasks."
 authors = [{name = "Abubakr Alsheikh", email = "abubakralsheikh@outlook.com"}]
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
+# PyPI's page and the README badges read these.
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia",
+    "Topic :: Utilities",
+]
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.0.0",
