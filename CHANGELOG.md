@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (2026-10-04)
+## 1.0.0 (2026-10-06)
 
 The first stable release. Max now has three ways in (commands, an AI agent and a dashboard) that share one description of every action, so they offer the same options and run the same code.
 
