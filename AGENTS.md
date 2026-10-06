@@ -150,6 +150,8 @@ def compress_images(...):
 
 - If a task takes too long (e.g., fighting type checkers on 3rd-party libs), mark it `[D]` (Deferred) in the `PLANS/` system and move on.
 - Update `README.md` and `docs/` ONLY if user-facing behavior, CLI commands, or installation steps change.
+- Commit messages follow Conventional Commits (`feat`, `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `ci`; `!` or a `BREAKING CHANGE:` line for a break): the type decides the next release. No Claude attribution in commits or PR text.
+- Versions follow Semantic Versioning, with the rules for major, minor and patch in `docs/contributing.md` ("Versions and Releases"). When asked to bump the version, use the `max-release` skill: `scripts/release_plan.py` suggests the level from the commits since the last tag, you recommend one with reasons and wait for the maintainer's choice, then update `pyproject.toml` and `CHANGELOG.md`, merge, tag `vX.Y.Z` and check PyPI. The Release workflow publishes the tag's `CHANGELOG.md` section as the release notes.
 
 ### Automated Enforcement (Claude Code hooks & skills)
 
@@ -159,7 +161,7 @@ def compress_images(...):
 - **PreToolUse `guard.py`**: denies `--no-verify`, force-push, `.env` edits, and `gh pr create` before `scripts/ci_local.py --full` has passed for HEAD. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
 - **Stop `stop_gate.py`**: when Python changed during the session, it runs `ruff check` plus `pytest -x` before the agent may finish. It blocks once, then warns.
 
-Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes), `max-plans` (PLANS lifecycle) and `max-tui-design` (the dashboard's design system: read it before building or redesigning any dashboard page). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
+Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes), `max-plans` (PLANS lifecycle), `max-release` (which version comes next, and shipping it) and `max-tui-design` (the dashboard's design system: read it before building or redesigning any dashboard page). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
 
 The same folder holds vetted third-party skills: `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `python-testing-patterns`, `python-type-safety`, `python-error-handling`, `ruff`, `sharp-edges`, `textual-builder` and `handoff` (session handovers in `.claude/handoffs/`; read the newest one first when resuming work). Each starts with a **Project overrides (Max CLI)** block that wins over the upstream text. `.claude/skills/THIRD_PARTY.md` records their sources, commits and licenses. Before you add another external skill, read it in full, add an override block and record it there.
 

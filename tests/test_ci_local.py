@@ -151,3 +151,21 @@ class TestGuardPrCreate:
     def test_other_gh_commands_are_not_affected(self, capsys, monkeypatch):
         monkeypatch.setattr(guard, "head_passed_local_ci", lambda: False)
         assert self._decision(capsys, "gh pr view 23") == "allow"
+
+
+def test_an_annotated_tag_on_the_checked_out_commit_runs_the_check(
+    fake_repo, monkeypatch
+):
+    """`git push origin v1.0.0` was refused: an annotated tag is its own
+    object, and the hook compared that object with HEAD."""
+    _, checks = fake_repo
+    tag_object = "c" * 40
+    answers = {
+        ("rev-parse", "HEAD"): HEAD_SHA,
+        ("rev-parse", f"{tag_object}^{{commit}}"): HEAD_SHA,
+    }
+    monkeypatch.setattr(ci_local, "git", lambda *args: answers.get(args, ""))
+    line = f"refs/tags/v1.0.0 {tag_object} refs/tags/v1.0.0 {ci_local.ZERO_SHA}"
+
+    assert ci_local.pre_push([line]) == 0
+    assert checks == [False]

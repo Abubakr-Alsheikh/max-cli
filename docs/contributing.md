@@ -80,8 +80,66 @@ CI also runs on macOS and Linux. The script can't reproduce those, so watch for 
 
 1. Create a feature branch
 2. Make changes, then run `python scripts/ci_local.py --full`
-3. Commit with a clear message
+3. Commit with a Conventional Commits message (see below)
 4. Push and create a PR
+
+## Commit Messages
+
+Start every commit with its type, an optional scope and a colon: `feat(images): convert SVG`. The type decides which release the change needs:
+
+| Type | Use it for | Release |
+|------|------------|---------|
+| `feat` | Something new you can use: a command, an option, a page, a setting, a format | minor |
+| `fix` | A bug fixed | patch |
+| `perf` | The same result, faster or lighter | patch |
+| `docs`, `test`, `refactor`, `style`, `ci`, `build`, `chore` | Nothing users notice | none |
+
+Mark a change that breaks something users rely on with `!` after the type (`feat(cli)!: rename max grab to max get`), or a `BREAKING CHANGE:` line in the body that says what breaks and what to do instead.
+
+## Versions and Releases
+
+Max follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`. A release takes the biggest change since the last one.
+
+**Major** (`1.4.2` to `2.0.0`): something that worked stops working, or works differently, without you changing anything.
+
+- A command, an option or a setting is removed or renamed (`config.REMOVED_SETTINGS` grows).
+- A default changes what a command makes: output names, folders, formats, quality.
+- A Python version is dropped (`requires-python` changes).
+- Exit codes that scripts check change.
+- The plugin API (`max_cli.plugins.base`) changes in a way old plugins can't follow.
+
+**Minor** (`1.4.2` to `1.5.0`): something new, and everything old still works.
+
+- A new command, option, dashboard page, setting, file format or AI provider.
+- A new Python version supported, or a new dependency that installs by itself.
+- Something marked as going away in a later major release (the old way still works).
+
+**Patch** (`1.4.2` to `1.4.3`): fixes only.
+
+- Bugs, crashes, wrong results, slow paths.
+- Wording, docs and tests that ship with a fix.
+
+**No release**: only docs, tests, refactors or CI changed. Wait for a fix or a feature.
+
+When you're unsure between two levels, take the bigger one: a surprise costs users more than a version number.
+
+To see what the next release should be:
+
+```bash
+python scripts/release_plan.py           # since the last tag
+python scripts/release_plan.py --since v1.0.0
+```
+
+It sorts the commits since the last tag by type, flags a dropped Python version or removed settings, and prints the suggested level and version with the commits behind it. It suggests; you decide.
+
+### Making a release
+
+1. Run `python scripts/release_plan.py` and agree on the level.
+2. On a `release/X.Y.Z` branch, set `version` in `pyproject.toml` and add a `## X.Y.Z (date)` section at the top of `CHANGELOG.md` with **New**, **Fixed** and **Changed** lists written for users, not copied from commits. Say what to do for every breaking change.
+3. Run `python scripts/ci_local.py --full`, open the PR and merge it once GitHub's checks pass.
+4. On the merged `main`, tag the merge commit and push the tag: `git tag -a vX.Y.Z -m "Max X.Y.Z"` and `git push origin vX.Y.Z`.
+5. The Release workflow tests again, builds, creates the GitHub release with the CHANGELOG section as its notes and publishes to PyPI. Check that https://pypi.org/project/max-cli/ shows the new version.
+6. In an editable install, run `pip install -e . --no-deps` (with the dashboard closed) so `max --version` and the sidebar show the new version.
 
 ## Project Structure
 

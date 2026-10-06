@@ -338,9 +338,21 @@ def check(full: bool) -> int:
     return 0 if ok else 1
 
 
+def _pushed_commit(local_ref: str, sha: str) -> str:
+    """The commit a pushed ref points at. An annotated tag is its own object,
+    so a release tag on HEAD looked like some other commit."""
+    if local_ref.startswith("refs/tags/") and sha != ZERO_SHA:
+        return git("rev-parse", f"{sha}^{{commit}}") or sha
+    return sha
+
+
 def pre_push(ref_lines: list[str]) -> int:
     """Git passes one line per pushed ref: local_ref local_sha remote_ref remote_sha."""
-    pushed = {line.split()[1] for line in ref_lines if len(line.split()) == 4}
+    pushed = {
+        _pushed_commit(line.split()[0], line.split()[1])
+        for line in ref_lines
+        if len(line.split()) == 4
+    }
     pushed.discard(ZERO_SHA)  # deleting a remote branch pushes no code
     if not pushed or pushed == {read_stamp().get("head")}:
         return 0
