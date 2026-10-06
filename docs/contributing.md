@@ -79,7 +79,7 @@ CI also runs on macOS and Linux. The script can't reproduce those, so watch for 
 ## Submitting PRs
 
 1. Create a feature branch
-2. Make changes, then run `python scripts/ci_local.py --full`
+2. Make changes. If they touch the package (`src/` or `pyproject.toml`), run `python scripts/ci_local.py --full` once before the PR. Docs, tests and scripts can go straight to the PR: GitHub CI tests every PR.
 3. Commit with a Conventional Commits message (see below)
 4. Push and create a PR
 

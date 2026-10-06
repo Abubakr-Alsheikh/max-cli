@@ -2,7 +2,10 @@
 
 Bash/PowerShell:
 - deny: skipping git hooks (--no-verify), force-pushing, committing .env files
-- deny: `gh pr create` until HEAD passed `python scripts/ci_local.py --full`
+- deny: `gh pr create` for a branch that changes the package (src/,
+        pyproject.toml) until `python scripts/ci_local.py --full` passed
+        for it. Docs, tests, scripts and skills don't need the local run:
+        GitHub CI tests every PR, and the full run takes 10-20 minutes.
 - ask:  installing packages (AGENTS.md: ask before adding dependencies),
         git reset --hard / git clean -f (destroys uncommitted work)
 Write/Edit:
@@ -37,9 +40,13 @@ ASK_COMMAND_PATTERNS = [
 PR_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
 CI_LOCAL_STAMP = "ci-local.json"
 CI_LOCAL_REASON = (
-    "Run `python scripts/ci_local.py --full` on a clean tree first; "
-    "it runs the GitHub CI checks locally and records HEAD when they pass."
+    "This branch changes the package (src/ or pyproject.toml): run "
+    "`python scripts/ci_local.py --full` on a clean tree first; it runs the "
+    "GitHub CI checks locally and records HEAD when they pass."
 )
+# Changes under these need the full local run before a PR.
+PACKAGE_PATHS = ("src/", "pyproject.toml")
+BASE_BRANCH = "origin/main"
 ASK_EDIT_FILES = {
     "pyproject.toml": "AGENTS.md: ask before changing dependencies or entry points.",
 }
@@ -73,22 +80,40 @@ def strip_literals(command: str) -> str:
     return QUOTED_STRING.sub("''", without_heredocs)
 
 
+def _git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def changes_package(since: str) -> bool:
+    """True when a commit after `since` touched src/ or pyproject.toml."""
+    changed = _git("diff", "--name-only", f"{since}..HEAD").splitlines()
+    return any(name.startswith(PACKAGE_PATHS) for name in changed)
+
+
 def head_passed_local_ci() -> bool:
-    """True when scripts/ci_local.py --full passed for the checked-out commit."""
+    """True when the PR may open without another local run.
+
+    That is: the branch leaves the package alone, or the full run passed
+    for HEAD, or for an earlier commit with only docs, tests or scripts
+    after it.
+    """
     try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        stamp_file = subprocess.run(
-            ["git", "rev-parse", "--git-path", CI_LOCAL_STAMP],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        if not changes_package(_git("merge-base", BASE_BRANCH, "HEAD")):
+            return True
+        stamp_file = _git("rev-parse", "--git-path", CI_LOCAL_STAMP)
         stamp = json.loads(Path(stamp_file).read_text(encoding="utf-8"))
+        if stamp.get("mode") != "full":
+            return False
+        passed = stamp.get("head", "")
+        is_ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", passed, "HEAD"],
+            capture_output=True,
+        )
+        return is_ancestor.returncode == 0 and not changes_package(passed)
     except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
         return False
-    return stamp == {"head": head, "mode": "full"}
 
 
 def check_command(command: str) -> None:

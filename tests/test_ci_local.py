@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -151,6 +152,64 @@ class TestGuardPrCreate:
     def test_other_gh_commands_are_not_affected(self, capsys, monkeypatch):
         monkeypatch.setattr(guard, "head_passed_local_ci", lambda: False)
         assert self._decision(capsys, "gh pr view 23") == "allow"
+
+
+class TestGuardNeedsTheLocalRunOnlyForThePackage:
+    """The full local run takes 10-20 minutes; GitHub CI tests every PR."""
+
+    def _commit(self, repo, name: str, text: str = "x") -> str:
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        subprocess.run(["git", "add", name], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", name], cwd=repo, check=True)
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def _stamp(self, repo, head: str) -> None:
+        (repo / ".git" / guard.CI_LOCAL_STAMP).write_text(
+            json.dumps({"head": head, "mode": "full"}), encoding="utf-8"
+        )
+
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch):
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        for key, value in (("user.email", "t@t"), ("user.name", "t")):
+            subprocess.run(["git", "config", key, value], cwd=tmp_path, check=True)
+        base = self._commit(tmp_path, "README.md")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(guard, "BASE_BRANCH", base)
+        return tmp_path
+
+    def test_docs_and_tests_need_no_local_run(self, repo):
+        self._commit(repo, "docs/usage.md")
+        self._commit(repo, "tests/test_x.py")
+
+        assert guard.head_passed_local_ci()
+
+    def test_a_package_change_needs_a_full_pass(self, repo):
+        self._commit(repo, "src/max_cli/x.py")
+
+        assert not guard.head_passed_local_ci()
+
+    def test_docs_after_a_full_pass_need_no_new_run(self, repo):
+        passed = self._commit(repo, "src/max_cli/x.py")
+        self._stamp(repo, passed)
+        self._commit(repo, "CHANGELOG.md")
+
+        assert guard.head_passed_local_ci()
+
+    def test_code_after_a_full_pass_needs_a_new_run(self, repo):
+        passed = self._commit(repo, "src/max_cli/x.py")
+        self._stamp(repo, passed)
+        self._commit(repo, "pyproject.toml")
+
+        assert not guard.head_passed_local_ci()
 
 
 def test_an_annotated_tag_on_the_checked_out_commit_runs_the_check(
