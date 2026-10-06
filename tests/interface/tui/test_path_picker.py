@@ -9,6 +9,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Button, Checkbox, DataTable, Input, OptionList, Static
 
 from max_cli.common.file_kinds import IMAGE, KIND_SUFFIXES
+from max_cli.interface.tui.ui_prefs import DOWNLOAD_FOLDER_PREF, save_pref
 from max_cli.interface.tui.widgets import path_picker
 from max_cli.interface.tui.widgets.path_picker import PathPicker, PickMode
 
@@ -61,7 +62,6 @@ def test_list_folder_sorts_folders_first_and_filters(tree):
 
     everything = path_picker.list_folder(photos)
     images = path_picker.list_folder(photos, suffixes=KIND_SUFFIXES[IMAGE])
-    folders = path_picker.list_folder(photos, folders_only=True)
     hidden = path_picker.list_folder(photos, show_hidden=True)
 
     assert [entry.name for entry in everything] == [
@@ -71,7 +71,6 @@ def test_list_folder_sorts_folders_first_and_filters(tree):
         "notes.txt",
     ]
     assert [entry.name for entry in images] == ["trips", "a.jpg", "b.png"]
-    assert [entry.name for entry in folders] == ["trips"]
     assert ".secret.jpg" in [entry.name for entry in hidden]
     assert everything[1].size == 10
 
@@ -101,6 +100,16 @@ def test_places_lists_the_usual_folders_that_exist():
 
     assert names[:2] == ["Home", "Downloads"]
     assert "Desktop" not in names
+
+
+def test_max_downloads_is_the_folder_the_download_page_saves_into(tmp_path):
+    # The Download page remembers its own folder; the setting's folder can
+    # sit elsewhere, empty. The place has to open the one with the files.
+    page_folder = tmp_path / "Videos" / "Max Downloads"
+    page_folder.mkdir(parents=True)
+    save_pref(DOWNLOAD_FOLDER_PREF, str(page_folder))
+
+    assert ("Max downloads", page_folder) in path_picker.places()
 
 
 # --- the dialog ------------------------------------------------------------------
@@ -194,16 +203,34 @@ async def test_a_page_shows_its_own_files_until_all_files_is_ticked(tree):
 
 
 @pytest.mark.asyncio
-async def test_folder_mode_lists_folders_and_returns_the_open_one(tree):
+async def test_folder_mode_shows_files_too_and_returns_the_open_folder(tree):
     app = PickerApp(PathPicker(tree, PickMode.FOLDER))
     async with app.run_test(size=SIZE) as pilot:
-        assert await _listed(pilot, app, ["..", "docs", "photos"])
+        assert await _listed(pilot, app, ["..", "docs", "photos", "report.pdf"])
         await pilot.press("down", "enter")  # from docs to photos
-        await _listed(pilot, app, ["..", "trips"])
+        assert await _listed(pilot, app, ["..", "trips", "a.jpg", "b.png", "notes.txt"])
+        await pilot.press("down", "enter")  # a file: nothing to open or pick
+        await pilot.pause()
+        still_open = isinstance(app.screen, PathPicker)
+        table = app.screen.query_one("#picker-table", DataTable)
+        file_style = table.get_row_at(2)[0].style
         app.screen.query_one("#picker-ok", Button).press()
         await pilot.pause()
 
+    assert still_open
+    assert file_style == "dim"
     assert app.picked == [tree / "photos"]
+
+
+@pytest.mark.asyncio
+async def test_a_folder_of_the_pages_files_does_not_look_empty(tree):
+    app = PickerApp(PathPicker(tree / "photos", PickMode.FOLDER, file_types="images"))
+    async with app.run_test(size=SIZE) as pilot:
+        listed = await _listed(pilot, app, ["..", "trips", "a.jpg", "b.png"])
+        status = str(app.screen.query_one("#picker-status", Static).render())
+
+    assert listed
+    assert "1 folder" in status and "2 images" in status
 
 
 @pytest.mark.asyncio

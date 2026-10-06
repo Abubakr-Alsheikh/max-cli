@@ -10,6 +10,7 @@ import yt_dlp
 from max_cli.common.exceptions import OperationCancelled, ValidationError
 from max_cli.config import settings
 from max_cli.core.engines.download_history import DownloadHistory
+from max_cli.core.engines.download_tags import DownloadTags
 from max_cli.core.engines.network_engine import NetworkEngine
 from max_cli.core.operations import grab
 
@@ -188,6 +189,38 @@ class TestDownload:
         )
 
         assert "list=" not in engine.download_media.call_args.kwargs["url"]
+
+    def test_tags_and_folders_reach_the_engine(self, tmp_path):
+        engine = MagicMock()
+        engine.download_media.return_value = {"files": []}
+
+        grab.download(
+            VIDEO_URL,
+            output=tmp_path,
+            artist=" Me ",
+            album="Mine",
+            genre="",
+            year="2024",
+            track_numbers=False,
+            sort_into="artist/album",
+            record_history=False,
+            engine=engine,
+        )
+
+        tags = engine.download_media.call_args.kwargs["tags"]
+        assert tags == DownloadTags(
+            artist="Me",
+            album="Mine",
+            year="2024",
+            track_numbers=False,
+            sort_into="artist/album",
+        )
+
+    def test_unknown_folder_sorting(self, tmp_path):
+        with pytest.raises(ValidationError, match="sort_into"):
+            grab.download(
+                VIDEO_URL, output=tmp_path, sort_into="genre", engine=MagicMock()
+            )
 
     def test_unknown_media_type(self, tmp_path):
         with pytest.raises(ValidationError, match="media_type"):
@@ -449,3 +482,40 @@ class TestYoutubeFix:
         with patch("shutil.which", return_value="deno"):
             with pytest.raises(ProcessingError, match="Restart max"):
                 grab.install_youtube_fix(engine=engine)
+
+
+class TestTagsInTheEngine:
+    def test_download_media_names_files_by_the_folders_and_adds_the_tag_steps(
+        self, tmp_path
+    ):
+        with patch("yt_dlp.YoutubeDL") as youtube_dl:
+            ydl = youtube_dl.return_value.__enter__.return_value
+            NetworkEngine().download_media(
+                VIDEO_URL,
+                tmp_path,
+                audio_only=True,
+                tags=DownloadTags(sort_into="album"),
+            )
+
+        options = youtube_dl.call_args.args[0]
+        assert options["outtmpl"] == str(
+            tmp_path / "%(max_folder_1|.)s/%(max_folder_2|.)s/%(title)s.%(ext)s"
+        )
+        steps = [call.kwargs["when"] for call in ydl.add_post_processor.call_args_list]
+        assert steps == ["pre_process", "post_process"]
+
+    def test_a_queued_download_keeps_its_tags(self, tmp_path):
+        from max_cli.core.engines.network_engine import (
+            _download_executor,
+            make_download_task,
+        )
+
+        tags = DownloadTags(artist="Me", sort_into="artist/album")
+        task = make_download_task(VIDEO_URL, output_path=tmp_path, tags=tags)
+
+        with patch.object(NetworkEngine, "download_media") as download_media:
+            with patch("max_cli.core.engines.network_engine._log_download"):
+                _download_executor(task)
+
+        assert task.payload["artist"] == "Me"
+        assert download_media.call_args.kwargs["tags"] == tags

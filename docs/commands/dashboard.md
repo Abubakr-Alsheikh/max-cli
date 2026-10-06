@@ -67,7 +67,9 @@ The Activity page's Queue tab reads the same task store as `max queue` and `max 
 
 Paste a link and press `Enter`, or wait a moment: the page checks the link. While it checks, the Check button reads "Checking" and the preview shows a spinner with the seconds so far. Then it shows its title, channel, length, chapters, views, likes, upload date, the best video and audio streams, the subtitle languages and the site. Each quality button shows the size you'll get, and the Audio (MP3) buttons show the size at each bitrate.
 
-- **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles, metadata and playlist handling.
+- **Options**, under the preview, holds the other `max grab download` options: an exact resolution, the YouTube player client, and checkboxes for subtitles and metadata.
+- **Whole playlist**, in Options, decides what a link to a video inside a playlist (`watch?v=...&list=...`) gets. Off (the default while the setting "Single videos drop the playlist part of their link" is on), the page checks and downloads only that video. On, it checks the playlist and lists its items to tick. A playlist link always lists them. Under the list, Select all and Select none tick everything or nothing, and the **Items** box takes `10` for the first 10, or `5-20` and `1-3,7` for those items; press `Enter`. The line under it counts the ticked items and their length.
+- **Tags**, under Options, shows when the format is Audio (MP3); for video, tick **Tags** in Options. Tags you hide aren't used. The card sets what goes into the files: artist, album, genre and year (empty fields keep what the site says), whether a playlist's tracks get numbers, whether `Artist - Song` titles give the artist, and **Sort into** for `Album/` or `Artist/Album/` folders. After you check a playlist, the card names the album it will get. The page keeps your Sort into, numbering and title choices for next time.
 - **Transfers** has two tabs. Downloads shows one row per download with its progress; "Clear finished" removes the done, failed and cancelled rows. History shows 8 past downloads at a time: type in the filter box to search titles and sites, and use "< Prev" and "Next >" to page. Press `Enter` on a row, or "Download again", to put its link back in the box. "Copy link" copies it.
 - **Tools** sums up your downloads (count, done, failed, total size, sites) and shows whether the YouTube fix is installed. If YouTube downloads fail with HTTP 403, press "Install fix": it does what `max grab pot-setup` does, after one confirmation. It needs Deno. The other buttons open the download folder, the Activity page's Queue and the settings.
 
@@ -131,13 +133,13 @@ When you pick a video, an audio file, an image or a PDF on a page that isn't mad
 
 Every Browse button opens the same window. It starts in the folder of the path already in the field, or where you picked from last time.
 
-- **Places** on the left: Home, Desktop, Documents, Downloads, Pictures, Videos and Music (the ones you have), Max's download folder, your pinned folders, folders you picked from lately, and the drives.
+- **Places** on the left: Home, Desktop, Documents, Downloads, Pictures, Videos and Music (the ones you have), **Max downloads** (the folder the Download page saves into), your pinned folders, folders you picked from lately, and the drives.
 - **The path bar:** `<` goes back, `^` goes up a folder. Type or paste a path and press `Enter` to go there; a file path picks that file.
 - **The list:** folders first, then files with their size and date. Type in the filter box (`Ctrl+F`) to narrow it. `Enter` opens a folder or picks a file, `Backspace` goes up and puts you back on the folder you left, `Alt+Left` goes back.
 - On the Video, Images and PDF pages the list shows only the files that page works on. Tick **All files** to see everything, and **Hidden files** to see hidden ones.
 - **Pin this folder** adds the open folder to Places for next time.
 
-Fields that take a folder list folders only and pick the open one. Fields for a file Max writes (an output) ask for a file name and save it in the open folder. Fields that take a file also have **Use this folder**, for actions that work on a whole folder.
+Fields that take a folder pick the open one. They list the page's files too, dimmed, so you can see which folder holds your songs or photos; the line under the list counts them. Fields for a file Max writes (an output) ask for a file name and save it in the open folder. Fields that take a file also have **Use this folder**, for actions that work on a whole folder.
 
 ## Activity page
 

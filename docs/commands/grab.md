@@ -16,6 +16,12 @@ max grab download "https://youtube.com/watch?v=..." -Q
 
 # Interactive mode (no URL required)
 max grab download
+
+# A playlist as an album: Artist/Album folders, tracks numbered 1, 2, 3 ...
+max grab download "https://youtube.com/playlist?list=..." -a --sort-into artist/album
+
+# Your own artist and album in every file
+max grab download "https://youtube.com/playlist?list=..." -a --artist "Emil Rottmayer" --album "Live 2024"
 ```
 
 ## Options
@@ -35,6 +41,24 @@ max grab download
 | `--no-process` | | Use with `--queue`: add to the queue but don't start the worker. Run `max queue start` or `max queue process` later |
 | `--progress` / `--no-progress` | | Show or hide the progress bar (default: show) |
 | `--player-client` | | YouTube player client override: `auto`, `default`, `web`, `tv`, `ios`, `android`, `mweb`, `tv_embedded` (fixes HTTP 403 / SABR errors) |
+| `--artist` | | Artist to write into every file. Default: what the site says |
+| `--album` | | Album to write into every file. Default: the site's album, or the playlist's name |
+| `--genre` | | Genre to write into every file |
+| `--year` | | Year to write into every file |
+| `--track-numbers` / `--no-track-numbers` | | Number a playlist's files by their place in it, as `3/43` (default: on) |
+| `--split-title` / `--no-split-title` | | Read the artist from titles like `Artist - Song` when the site names none (default: on) |
+| `--sort-into` | | `none` (default), `album` (an `Album/` folder) or `artist/album` (`Artist/Album/`) inside the output folder |
+
+### Tags and folders
+
+With metadata on (the default), Max writes tags into each file: the title, the artist, the album and, for a playlist, the track number.
+
+- **Artist:** `--artist`, else the site's artist, else the part before ` - ` in a title like `A.L.I.S.O.N - Before I Go`, else the channel.
+- **Album:** `--album`, else the site's album, else the playlist's name. The playlist's channel becomes the album artist, so music players keep the tracks together.
+- **Track:** the item's place in the playlist and the playlist's length (`3/43`). Picking items with `--index 3,5` keeps their real places.
+- **Folders:** `--sort-into artist/album` saves into `Artist/Album/`, and `--sort-into album` into `Album/`. A file without an album stays in the artist's folder or the output folder.
+
+Older versions showed track **63** on every downloaded MP3. ffmpeg wrote the link into the old ID3v1 tag, and some readers, Max's own tag reader among them, took its last character, `?`, for track 63. Max now rewrites that tag after each download, and `max audio` commands ignore the false number. To fix files you already have, renumber them: `max audio batch "<folder>" --start 1`.
 
 `max net` is an old, hidden name for the `max grab` group. It still works, but new scripts should use `max grab`.
 

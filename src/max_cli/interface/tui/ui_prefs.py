@@ -8,6 +8,8 @@ from max_cli.common.atomic import atomic_write_json
 from max_cli.common.retry import retry
 
 PREFS_FILE_NAME = "dashboard_prefs.json"
+# The folder last picked on the Download page.
+DOWNLOAD_FOLDER_PREF = "download_folder"
 
 
 def _prefs_file() -> Path:
@@ -49,3 +51,14 @@ def save_pref(key: str, value: Any) -> None:
         _write(prefs)
     except PermissionError:
         return
+
+
+def download_folder() -> Path:
+    """Where the Download page saves: the folder picked there last, else the
+    Save to setting (GRAB_DEFAULT_PATH)."""
+    from max_cli.config import settings
+
+    saved = load_prefs().get(DOWNLOAD_FOLDER_PREF)
+    if isinstance(saved, str) and saved.strip():
+        return Path(saved.strip()).expanduser()
+    return Path(settings.GRAB_DEFAULT_PATH).expanduser()

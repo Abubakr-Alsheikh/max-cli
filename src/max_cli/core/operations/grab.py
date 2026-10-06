@@ -4,6 +4,7 @@ Used by the dashboard's Download page, the Tools page and (later) the CLI and
 the AI agent. Nothing here prompts or prints. See PLANS/active/grab-page-redesign.md.
 """
 
+import dataclasses
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from max_cli.common.exceptions import ValidationError
 from max_cli.core.operations.result import ActionResult
+from max_cli.core.presets import DOWNLOAD_SORT_CHOICES, DOWNLOAD_SORT_NONE
 
 if TYPE_CHECKING:
     from max_cli.core.engines.network_engine import NetworkEngine
@@ -237,6 +239,11 @@ def probe(url: str, *, engine: Optional["NetworkEngine"] = None) -> MediaInfo:
     return media
 
 
+def _text_or_none(value: Optional[str]) -> Optional[str]:
+    text = (value or "").strip()
+    return text or None
+
+
 def _cached_title(url: str) -> Optional[str]:
     with _probe_lock:
         media = _probe_cache.get(url)
@@ -255,6 +262,13 @@ def download(
     include_metadata: Optional[bool] = None,
     strip_playlist: Optional[bool] = None,
     player_client: str = "auto",
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    genre: Optional[str] = None,
+    year: Optional[str] = None,
+    track_numbers: bool = True,
+    split_title: bool = True,
+    sort_into: str = DOWNLOAD_SORT_NONE,
     *,
     engine: Optional["NetworkEngine"] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
@@ -263,9 +277,16 @@ def download(
 ) -> ActionResult:
     """Download `url`. Options left as None use the user's grab settings.
 
+    `artist`, `album`, `genre` and `year` go into every file; empty ones keep
+    what the site says, and a playlist's name becomes the album when the site
+    names none. `track_numbers` numbers a playlist's files by their place in
+    it, `split_title` reads the artist from titles like "Artist - Song", and
+    `sort_into` saves into Album or Artist/Album folders.
+
     Raises OperationCancelled when `should_cancel` returns True mid-download.
     """
     from max_cli.config import settings
+    from max_cli.core.engines.download_tags import DownloadTags
     from max_cli.core.engines.network_engine import strip_playlist_params
 
     url = url.strip()
@@ -276,6 +297,18 @@ def download(
     if media_type not in MEDIA_TYPES:
         raise ValidationError(f"media_type must be one of {', '.join(MEDIA_TYPES)}")
     quality = quality or settings.GRAB_QUALITY
+    if sort_into not in DOWNLOAD_SORT_CHOICES:
+        choices = ", ".join(DOWNLOAD_SORT_CHOICES)
+        raise ValidationError(f"sort_into must be one of {choices}")
+    tags = DownloadTags(
+        artist=_text_or_none(artist),
+        album=_text_or_none(album),
+        genre=_text_or_none(genre),
+        year=_text_or_none(year),
+        track_numbers=track_numbers,
+        split_title=split_title,
+        sort_into=sort_into,
+    )
     if include_metadata is None:
         include_metadata = settings.GRAB_INCLUDE_METADATA
     if strip_playlist is None:
@@ -299,6 +332,7 @@ def download(
         output_path=output,
         progress_hook=progress_hook,
         should_cancel=should_cancel,
+        tags=tags,
         **options,
     )
     files = [Path(path) for path in result.get("files", [])]
@@ -312,7 +346,11 @@ def download(
             url=url,
             title=title,
             output_files=[str(path) for path in files],
-            settings_used={**options, "output_path": str(output)},
+            settings_used={
+                **options,
+                **dataclasses.asdict(tags),
+                "output_path": str(output),
+            },
             file_size=total_size,
         )
 

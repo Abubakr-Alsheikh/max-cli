@@ -36,6 +36,30 @@ class TestCLINetwork:
         assert type(passed) is str
 
     @patch("max_cli.interface.cli_network._add_to_queue_or_download")
+    def test_tag_and_folder_options_reach_the_downloader(self, mock_download):
+        from max_cli.core.engines.download_tags import DownloadTags
+
+        result = runner.invoke(
+            network_app,
+            [
+                "do",
+                "https://example.com/video",
+                "--artist",
+                "Me",
+                "--album",
+                "Mine",
+                "--no-track-numbers",
+                "--sort-into",
+                "artist/album",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert mock_download.call_args.kwargs["tags"] == DownloadTags(
+            artist="Me", album="Mine", track_numbers=False, sort_into="artist/album"
+        )
+
+    @patch("max_cli.interface.cli_network._add_to_queue_or_download")
     def test_player_client_defaults_to_none(self, mock_download):
         result = runner.invoke(network_app, ["do", "https://example.com/video"])
 
@@ -79,6 +103,7 @@ class TestCLINetwork:
         result = runner.invoke(network_app, ["pot-setup"])
         assert result.exit_code == 1
         assert "Deno not found" in result.stdout
+
 
 class TestGrabQueueUsesTaskStore:
     """`max grab queue/history/clear` read the shared task store (D1)."""
@@ -129,10 +154,11 @@ def test_declining_playlist_prompt_cancels_download():
 
     engine = MagicMock(has_js=True)
     engine.get_info.return_value = {"entries": [{}, {}]}
-    with patch.object(cli_network, "_get_engine", return_value=engine), patch.object(
-        cli_network.Confirm, "ask", return_value=False
-    ), patch.object(cli_network.Prompt, "ask", return_value="n"), pytest.raises(
-        typer.Exit
+    with (
+        patch.object(cli_network, "_get_engine", return_value=engine),
+        patch.object(cli_network.Confirm, "ask", return_value=False),
+        patch.object(cli_network.Prompt, "ask", return_value="n"),
+        pytest.raises(typer.Exit),
     ):
         cli_network._download_immediate(
             "https://youtube.com/watch?v=a&list=b",

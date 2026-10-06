@@ -1,3 +1,4 @@
+import dataclasses
 import shutil
 import subprocess
 import tarfile
@@ -5,7 +6,10 @@ import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+
+if TYPE_CHECKING:
+    from max_cli.core.engines.download_tags import DownloadTags
 
 QUALITY_MAP: dict[str, dict[str, Union[str, int]]] = {
     "ss": {"height": 360, "bitrate": 64, "label": "360p"},
@@ -214,8 +218,13 @@ class NetworkEngine:
         custom_height: Optional[int] = None,
         player_client: Optional[str] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
+        tags: Optional["DownloadTags"] = None,
     ) -> dict[str, Any]:
         """Download `url` into `output_path`.
+
+        `tags` sets the artist, album, track numbers and Artist/Album folders
+        (`download_tags.DownloadTags`); None numbers playlist tracks and keeps
+        the rest as the site says.
 
         Returns the output folder and `files`, the final paths on disk (after
         merging and audio extraction). `should_cancel` is polled on every
@@ -231,7 +240,13 @@ class NetworkEngine:
         )
         from max_cli.common.exceptions import OperationCancelled
         from max_cli.config import settings
+        from max_cli.core.engines.download_tags import (
+            DownloadTags,
+            output_template,
+            postprocessors,
+        )
 
+        tags = tags or DownloadTags()
         q = quality.lower()[0]
 
         quality_info = self.get_quality_info(quality, custom_height)
@@ -289,7 +304,7 @@ class NetworkEngine:
                 final_paths[info.get("id") or info["filepath"]] = info["filepath"]
 
         ydl_opts: dict[str, Any] = {
-            "outtmpl": str(output_path / "%(title)s.%(ext)s"),
+            "outtmpl": str(output_path / output_template(tags.sort_into)),
             "quiet": True,
             "noprogress": True,
             "updatetime": False,
@@ -357,6 +372,10 @@ class NetworkEngine:
             )
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            apply_tags, fix_id3v1 = postprocessors(tags)
+            ydl.add_post_processor(apply_tags, when="pre_process")
+            # After FFmpegMetadata and EmbedThumbnail, which run first.
+            ydl.add_post_processor(fix_id3v1, when="post_process")
             try:
                 ydl.download([url])
             except yt_dlp.utils.DownloadCancelled:
@@ -417,6 +436,9 @@ def make_download_task(url: str, **options: Any) -> "TaskItem":
         if key in options:
             value = options[key]
             payload[key] = str(value) if isinstance(value, Path) else value
+    tags = options.get("tags")
+    if tags is not None:
+        payload.update(dataclasses.asdict(tags))
     return TaskItem(
         type=TaskType.DOWNLOAD,
         title=url,
@@ -458,6 +480,7 @@ def _download_executor(task: "TaskItem") -> dict[str, Any]:
         subtitles=payload.get("subtitles", False),
         custom_height=payload.get("custom_height"),
         player_client=payload.get("player_client"),
+        tags=_payload_tags(payload),
     )
     # Post-processing (merge, audio extraction) can rename or remove the
     # files yt-dlp reported, so keep only the ones still on disk.
@@ -470,6 +493,14 @@ def _download_executor(task: "TaskItem") -> dict[str, Any]:
         "file_size": size,
         "message": f"Downloaded: {url[:50]}",
     }
+
+
+def _payload_tags(payload: dict[str, Any]) -> "DownloadTags":
+    from max_cli.core.engines.download_tags import TAG_OPTION_KEYS, DownloadTags
+
+    return DownloadTags(
+        **{key: payload[key] for key in TAG_OPTION_KEYS if key in payload}
+    )
 
 
 def _log_download(url: str, output_files: list[str], size: int) -> None:

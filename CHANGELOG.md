@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders. The Tags card shows for audio, and for video when you tick Tags.
+
+### Changed
+
+- The Download page has one **Whole playlist** box instead of "No playlist" and "Strip playlist". Off, a link to a video inside a playlist checks and downloads only that video; on, it lists the playlist's items to tick. The new Items box ticks the first N (`10`) or ranges (`5-20`, `1-3,7`), and a line counts the ticked items and their length.
+
+### Fixed
+
+- Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and some readers, Max's own among them (mutagen before 1.48), took its last character, `?`, for track 63. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
+- The Browse window's **Max downloads** place opens the folder the Download page saves into, not the empty folder of the Save to setting. Folder pickers list the page's files too, dimmed, so a folder of songs no longer looks empty.
+
 ## 1.0.0 (2026-10-06)
 
 The first stable release. Max now has three ways in (commands, an AI agent and a dashboard) that share one description of every action, so they offer the same options and run the same code.
