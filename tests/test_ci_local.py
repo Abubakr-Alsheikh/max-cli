@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -69,6 +70,7 @@ def fake_repo(monkeypatch, tmp_path):
     )
     checks: list[bool] = []
     monkeypatch.setattr(ci_local, "check", lambda full: checks.append(full) or 0)
+    monkeypatch.setattr(ci_local, "pushes_package_changes", lambda lines: True)
     return stamp, checks
 
 
@@ -77,6 +79,13 @@ def _push_line(sha: str) -> str:
 
 
 class TestPrePush:
+    def test_skips_a_push_that_leaves_the_package_alone(self, fake_repo, monkeypatch):
+        _, checks = fake_repo
+        monkeypatch.setattr(ci_local, "pushes_package_changes", lambda lines: False)
+
+        assert ci_local.pre_push([_push_line(HEAD_SHA)]) == 0
+        assert checks == []
+
     def test_skips_a_commit_that_already_passed(self, fake_repo):
         stamp, checks = fake_repo
         stamp.write_text(
@@ -151,3 +160,79 @@ class TestGuardPrCreate:
     def test_other_gh_commands_are_not_affected(self, capsys, monkeypatch):
         monkeypatch.setattr(guard, "head_passed_local_ci", lambda: False)
         assert self._decision(capsys, "gh pr view 23") == "allow"
+
+
+class TestGuardNeedsTheLocalRunOnlyForThePackage:
+    """The full local run takes 10-20 minutes; GitHub CI tests every PR."""
+
+    def _commit(self, repo, name: str, text: str = "x") -> str:
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        subprocess.run(["git", "add", name], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", name], cwd=repo, check=True)
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def _stamp(self, repo, head: str) -> None:
+        (repo / ".git" / guard.CI_LOCAL_STAMP).write_text(
+            json.dumps({"head": head, "mode": "full"}), encoding="utf-8"
+        )
+
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch):
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        for key, value in (("user.email", "t@t"), ("user.name", "t")):
+            subprocess.run(["git", "config", key, value], cwd=tmp_path, check=True)
+        base = self._commit(tmp_path, "README.md")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(guard, "BASE_BRANCH", base)
+        return tmp_path
+
+    def test_docs_and_tests_need_no_local_run(self, repo):
+        self._commit(repo, "docs/usage.md")
+        self._commit(repo, "tests/test_x.py")
+
+        assert guard.head_passed_local_ci()
+
+    def test_a_package_change_needs_a_full_pass(self, repo):
+        self._commit(repo, "src/max_cli/x.py")
+
+        assert not guard.head_passed_local_ci()
+
+    def test_docs_after_a_full_pass_need_no_new_run(self, repo):
+        passed = self._commit(repo, "src/max_cli/x.py")
+        self._stamp(repo, passed)
+        self._commit(repo, "CHANGELOG.md")
+
+        assert guard.head_passed_local_ci()
+
+    def test_code_after_a_full_pass_needs_a_new_run(self, repo):
+        passed = self._commit(repo, "src/max_cli/x.py")
+        self._stamp(repo, passed)
+        self._commit(repo, "pyproject.toml")
+
+        assert not guard.head_passed_local_ci()
+
+
+def test_an_annotated_tag_on_the_checked_out_commit_runs_the_check(
+    fake_repo, monkeypatch
+):
+    """`git push origin v1.0.0` was refused: an annotated tag is its own
+    object, and the hook compared that object with HEAD."""
+    _, checks = fake_repo
+    tag_object = "c" * 40
+    answers = {
+        ("rev-parse", "HEAD"): HEAD_SHA,
+        ("rev-parse", f"{tag_object}^{{commit}}"): HEAD_SHA,
+    }
+    monkeypatch.setattr(ci_local, "git", lambda *args: answers.get(args, ""))
+    line = f"refs/tags/v1.0.0 {tag_object} refs/tags/v1.0.0 {ci_local.ZERO_SHA}"
+
+    assert ci_local.pre_push([line]) == 0
+    assert checks == [False]
