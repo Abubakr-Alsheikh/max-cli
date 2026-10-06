@@ -4,7 +4,11 @@
 
 ### New
 
-- **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders.
+- **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders. The Tags card shows for audio, and for video when you tick Tags.
+
+### Changed
+
+- The Download page has one **Whole playlist** box instead of "No playlist" and "Strip playlist". Off, a link to a video inside a playlist checks and downloads only that video; on, it lists the playlist's items to tick. The new Items box ticks the first N (`10`) or ranges (`5-20`, `1-3,7`), and a line counts the ticked items and their length.
 
 ### Fixed
 

@@ -6,9 +6,12 @@
   each.
 - The OPTIONS card beside the preview holds every other `grab download`
   option, taken from the command catalog, in a few rows.
+- One "Whole playlist" box decides what a link to a video inside a playlist
+  gets: the video, or the playlist with its items to tick. The items box
+  ticks the first N or ranges such as 5-20.
 - The TAGS card sets the artist, album, genre and year written into the
   files, numbers a playlist's tracks by their place in it, and can save into
-  Album or Artist/Album folders.
+  Album or Artist/Album folders. It shows for audio; for video, tick Tags.
 - Check locks its button and shows a spinner with the seconds so far,
   until the site answers.
 - Each download gets a row with progress and a Cancel that really stops it.
@@ -35,6 +38,7 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import (
     Button,
+    Checkbox,
     DataTable,
     Input,
     Label,
@@ -68,8 +72,6 @@ ADVANCED_FIELDS = (
     "resolution",
     "subtitles",
     "include_metadata",
-    "no_playlist",
-    "strip_playlist",
     "player_client",
 )
 # The TAGS card: what goes into the files, and the folders they go in.
@@ -85,6 +87,7 @@ TAG_FIELDS = (
 # TAGS choices kept for next time. Artist and album belong to one download.
 REMEMBERED_TAG_FIELDS = ("sort_into", "track_numbers", "split_title")
 TAGS_PREF = "download_tags"
+ITEMS_HELP = "10 ticks the first 10; 5-20 or 1-3,7 tick those items"
 LINK_PATTERN = re.compile(r"https?://\S+")
 AUTO_CHECK_SECONDS = 0.6
 # At most this often per download. Every update is a repaint, and on Windows
@@ -226,6 +229,25 @@ def playlist_items(selected: list[int], total: int) -> Optional[str]:
     return ",".join(
         str(start) if start == end else f"{start}-{end}" for start, end in ranges
     )
+
+
+def items_to_tick(text: str, total: int) -> Optional[set[int]]:
+    """The playlist items `text` names: "10" is the first 10, "5-20" and
+    "1-3,7" are those items. Items past the end are left out. None when the
+    text isn't a list of numbers and ranges."""
+    text = text.strip().replace(" ", "")
+    if not text:
+        return None
+    if text.isdigit():
+        return set(range(1, min(int(text), total) + 1))
+    chosen: set[int] = set()
+    for part in text.split(","):
+        start, dash, end = part.partition("-")
+        if not start.isdigit() or (dash and not end.isdigit()):
+            return None
+        first, last = int(start), int(end) if dash else int(start)
+        chosen.update(range(max(first, 1), min(last, total) + 1))
+    return chosen
 
 
 def _duration(seconds: Optional[float]) -> str:
@@ -595,6 +617,34 @@ class DownloadPanel(Vertical):
         height: auto;
         max-height: 14;
     }
+    #dl-page-options {
+        height: auto;
+    }
+    /* The same look as the compact form's checkboxes above them. */
+    #dl-page-options Checkbox {
+        width: 1fr;
+        border: none;
+        padding: 0;
+        background: transparent;
+    }
+    #dl-page-options Checkbox:focus {
+        text-style: bold;
+        color: $accent;
+    }
+    #dl-page-options Checkbox > .toggle--button {
+        color: $border;
+        background: $boost;
+    }
+    #dl-page-options Checkbox.-on > .toggle--button {
+        color: $success;
+        background: $boost;
+    }
+    #dl-pl-items {
+        width: 1fr;
+    }
+    #dl-playlist-summary {
+        color: $text-muted;
+    }
     #dl-tags-hint {
         color: $text-muted;
         margin: 1 0;
@@ -711,10 +761,31 @@ class DownloadPanel(Vertical):
                     with Horizontal(id="dl-playlist-actions"):
                         yield Button("Select all", id="btn-pl-all")
                         yield Button("Select none", id="btn-pl-none")
+                        yield Input(
+                            placeholder="Items: 10 or 5-20",
+                            id="dl-pl-items",
+                            tooltip=ITEMS_HELP,
+                        )
+                    yield Static("", id="dl-playlist-summary")
                 with Vertical(id="dl-advanced", classes="card"):
                     yield ActionForm(
                         self._action, include=ADVANCED_FIELDS, compact=True
                     )
+                    with Horizontal(id="dl-page-options"):
+                        yield Checkbox(
+                            "Whole playlist",
+                            value=not settings.GRAB_STRIP_PLAYLIST,
+                            id="dl-whole-playlist",
+                            tooltip="A link to a video inside a playlist gets "
+                            "the whole playlist, with its items to tick. "
+                            "Off: only that video.",
+                        )
+                        yield Checkbox(
+                            "Tags",
+                            id="dl-tags-toggle",
+                            tooltip="Set the artist, album and folders for "
+                            "videos too. Audio always shows them.",
+                        )
                 with Vertical(id="dl-tags", classes="card"):
                     yield Static(TAGS_HINT, id="dl-tags-hint")
                     yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
@@ -791,6 +862,7 @@ class DownloadPanel(Vertical):
         self.query_one("#dl-advanced").border_title = "OPTIONS"
         self.query_one("#dl-tags").border_title = "TAGS"
         self._restore_tag_choices()
+        self._sync_tags_card()
         self.query_one("#dl-transfers").border_title = "TRANSFERS"
         self.query_one("#dl-tools").border_title = "TOOLS"
         self.query_one("#dl-duplicate").display = False
@@ -823,6 +895,7 @@ class DownloadPanel(Vertical):
         self._format = "audio" if event.button.id == "fmt-audio" else "video"
         save_pref(FORMAT_PREF, self._format)
         self._sync_format_buttons()
+        self._sync_tags_card()
         await self._render_choices()
 
     # --- quality chips ----------------------------------------------------
@@ -932,7 +1005,7 @@ class DownloadPanel(Vertical):
             self._show_many(links)
             return
         self._start_checking(text)
-        url = links[0]
+        url = self._link_to_get(links[0])
         self.run_worker(
             lambda: self._probe(url, text), thread=True, exclusive=True, group="probe"
         )
@@ -1037,9 +1110,32 @@ class DownloadPanel(Vertical):
 
     # --- playlist ---------------------------------------------------------
 
+    def _whole_playlist(self) -> bool:
+        return self.query_one("#dl-whole-playlist", Checkbox).value
+
+    def _link_to_get(self, url: str) -> str:
+        """`url`, or only its video when it names a video inside a playlist
+        and Whole playlist is off."""
+        from max_cli.core.engines.network_engine import strip_playlist_params
+
+        return url if self._whole_playlist() else strip_playlist_params(url)
+
+    @on(Checkbox.Changed, "#dl-whole-playlist")
+    def _on_whole_playlist(self) -> None:
+        """Check again: the preview shows the video or the playlist."""
+        links = self._links()
+        if self._media is not None and len(links) == 1:
+            from max_cli.core.engines.network_engine import strip_playlist_params
+
+            if strip_playlist_params(links[0]) != links[0]:
+                self._check()
+
     def _show_playlist(self, visible: bool) -> None:
         self.query_one("#dl-playlist").display = visible
         self.query_one("#dl-playlist-actions").display = visible
+        self.query_one("#dl-playlist-summary").display = visible
+        if not visible:
+            self.query_one("#dl-pl-items", Input).value = ""
 
     def _fill_playlist(self, media: Any) -> None:
         playlist = self.query_one("#dl-playlist", SelectionList)
@@ -1055,6 +1151,7 @@ class DownloadPanel(Vertical):
             for entry in media.entries
         )
         self._show_playlist(True)
+        self._show_playlist_summary()
 
     @on(Button.Pressed, "#btn-pl-all")
     def _on_select_all(self) -> None:
@@ -1064,9 +1161,41 @@ class DownloadPanel(Vertical):
     def _on_select_none(self) -> None:
         self.query_one("#dl-playlist", SelectionList).deselect_all()
 
+    @on(Input.Submitted, "#dl-pl-items")
+    def _on_items(self) -> None:
+        if self._media is None or not self._media.is_playlist:
+            return
+        box = self.query_one("#dl-pl-items", Input)
+        chosen = items_to_tick(box.value, len(self._media.entries))
+        if chosen is None:
+            self._set_status(Content.styled(f"Items: {ITEMS_HELP}.", "$warning"))
+            return
+        playlist = self.query_one("#dl-playlist", SelectionList)
+        playlist.deselect_all()
+        for index in sorted(chosen):
+            playlist.select(index)
+        self._set_status("")
+
     @on(SelectionList.SelectedChanged, "#dl-playlist")
     def _on_playlist_changed(self) -> None:
         self._sync_download_label()
+        self._show_playlist_summary()
+
+    def _show_playlist_summary(self) -> None:
+        """How many items are ticked, and how long they last together."""
+        if self._media is None or not self._media.is_playlist:
+            return
+        ticked = set(self.query_one("#dl-playlist", SelectionList).selected)
+        seconds = sum(
+            entry.duration or 0
+            for entry in self._media.entries
+            if entry.index in ticked
+        )
+        length = _duration(seconds)
+        self.query_one("#dl-playlist-summary", Static).update(
+            f"{len(ticked)} of {len(self._media.entries)} ticked"
+            + (f"{SEPARATOR}{length}" if length else "")
+        )
 
     # --- download ---------------------------------------------------------
 
@@ -1092,7 +1221,13 @@ class DownloadPanel(Vertical):
         self.query_one("#btn-download", Button).label = label
 
     def _values_for(self, url: str) -> dict[str, Any]:
-        values: dict[str, Any] = {"url": url, "media_type": self._format}
+        whole = self._whole_playlist()
+        values: dict[str, Any] = {
+            "url": url,
+            "media_type": self._format,
+            "no_playlist": not whole,
+            "strip_playlist": not whole,
+        }
         output = self.query_one("#dl-output", Input).value.strip()
         if output:
             values["output"] = output
@@ -1102,13 +1237,26 @@ class DownloadPanel(Vertical):
             items = playlist_items(selected, len(self._media.entries))
             if items:
                 values["playlist_items"] = items
-        for form in self.query(ActionForm):
+        forms = [self.query_one("#dl-advanced ActionForm", ActionForm)]
+        if self.query_one("#dl-tags").display:
+            forms.append(self._tags_form())
+        for form in forms:
             for name, value in form.values().items():
                 if value not in (None, ""):
                     values[name] = value
         return values
 
     # --- tags -------------------------------------------------------------
+
+    def _sync_tags_card(self) -> None:
+        """Tags show for audio. For video, the Tags box shows them."""
+        toggle = self.query_one("#dl-tags-toggle", Checkbox)
+        toggle.display = self._format == "video"
+        self.query_one("#dl-tags").display = self._format == "audio" or toggle.value
+
+    @on(Checkbox.Changed, "#dl-tags-toggle")
+    def _on_tags_toggle(self) -> None:
+        self._sync_tags_card()
 
     def _tags_form(self) -> ActionForm:
         return self.query_one("#dl-tags ActionForm", ActionForm)

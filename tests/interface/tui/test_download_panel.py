@@ -29,6 +29,7 @@ from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
 from max_cli.interface.tui.widgets.download_panel import (
     DownloadPanel,
     DownloadRow,
+    items_to_tick,
     playlist_items,
     short_size,
 )
@@ -77,6 +78,7 @@ def quiet_page(monkeypatch):
     monkeypatch.setattr(download_panel, "AUTO_CHECK_SECONDS", 3600)
     monkeypatch.setattr(settings, "GRAB_DEFAULT_TYPE", "video")
     monkeypatch.setattr(settings, "GRAB_QUALITY", "h")
+    monkeypatch.setattr(settings, "GRAB_STRIP_PLAYLIST", True)
     # The real check imports yt-dlp and asks about its plugins.
     monkeypatch.setattr(
         grab, "youtube_fix_status", lambda **_: grab.YoutubeFixStatus(True, True)
@@ -134,6 +136,23 @@ def _row_info(row: DownloadRow) -> str:
 )
 def test_playlist_items(selected, total, expected):
     assert playlist_items(selected, total) == expected
+
+
+@pytest.mark.parametrize(
+    "typed, total, expected",
+    [
+        ("10", 43, set(range(1, 11))),
+        ("50", 4, {1, 2, 3, 4}),
+        ("5-7", 43, {5, 6, 7}),
+        ("1-3, 7", 43, {1, 2, 3, 7}),
+        ("40-50", 43, {40, 41, 42, 43}),
+        ("ten", 43, None),
+        ("1-", 43, None),
+        ("", 43, None),
+    ],
+)
+def test_items_to_tick(typed, total, expected):
+    assert items_to_tick(typed, total) == expected
 
 
 def test_short_size():
@@ -749,6 +768,8 @@ async def test_tags_reach_the_download_and_the_folder_choice_is_kept():
         app = PanelApp()
         async with app.run_test(size=(140, 60)) as pilot:
             await _settle(app, pilot)
+            app.query_one("#dl-tags-toggle", Checkbox).value = True
+            await pilot.pause()
             app.query_one("#dl-tags #field-artist", Input).value = "Me"
             app.query_one("#dl-tags #field-album", Input).value = "Mine"
             app.query_one("#dl-tags #field-sort_into", Select).value = "artist/album"
@@ -1001,3 +1022,94 @@ async def test_in_the_dashboard_history_never_scrolls_inside_the_page():
 
     assert max_scroll == 0
     assert rows_high == download_panel.HISTORY_PAGE_ROWS + 1  # plus the header
+
+
+# --- one playlist switch ---------------------------------------------------------
+
+VIDEO_IN_PLAYLIST = "https://www.youtube.com/watch?v=abc&list=PL1"
+
+
+@pytest.mark.asyncio
+async def test_a_video_in_a_playlist_gets_only_the_video_until_whole_playlist():
+    from textual.widgets import Checkbox
+
+    def answer(url, **_):
+        return PLAYLIST if "list=" in url else VIDEO
+
+    app = PanelApp()
+    with (
+        patch(PROBE, side_effect=answer) as probe,
+        patch(DOWNLOAD, return_value=OK) as download,
+    ):
+        async with app.run_test(size=(110, 60)) as pilot:
+            await _check(app, pilot, VIDEO_IN_PLAYLIST)
+            single_preview = app.query_one("#dl-playlist").display
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+            single = download.call_args.kwargs
+
+            await _check(app, pilot, VIDEO_IN_PLAYLIST)
+            app.query_one("#dl-whole-playlist", Checkbox).value = True
+            await _settle(app, pilot)
+            playlist_preview = app.query_one("#dl-playlist").display
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+            whole = download.call_args.kwargs
+
+    assert probe.call_args_list[0].args[0] == "https://www.youtube.com/watch?v=abc"
+    assert probe.call_args_list[-1].args[0] == VIDEO_IN_PLAYLIST
+    assert not single_preview and playlist_preview
+    assert (single["no_playlist"], single["strip_playlist"]) == (True, True)
+    assert (whole["no_playlist"], whole["strip_playlist"]) == (False, False)
+
+
+@pytest.mark.asyncio
+async def test_the_items_box_ticks_the_first_ones_or_ranges():
+    app = PanelApp()
+    with patch(PROBE, return_value=PLAYLIST):
+        async with app.run_test(size=(110, 60)) as pilot:
+            await _check(app, pilot)
+            box = app.query_one("#dl-pl-items", Input)
+            box.value = "2"
+            box.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            first_two = sorted(app.query_one("#dl-playlist", SelectionList).selected)
+            summary = _text(app, "#dl-playlist-summary")
+            box.value = "3-4"
+            await pilot.press("enter")
+            await pilot.pause()
+            last_two = sorted(app.query_one("#dl-playlist", SelectionList).selected)
+
+    assert first_two == [1, 2]
+    assert summary.startswith("2 of 4 ticked")
+    assert last_two == [3, 4]
+
+
+@pytest.mark.asyncio
+async def test_tags_show_for_audio_and_on_request_for_video():
+    from textual.widgets import Checkbox
+
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK) as download:
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _settle(app, pilot)
+            tags = app.query_one("#dl-tags")
+            toggle = app.query_one("#dl-tags-toggle", Checkbox)
+            app.query_one("#dl-tags #field-artist", Input).value = "Hidden"
+            video_hidden = not tags.display and toggle.display
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+            hidden_sent = download.call_args.kwargs
+
+            toggle.value = True
+            await pilot.pause()
+            video_shown = tags.display
+
+            app.query_one("#fmt-audio", Button).press()
+            await _settle(app, pilot)
+            audio_shown = tags.display and not toggle.display
+
+    assert video_hidden and video_shown and audio_shown
+    assert hidden_sent["artist"] is None  # the default: what the site says
