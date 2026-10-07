@@ -91,3 +91,27 @@ def test_a_cli_batch_is_one_entry(monkeypatch, tmp_path):
     entry = _only_entry()
     assert entry.action == "compress" and len(entry.details["details"]["done"]) == 2
     assert get_action("video.compress").group == entry.category
+
+
+def test_an_entry_added_later_comes_first_on_the_same_timestamp(monkeypatch):
+    """Windows' clock gave the agent's request and its action one timestamp,
+    and the request (logged last) landed below the action."""
+    from datetime import datetime
+
+    from max_cli.common import activity_log
+    from max_cli.common.activity_log import ActivityLog
+
+    frozen = datetime(2026, 10, 7, 12, 0, 0)
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    monkeypatch.setattr(activity_log, "datetime", Frozen)
+    ActivityLog().add_entry("files", "preview", "success", {})
+    ActivityLog().add_entry("ai", "agent", "success", {})
+
+    newest, older = ActivityLog().get_entries(limit=2)
+
+    assert (newest.category, older.category) == ("ai", "files")
