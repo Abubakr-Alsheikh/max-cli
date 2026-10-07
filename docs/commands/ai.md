@@ -48,6 +48,10 @@ max "remember that my music lives in D:/Music"
 - **Check a link** before downloading it: title, length, qualities with their sizes, a playlist's items.
 - **Read the recent activity:** what Max did lately and which file changes undo can reverse, so "undo that" and "what did I compress yesterday?" work. "Undo that" runs `files undo`, which asks first.
 - **Check the queued jobs:** which are running, with their progress, which wait, and how the latest ones ended, so "is my download done?" works.
+- **Check the computer:** free space on each drive, memory, CPU, battery and uptime, and the programs using the most memory ("what's eating my memory?").
+- **Look at an image:** the vision model answers a question about one picture ("is this a screenshot?", "what's in it?"). Each look is an AI call, so it uses it for a few images, not a whole album.
+
+It can also **open** a file or folder in the allowed folders, or a web link, with its default app when you ask to see it ("open the merged PDF"). It never opens programs, scripts or shortcuts, since that would run them.
 
 Every request also carries a few lines Max adds about where you are: what the folder holds (files by kind, subfolders), which queued jobs are running or waiting, and the last thing Max did. So "shrink these" works without the agent listing the folder first.
 

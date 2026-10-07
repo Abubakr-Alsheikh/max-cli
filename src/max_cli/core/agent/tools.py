@@ -26,6 +26,10 @@ REMEMBER = "remember"
 FORGET = "forget"
 PLAN = "plan"
 ASK_USER = "ask_user"
+SYSTEM_INFO = "system_info"
+PROCESSES = "processes"
+OPEN = "open"
+LOOK_AT_IMAGE = "look_at_image"
 LOOK_TOOLS = (
     LIST_FOLDER,
     INSPECT,
@@ -33,10 +37,20 @@ LOOK_TOOLS = (
     PROBE_LINK,
     RECENT_ACTIVITY,
     JOB_STATUS,
+    SYSTEM_INFO,
+    PROCESSES,
+    LOOK_AT_IMAGE,
 )
 MEMORY_TOOLS = (REMEMBER, FORGET)
 QUESTION_TOOLS = (PLAN, ASK_USER)
-TOOL_NAMES = (*LOOK_TOOLS, *MEMORY_TOOLS, *QUESTION_TOOLS, LOAD_GROUP, RUN_ACTION)
+TOOL_NAMES = (
+    *LOOK_TOOLS,
+    *MEMORY_TOOLS,
+    *QUESTION_TOOLS,
+    OPEN,
+    LOAD_GROUP,
+    RUN_ACTION,
+)
 # run_action's `select`: limits for the files a folder or pattern gives.
 SELECT_FIELDS = (
     "recursive",
@@ -165,6 +179,32 @@ def _look_definitions() -> list[dict[str, Any]]:
             "latest finished ones with errors and outputs.",
             {"limit": {"type": "integer", "description": "How many, at most 15."}},
             [],
+        ),
+        _tool(
+            SYSTEM_INFO,
+            "This computer: disks with free space, memory, CPU, battery, uptime.",
+            {},
+            [],
+        ),
+        _tool(
+            PROCESSES,
+            "Programs running now, biggest memory users first; name narrows.",
+            {"name": {"type": "string"}},
+            [],
+        ),
+        _tool(
+            LOOK_AT_IMAGE,
+            "Ask the vision model about one image: what it shows, its text, "
+            "whether it's a screenshot. Costs an AI call; use for few images.",
+            {"path": {"type": "string"}, "question": {"type": "string"}},
+            ["path", "question"],
+        ),
+        _tool(
+            OPEN,
+            "Open a file, folder or http(s) link with its default app, when the "
+            "user asks to see it. Never programs or scripts.",
+            {"target": {"type": "string"}},
+            ["target"],
         ),
         _tool(
             REMEMBER,

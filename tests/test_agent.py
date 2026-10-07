@@ -22,8 +22,9 @@ from max_cli.core.operations.result import ActionResult
 # small: about 4 characters per token, so this is roughly 1,500 tokens.
 # 6,000 until phase 1 added job_status, remember, forget and select; 8,000
 # until phase 2 added plan and ask_user (PLANS/completed/agent-phase1-...md,
-# PLANS/active/agent-phase2-plan-ask-context.md).
-FIRST_PROMPT_CHAR_BUDGET = 9_000
+# PLANS/completed/agent-phase2-plan-ask-context.md); 9,000 until phase 3 added
+# system_info, processes, look_at_image and open.
+FIRST_PROMPT_CHAR_BUDGET = 10_500
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -107,6 +108,10 @@ def test_the_tools_look_load_and_run():
         "probe_link",
         "recent_activity",
         "job_status",
+        "system_info",
+        "processes",
+        "look_at_image",
+        "open",
         "remember",
         "plan",
         "ask_user",
@@ -1294,3 +1299,111 @@ def test_a_failed_summary_keeps_the_whole_chat(tmp_path, monkeypatch):
         "first",
         "second",
     ]
+
+
+# --- phase 3: the computer, opening things, looking at images ---------------------
+
+
+def test_system_info_names_disks_memory_and_cpu():
+    from max_cli.core.agent import pc
+
+    info = json.loads(pc.system_info())
+
+    assert {"system", "cpu_used", "memory_free", "disks", "up_for_hours"} <= set(info)
+    assert info["disks"] and "free" in info["disks"][0]
+
+
+def test_processes_narrows_by_name():
+    from max_cli.core.agent import pc
+
+    found = json.loads(pc.processes("python"))
+
+    assert found["matches"] >= 1  # this test runs in one
+    assert all("python" in item["name"].casefold() for item in found["processes"])
+
+
+@pytest.mark.parametrize("name", ["setup.exe", "run.bat", "tool.ps1", "Mail.app"])
+def test_programs_and_scripts_never_open(tmp_path, name):
+    from max_cli.common.exceptions import ValidationError
+    from max_cli.core.agent import pc
+
+    target = tmp_path / name
+    if name.endswith(".app"):
+        target.mkdir()  # a macOS app is a folder
+    else:
+        target.write_bytes(b"\0")
+
+    with pytest.raises(ValidationError, match="never run programs"):
+        pc.check_openable(target)
+
+
+def _opens(monkeypatch) -> list:
+    from max_cli.core.agent import pc
+
+    opened: list = []
+    real_check = pc.check_openable
+
+    def fake_open(target: str) -> None:
+        if not pc.is_web_link(target):
+            real_check(Path(target))
+        opened.append(target)
+
+    monkeypatch.setattr(pc, "open_target", fake_open)
+    return opened
+
+
+@pytest.mark.parametrize(
+    ("target", "opens"),
+    [("report.pdf", True), ("https://example.com", True), ("../elsewhere.pdf", False)],
+)
+def test_open_works_inside_the_scope_and_for_links(
+    tmp_path, monkeypatch, target, opens
+):
+    opened = _opens(monkeypatch)
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "report.pdf").write_bytes(b"%PDF")
+    (tmp_path / "elsewhere.pdf").write_bytes(b"%PDF")
+    model = ScriptedModel(
+        _answer(calls=(_call("open", {"target": target}),)), _answer("Opened.")
+    )
+
+    reply = _agent(model, work).ask("show it to me")
+
+    assert bool(opened) == opens
+    kinds = [step.kind for step in reply.steps]
+    assert (StepKind.OPENED in kinds) == opens
+    if not opens:
+        assert "outside the folders" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_look_at_image_asks_the_vision_model(tmp_path, monkeypatch):
+    from max_cli.core.engines.ai_engine import AIEngine
+
+    asked = []
+    monkeypatch.setattr(
+        AIEngine,
+        "analyze_image_content",
+        lambda self, path, question: asked.append((path.name, question))
+        or "A screenshot of a spreadsheet.",
+    )
+    (tmp_path / "shot.png").write_bytes(b"\x89PNG")
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    model = ScriptedModel(
+        _answer(
+            calls=(
+                _call("look_at_image", {"path": "shot.png", "question": "Screenshot?"}),
+                _call("look_at_image", {"path": "notes.txt", "question": "?"}, "c2"),
+            )
+        ),
+        _answer("It's a screenshot."),
+    )
+
+    _agent(model, tmp_path).ask("is shot.png a screenshot?")
+
+    results = [
+        m["content"] for m in model.requests[1]["messages"] if m["role"] == "tool"
+    ]
+    assert asked == [("shot.png", "Screenshot?")]
+    assert json.loads(results[0])["answer"] == "A screenshot of a spreadsheet."
+    assert "isn't an image" in results[1]

@@ -43,14 +43,18 @@ from max_cli.core.agent.tools import (
     JOB_STATUS,
     LIST_FOLDER,
     LOAD_GROUP,
+    LOOK_AT_IMAGE,
     LOOK_TOOLS,
+    OPEN,
     PLAN,
     PROBE_LINK,
+    PROCESSES,
     QUESTION_TOOLS,
     RECENT_ACTIVITY,
     REMEMBER,
     RUN_ACTION,
     SELECT_FIELDS,
+    SYSTEM_INFO,
     TOOL_NAMES,
     agent_groups,
     group_actions,
@@ -86,6 +90,8 @@ SIZE_SHOWN_FROM = 1024 * 1024  # a batch's question names its size from 1 MB
 DRY_RUN_NOTE = "Nothing ran and nothing changed. Tell the user what would happen."
 # select's filters; recursive and redo go to expand_each.
 MAX_PLAN_STEPS = 12
+MAX_IMAGE_MB = 20  # look_at_image sends the whole file to the vision model
+BYTES_PER_MB = 1024 * 1024
 MAX_OPTIONS = 6
 # Answers to a plan that mean "go ahead"; anything else is a change to make.
 GO_ANSWERS = frozenset({"go", "go ahead", "yes", "y", "ok", "okay", "sure"})
@@ -132,6 +138,7 @@ moves, overwrites or deletes files. If they say no, don't retry.
 - Results come back checked: report failed, missing or empty outputs; never claim it all worked.
 - "Undo that": the files group's undo action. job_status shows queued jobs.
 - Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
+- The computer: system_info and processes. open shows the user a file, folder or link they asked to see; never programs. look_at_image when you must see what a picture shows.
 - Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself.
 - When you're done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead.
@@ -170,6 +177,7 @@ class StepKind(str, Enum):
     QUEUED = "queued"  # added to the queue; the dashboard runs it in the background
     NOTED = "noted"  # saved or deleted a memory note, or summarised the chat
     PLAN = "plan"  # showed the plan; text holds the numbered steps
+    OPENED = "opened"  # opened a file, folder or link for the user
     ASKED = "asked"  # asked the user a question or for a go-ahead
 
 
@@ -639,6 +647,8 @@ class Agent:
             return self._note(name, arguments, reply)
         if name in QUESTION_TOOLS:
             return self._question(name, arguments, reply)
+        if name == OPEN:
+            return self._open(str(arguments.get("target", "")), reply)
         if name == RUN_ACTION:
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
@@ -685,6 +695,16 @@ class Agent:
             elif tool == JOB_STATUS:
                 found = looks.job_status(int(arguments.get("limit") or 10))
                 what = "Checked the queued jobs"
+            elif tool == SYSTEM_INFO:
+                from max_cli.core.agent import pc
+
+                found, what = pc.system_info(), "Checked this computer"
+            elif tool == PROCESSES:
+                from max_cli.core.agent import pc
+
+                name = str(arguments.get("name") or "")
+                found = pc.processes(name)
+                what = f"Listed running programs{f' named {name}' if name else ''}"
             else:
                 path = self.scope.resolve(str(arguments.get("path") or "."))
                 if not self.scope.allows(path):
@@ -707,12 +727,42 @@ class Agent:
             return looks.list_folder(path), f"Listed {name}"
         if tool == INSPECT:
             return looks.inspect(path), f"Inspected {name}"
+        if tool == LOOK_AT_IMAGE:
+            return _look_at_image(path, str(arguments.get("question") or "")), (
+                f"Looked at {name}"
+            )
         filters = {
             key: arguments[key]
             for key in FIND_FILTERS
             if arguments.get(key) not in (None, "")
         }
         return looks.find_files(path, **filters), f"Searched {name}"
+
+    def _open(self, target: str, reply: AgentReply) -> str:
+        """Open a link, or a file or folder inside the allowed folders."""
+        from max_cli.core.agent import pc
+
+        target = target.strip()
+        if not target:
+            return "Error: 'target' is empty."
+        if not pc.is_web_link(target):
+            path = self.scope.resolve(target)
+            if not self.scope.allows(path):
+                text = f"{path} is outside the folders I may use"
+                self._report(reply, Step(StepKind.REFUSED, OPEN, text))
+                return f"Error: {text}. Ask the user to name it."
+            target = str(path)
+        if self.dry_run:
+            return f"Dry run: would open {target}. {DRY_RUN_NOTE}"
+        try:
+            pc.open_target(target)
+        except MaxError as e:
+            return f"Error: {e}"
+        except OSError as e:
+            return f"Error: couldn't open it: {e}"
+        shown = Path(target).name if not pc.is_web_link(target) else target
+        self._report(reply, Step(StepKind.OPENED, OPEN, f"Opened {shown}"))
+        return json.dumps({"opened": target}, ensure_ascii=False)
 
     def _note(self, tool: str, arguments: dict[str, Any], reply: AgentReply) -> str:
         """remember or forget: the memory notes later sessions start with."""
@@ -1169,6 +1219,23 @@ class Agent:
             if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED):
                 _log_action(step)
             self.on_step(step)
+
+
+def _look_at_image(path: Path, question: str) -> str:
+    """The vision model's answer about one image in the allowed folders."""
+    from max_cli.common.file_kinds import IMAGE, kind_of
+    from max_cli.core.engines.ai_engine import AIEngine
+
+    if not path.is_file() or kind_of(path) != IMAGE:
+        raise ValueError(f"{path.name} isn't an image file.")
+    if path.stat().st_size > MAX_IMAGE_MB * BYTES_PER_MB:
+        raise ValueError(f"{path.name} is over {MAX_IMAGE_MB} MB; resize it first.")
+    question = question.strip() or "Describe this image in two sentences."
+    answer = AIEngine().analyze_image_content(path, question)
+    return json.dumps(
+        {"image": path.name, "answer": (answer or "").strip()[:MAX_RESULT_CHARS]},
+        ensure_ascii=False,
+    )
 
 
 def _transcript(messages: list[dict[str, Any]]) -> str:
