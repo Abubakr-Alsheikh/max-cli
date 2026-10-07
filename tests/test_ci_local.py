@@ -69,7 +69,7 @@ def fake_repo(monkeypatch, tmp_path):
         ci_local, "git", lambda *args: HEAD_SHA if args == ("rev-parse", "HEAD") else ""
     )
     checks: list[bool] = []
-    monkeypatch.setattr(ci_local, "check", lambda full: checks.append(full) or 0)
+    monkeypatch.setattr(ci_local, "check", lambda mode: checks.append(mode) or 0)
     monkeypatch.setattr(ci_local, "pushes_package_changes", lambda lines: True)
     return stamp, checks
 
@@ -95,11 +95,11 @@ class TestPrePush:
         assert ci_local.pre_push([_push_line(HEAD_SHA)]) == 0
         assert checks == []
 
-    def test_runs_the_quick_check_on_a_new_commit(self, fake_repo):
+    def test_runs_the_changed_check_on_a_new_commit(self, fake_repo):
         _, checks = fake_repo
 
         assert ci_local.pre_push([_push_line(HEAD_SHA)]) == 0
-        assert checks == [False]
+        assert checks == ["changed"]
 
     def test_refuses_a_commit_that_is_not_checked_out(self, fake_repo):
         _, checks = fake_repo
@@ -235,4 +235,65 @@ def test_an_annotated_tag_on_the_checked_out_commit_runs_the_check(
     line = f"refs/tags/v1.0.0 {tag_object} refs/tags/v1.0.0 {ci_local.ZERO_SHA}"
 
     assert ci_local.pre_push([line]) == 0
-    assert checks == [False]
+    assert checks == ["changed"]
+
+
+class TestChangedCheck:
+    def _steps(self, monkeypatch, changed: list) -> list:
+        ran: list = []
+        monkeypatch.setattr(ci_local, "changed_files", lambda: changed)
+        monkeypatch.setattr(
+            ci_local,
+            "run_step",
+            lambda name, command, env=None: ran.append((name, command))
+            or ci_local.StepResult(name, True, 0.0, ""),
+        )
+        monkeypatch.setattr(ci_local, "announce", lambda result: result)
+        ci_local.changed_steps()
+        return ran
+
+    def test_runs_only_the_tests_of_what_changed(self, monkeypatch):
+        ran = self._steps(monkeypatch, ["src/max_cli/core/agent/memory.py"])
+
+        name, command = ran[-1]
+        assert "related files" in name
+        assert "tests/test_agent_memory.py" in command
+
+    def test_a_conftest_or_pyproject_change_runs_everything(self, monkeypatch):
+        ran = self._steps(monkeypatch, ["tests/conftest.py"])
+
+        name, command = ran[-1]
+        assert "whole suite" in name
+        assert not any(part.startswith("tests/") for part in command)
+
+    def test_docs_alone_run_no_tests(self, monkeypatch):
+        ran = self._steps(monkeypatch, ["README.md"])
+
+        assert not any(name.startswith("pytest") for name, _ in ran)
+
+
+def test_a_lighter_pass_keeps_a_stronger_one(fake_repo):
+    stamp, _ = fake_repo
+    stamp.write_text(json.dumps({"head": HEAD_SHA, "mode": "quick"}), encoding="utf-8")
+
+    ci_local.record_pass("changed")
+
+    assert json.loads(stamp.read_text(encoding="utf-8"))["mode"] == "quick"
+
+
+def test_the_guard_accepts_the_changed_check(tmp_path, monkeypatch):
+    stamp = tmp_path / guard.CI_LOCAL_STAMP
+    stamp.write_text(json.dumps({"head": "abc", "mode": "changed"}), encoding="utf-8")
+    answers = {
+        ("merge-base", guard.BASE_BRANCH, "HEAD"): "base",
+        ("rev-parse", "--git-path", guard.CI_LOCAL_STAMP): str(stamp),
+    }
+    monkeypatch.setattr(guard, "_git", lambda *args: answers.get(args, ""))
+    monkeypatch.setattr(guard, "changes_package", lambda since: since == "base")
+
+    class Done:
+        returncode = 0
+
+    monkeypatch.setattr(guard.subprocess, "run", lambda *args, **kwargs: Done())
+
+    assert guard.head_passed_local_ci()
