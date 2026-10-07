@@ -297,3 +297,12 @@ def test_the_guard_accepts_the_changed_check(tmp_path, monkeypatch):
     monkeypatch.setattr(guard.subprocess, "run", lambda *args, **kwargs: Done())
 
     assert guard.head_passed_local_ci()
+
+
+def test_import_all_lists_modules_in_folders_without_an_init(tmp_path):
+    import_all = _load("import_all", REPO_ROOT / "scripts" / "import_all.py")
+    for name in ("max_cli/__init__.py", "max_cli/__main__.py", "max_cli/core/a.py"):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text("", encoding="utf-8")
+
+    assert import_all.module_names(tmp_path) == ["max_cli", "max_cli.core.a"]

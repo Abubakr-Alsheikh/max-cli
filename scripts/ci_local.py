@@ -59,14 +59,8 @@ SOURCE_ROOT = "src/"
 TESTS_DIR = "tests"
 # A change to one of these can break any test: run the whole suite.
 WHOLE_SUITE_TRIGGERS = ("pyproject.toml", "conftest.py")
-# Imports every max_cli module, so Python 3.9 meets every annotation and
-# syntax at import time. Heavy libraries load lazily, so this takes seconds.
-IMPORT_EVERY_MODULE = (
-    "import importlib, pkgutil, max_cli\n"
-    "for found in pkgutil.walk_packages(max_cli.__path__, 'max_cli.'):\n"
-    "    if not found.name.endswith('__main__'):\n"
-    "        importlib.import_module(found.name)\n"
-)
+# Imports every max_cli module on the oldest CI Python (scripts/import_all.py).
+IMPORT_ALL_SCRIPT = "scripts/import_all.py"
 OLDEST_PYTHON = "3.9"
 HOOK_MARKER = "Installed by scripts/ci_local.py"
 HOOK_SCRIPT = f"""#!/bin/sh
@@ -249,9 +243,7 @@ def changed_steps() -> list[StepResult]:
     if oldest.exists():
         name = f"import every module (Python {OLDEST_PYTHON})"
         print(f"... {name}", flush=True)
-        results.append(
-            announce(run_step(name, [str(oldest), "-c", IMPORT_EVERY_MODULE]))
-        )
+        results.append(announce(run_step(name, [str(oldest), IMPORT_ALL_SCRIPT])))
     else:
         print(
             f"... skipped the Python {OLDEST_PYTHON} import: no .ci-venvs/py"
