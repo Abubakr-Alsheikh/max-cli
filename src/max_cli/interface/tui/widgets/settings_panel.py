@@ -136,6 +136,28 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
         ),
     ),
     (
+        "AI AGENT",
+        "settings-agent",
+        (
+            SettingField(
+                "AGENT_SHELL",
+                "Let the agent run commands",
+                "bool",
+                "Programs only, no shell syntax, in the folders it may use. It "
+                "shows each command and asks first. Off by default.",
+                wide=True,
+            ),
+            SettingField(
+                "AI_FAST_MODEL",
+                "Cheaper model for summaries",
+                "text",
+                "A model of the main AI that summarises long chats. Empty uses "
+                "the main model.",
+                wide=True,
+            ),
+        ),
+    ),
+    (
         "SAFETY AND NETWORK",
         "settings-general",
         (

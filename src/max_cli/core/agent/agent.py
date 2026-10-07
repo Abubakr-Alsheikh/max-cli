@@ -53,7 +53,9 @@ from max_cli.core.agent.tools import (
     RECENT_ACTIVITY,
     REMEMBER,
     RUN_ACTION,
+    RUN_COMMAND,
     SELECT_FIELDS,
+    STOP_PROCESS,
     SYSTEM_INFO,
     TOOL_NAMES,
     agent_groups,
@@ -87,7 +89,18 @@ MAX_EACH = 500  # files one run_action call may run
 AUTO_QUEUE_FILES = 20
 MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
 SIZE_SHOWN_FROM = 1024 * 1024  # a batch's question names its size from 1 MB
-DRY_RUN_NOTE = "Nothing ran and nothing changed. Tell the user what would happen."
+DRY_RUN_NOTE = (
+    "Dry run: nothing ran and nothing changed, as asked. Don't call it again; "
+    "tell the user what would happen."
+)
+DRY_RUN_CONTEXT = (
+    "(Dry run: Max checks each action and runs nothing. Ask for each step "
+    "once, then say what would happen.)"
+)
+REPEAT_NOTE = (
+    "Already done in this request with these exact arguments: its answer is "
+    "above. Don't repeat it."
+)
 # select's filters; recursive and redo go to expand_each.
 MAX_PLAN_STEPS = 12
 MAX_IMAGE_MB = 20  # look_at_image sends the whole file to the vision model
@@ -138,7 +151,7 @@ moves, overwrites or deletes files. If they say no, don't retry.
 - Results come back checked: report failed, missing or empty outputs; never claim it all worked.
 - "Undo that": the files group's undo action. job_status shows queued jobs.
 - Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
-- The computer: system_info and processes. open shows the user a file, folder or link they asked to see; never programs. look_at_image when you must see what a picture shows.
+- The computer: system_info and processes; stop_process ends a program the user wants closed (Max asks them). open shows the user a file, folder or link they asked to see; never programs. look_at_image when you must see what a picture shows.
 - Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself.
 - When you're done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead.
@@ -178,6 +191,8 @@ class StepKind(str, Enum):
     NOTED = "noted"  # saved or deleted a memory note, or summarised the chat
     PLAN = "plan"  # showed the plan; text holds the numbered steps
     OPENED = "opened"  # opened a file, folder or link for the user
+    STOPPED = "stopped"  # ended a program the user agreed to stop
+    COMMAND = "command"  # ran a command (AGENT_SHELL); text holds its output's end
     ASKED = "asked"  # asked the user a question or for a go-ahead
 
 
@@ -337,6 +352,7 @@ def _done_already(names: tuple[str, ...]) -> dict[str, Any]:
 class QuestionKind(str, Enum):
     QUESTION = "question"  # ask_user: answer in words or pick an option
     PLAN = "plan"  # plan: "go", None to stop, or the changes to make
+    CONFIRM = "confirm"  # yes or no: "yes", or None
 
 
 @dataclass(frozen=True)
@@ -381,6 +397,7 @@ class Agent:
         memory: Optional[AgentMemory] = None,
         ask: Optional[Ask] = None,
         context: bool = True,
+        shell: Optional[bool] = None,
     ) -> None:
         """`can_queue` lets the model queue long jobs, which the caller must
         then run: the dashboard's worker, or the background worker the CLI
@@ -400,8 +417,18 @@ class Agent:
         self.token_limit = token_limit
         self._report_lock = threading.Lock()
         self.memory = memory or AgentMemory()
+        # Per request (_ask resets them): the kinds of file-changing actions
+        # run, whether a plan was shown, the run_action calls asked (as JSON).
+        self._changing_actions: set[str] = set()
+        self._plan_shown = False
+        self._actions_asked: set[str] = set()
         self.ask_user = ask
         self.context = context
+        if shell is None:
+            from max_cli.config import settings
+
+            shell = settings.AGENT_SHELL
+        self.shell = shell
         self.scope = PathScope(cwd or Path.cwd())
         self.scope.allow(_download_folder())
         self.loaded: set[str] = set()
@@ -469,6 +496,11 @@ class Agent:
 
     def _ask(self, request: str) -> AgentReply:
         self.scope.add_from(request)
+        # The kinds of file-changing actions this request ran, and whether it
+        # showed a plan: a second kind without a plan asks for one first.
+        self._changing_actions = set()
+        self._plan_shown = False
+        self._actions_asked = set()
         reply = AgentReply("")
         self._compact(reply)
         self.messages.append({"role": "user", "content": self._with_context(request)})
@@ -500,12 +532,14 @@ class Agent:
                 return reply
 
     def _with_context(self, request: str) -> str:
-        if not self.context:
-            return request
-        from max_cli.core.agent.context import request_context
+        parts = [request]
+        if self.context:
+            from max_cli.core.agent.context import request_context
 
-        found = request_context(self.scope.cwd)
-        return f"{request}\n\n{found}" if found else request
+            parts.append(request_context(self.scope.cwd))
+        if self.dry_run:
+            parts.append(DRY_RUN_CONTEXT)
+        return "\n\n".join(part for part in parts if part)
 
     def _compact(self, reply: AgentReply) -> None:
         """Turn the oldest turns into one summary when the conversation is
@@ -522,9 +556,12 @@ class Agent:
             return
         cut = requests[-KEEP_RECENT_REQUESTS]
         transcript = _transcript(self.messages[1:cut])[-MAX_SUMMARY_SOURCE_CHARS:]
+        from max_cli.config import settings
+
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                # A cheaper model is enough for a summary (AI_FAST_MODEL).
+                model=settings.AI_FAST_MODEL.strip() or self.model,
                 messages=[
                     {"role": "system", "content": SUMMARY_PROMPT},
                     {"role": "user", "content": transcript},
@@ -613,7 +650,7 @@ class Agent:
             return self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
-                tools=tool_definitions(self.can_queue),
+                tools=tool_definitions(self.can_queue, self.shell),
             )
         except BadRequestError as e:
             if "tool" in str(e).lower():
@@ -649,7 +686,15 @@ class Agent:
             return self._question(name, arguments, reply)
         if name == OPEN:
             return self._open(str(arguments.get("target", "")), reply)
+        if name == STOP_PROCESS:
+            return self._stop_process(arguments, reply)
+        if name == RUN_COMMAND and self.shell:
+            return self._run_command(arguments, reply)
         if name == RUN_ACTION:
+            asked = json.dumps(arguments, sort_keys=True, default=str)
+            if asked in self._actions_asked:
+                return REPEAT_NOTE
+            self._actions_asked.add(asked)
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
                 return "Error: 'arguments' must be an object."
@@ -764,6 +809,87 @@ class Agent:
         self._report(reply, Step(StepKind.OPENED, OPEN, f"Opened {shown}"))
         return json.dumps({"opened": target}, ensure_ascii=False)
 
+    def _yes(self, question: str) -> bool:
+        """The user's yes to `question`. No way to ask counts as no."""
+        if self.ask_user is None:
+            return False
+        return self.ask_user(Question(QuestionKind.CONFIRM, question)) == "yes"
+
+    def _stop_process(self, arguments: dict[str, Any], reply: AgentReply) -> str:
+        from max_cli.core.agent import pc
+
+        try:
+            process = pc.find_process(
+                int(arguments.get("pid") or 0), str(arguments.get("name") or "")
+            )
+        except (MaxError, ValueError) as e:
+            return f"Error: {e}"
+        described = pc.describe_process(process)
+        if self.dry_run:
+            return f"Dry run: would stop {described}. {DRY_RUN_NOTE}"
+        if not self._yes(f"Max wants to stop {described}. Unsaved work in it is lost."):
+            self._report(
+                reply,
+                Step(StepKind.DECLINED, STOP_PROCESS, f"Kept {described} running"),
+            )
+            return DECLINED_NOTE
+        try:
+            outcome = pc.stop_process(process)
+        except MaxError as e:
+            return f"Error: {e}"
+        self._report(reply, Step(StepKind.STOPPED, STOP_PROCESS, outcome))
+        return json.dumps({"result": outcome}, ensure_ascii=False)
+
+    def _run_command(self, arguments: dict[str, Any], reply: AgentReply) -> str:
+        """A program with its arguments, after the user's yes (AGENT_SHELL)."""
+        from max_cli.common.activity_log import ActivityLog
+        from max_cli.core.agent import pc
+
+        command = str(arguments.get("command", "")).strip()
+        folder = self.scope.resolve(str(arguments.get("folder") or "."))
+        if not self.scope.allows(folder) or not folder.is_dir():
+            return f"Error: {folder} isn't a folder I may use."
+        try:
+            words = pc.command_words(command)
+        except MaxError as e:
+            return f"Error: {e}"
+        if self.dry_run:
+            return f"Dry run: would run `{command}` in {folder}. {DRY_RUN_NOTE}"
+        if not self._yes(f"Max wants to run this command in {folder}:\n\n  {command}"):
+            self._report(
+                reply, Step(StepKind.DECLINED, RUN_COMMAND, f"Didn't run {command}")
+            )
+            return DECLINED_NOTE
+        started = time.monotonic()
+        try:
+            output = pc.run_command(words, folder)
+        except MaxError as e:
+            self._report(reply, Step(StepKind.FAILED, RUN_COMMAND, f"{command}: {e}"))
+            return f"Error: {e}"
+        result = json.loads(output)
+        self._report(
+            reply,
+            Step(
+                StepKind.COMMAND,
+                RUN_COMMAND,
+                f"Ran {command} (exit code {result['exit_code']})",
+                arguments={"command": command, "folder": str(folder)},
+                seconds=time.monotonic() - started,
+            ),
+        )
+        ActivityLog().add_entry(
+            "ai",
+            "command",
+            "success" if result["exit_code"] == 0 else "failed",
+            {
+                "command": command,
+                "folder": str(folder),
+                "exit_code": result["exit_code"],
+            },
+            duration_ms=int((time.monotonic() - started) * 1000),
+        )
+        return output
+
     def _note(self, tool: str, arguments: dict[str, Any], reply: AgentReply) -> str:
         """remember or forget: the memory notes later sessions start with."""
         if tool == REMEMBER:
@@ -818,6 +944,7 @@ class Agent:
             for number, step in enumerate(steps[:MAX_PLAN_STEPS], start=1)
         )
         self._report(reply, Step(StepKind.PLAN, PLAN, numbered))
+        self._plan_shown = True
         if self.dry_run:
             return f"Dry run: plan shown. {DRY_RUN_NOTE}"
         if self.ask_user is None:
@@ -844,6 +971,42 @@ class Agent:
         )
         return group_actions(name)
 
+    def _absolute(self, value: Any) -> Any:
+        """A relative path (or pattern) as one under the agent's folder. The
+        operations would read it from the process's folder, which can differ:
+        the dashboard and the evals start the agent elsewhere."""
+        if not isinstance(value, str) or not value.strip():
+            return value
+        path = Path(value).expanduser()
+        return value if path.is_absolute() else str(self.scope.cwd / path)
+
+    def _absolute_paths(self, action: Action, given: dict[str, Any]) -> dict[str, Any]:
+        found = dict(given)
+        for param in action.params:
+            value = found.get(param.name)
+            if param.kind not in PATH_KINDS or value in (None, ""):
+                continue
+            found[param.name] = (
+                [self._absolute(item) for item in value]
+                if isinstance(value, list)
+                else self._absolute(value)
+            )
+        return found
+
+    def _plan_first(self, action: Action) -> str:
+        """Ask for a plan when a request turns to a second kind of action that
+        changes files without one. Nobody to approve it means no plan needed."""
+        if action.danger == Danger.NONE or self.ask_user is None:
+            return ""
+        changing = self._changing_actions
+        if self._plan_shown or not changing or action.id in changing:
+            changing.add(action.id)
+            return ""
+        return (
+            "Error: this request needs more than one kind of action. Call plan "
+            "with all the steps first, then run them."
+        )
+
     def _run(
         self,
         action_id: str,
@@ -867,6 +1030,10 @@ class Agent:
             return (
                 f"Error: call load_group('{action.group}') first to see its arguments."
             )
+        plan_first = self._plan_first(action)
+        if plan_first:
+            return plan_first
+        given = self._absolute_paths(action, given)
         try:
             arguments = coerce_args(action, given)
         except MaxError as e:
@@ -1045,6 +1212,11 @@ class Agent:
         param = _each_param(action)
         if param is None:
             return f"Error: {action_id} takes no file, so 'each' doesn't fit it."
+        plan_first = self._plan_first(action)
+        if plan_first:
+            return plan_first
+        given = self._absolute_paths(action, given)
+        each = [self._absolute(item) for item in each]
         done_already: list[Path] = []
         refused: list[tuple[str, str]] = []
         if action.each_param() is not None:

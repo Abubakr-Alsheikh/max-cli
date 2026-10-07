@@ -19,7 +19,6 @@ Found in the reconciliation on 2026-10-04.
 
 | Plan | Status | Priority | What's left |
 |------|--------|----------|-------------|
-| [agent-phase3-pc-vision-models.md](./agent-phase3-pc-vision-models.md) | In Progress | P1 | 3b waits for a decision: a shell (off by default), stopping processes, a cheaper model, agent evals |
 | [dashboard-first-ai-agent.md](./dashboard-first-ai-agent.md) | In Progress | P1 | FFmpeg overwrite (before 1.0); `images` batch options; the `ai` group in the catalog; small local models; onboarding, friendlier errors, an installer |
 | [cli-dashboard-sync.md](./cli-dashboard-sync.md) | In Progress | P1 | Download page logging (before 1.0); one activity record for every caller; `max history` |
 | [dashboard-design-system.md](./dashboard-design-system.md) | In Progress | P1 | Polish: TUI rule checks in `check_rules.py`, snapshot tests, footer keys, light theme, path autocomplete, Run again in History, results list per page, keyboard parity |

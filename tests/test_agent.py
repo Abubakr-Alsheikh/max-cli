@@ -112,6 +112,7 @@ def test_the_tools_look_load_and_run():
         "processes",
         "look_at_image",
         "open",
+        "stop_process",
         "remember",
         "plan",
         "ask_user",
@@ -1407,3 +1408,206 @@ def test_look_at_image_asks_the_vision_model(tmp_path, monkeypatch):
     assert asked == [("shot.png", "Screenshot?")]
     assert json.loads(results[0])["answer"] == "A screenshot of a spreadsheet."
     assert "isn't an image" in results[1]
+
+
+# --- phase 3b: stopping programs, commands, the cheaper model ----------------------
+
+
+class _FakeProcess:
+    pid = 4242
+
+    def name(self) -> str:
+        return "notepad.exe"
+
+
+def _stop_setup(monkeypatch) -> list:
+    from max_cli.core.agent import pc
+
+    stopped: list = []
+    monkeypatch.setattr(pc, "find_process", lambda pid=0, name="": _FakeProcess())
+    monkeypatch.setattr(
+        pc, "describe_process", lambda process: "notepad.exe (pid 4242)"
+    )
+    monkeypatch.setattr(
+        pc, "stop_process", lambda process: stopped.append(process.pid) or "Stopped it."
+    )
+    return stopped
+
+
+@pytest.mark.parametrize(("answer", "stops"), [("yes", True), (None, False)])
+def test_stopping_a_program_asks_first(tmp_path, monkeypatch, answer, stops):
+    from max_cli.core.agent.agent import QuestionKind
+
+    stopped = _stop_setup(monkeypatch)
+    asked = []
+    model = ScriptedModel(
+        _answer(calls=(_call("stop_process", {"name": "notepad"}),)), _answer("OK.")
+    )
+    agent = _agent(model, tmp_path, ask=lambda q: asked.append(q) or answer)
+
+    agent.ask("close notepad")
+
+    assert asked[0].kind == QuestionKind.CONFIRM
+    assert "notepad.exe (pid 4242)" in asked[0].text
+    assert bool(stopped) == stops
+
+
+def test_nothing_to_ask_with_means_no_stop(tmp_path, monkeypatch):
+    stopped = _stop_setup(monkeypatch)
+    model = ScriptedModel(
+        _answer(calls=(_call("stop_process", {"name": "notepad"}),)), _answer("OK.")
+    )
+
+    _agent(model, tmp_path).ask("close notepad")
+
+    assert stopped == []
+
+
+def test_the_system_and_max_itself_are_never_stopped():
+    import os
+
+    from max_cli.common.exceptions import ValidationError
+    from max_cli.core.agent import pc
+
+    for pid in (os.getpid(), os.getppid()):
+        with pytest.raises(ValidationError, match="Max itself"):
+            pc.find_process(pid=pid)
+    assert "svchost.exe" in pc.PROTECTED_PROCESSES
+
+
+def test_commands_are_offered_only_when_turned_on():
+    names = {tool["function"]["name"] for tool in tool_definitions()}
+    with_shell = {tool["function"]["name"] for tool in tool_definitions(can_shell=True)}
+
+    assert "run_command" not in names
+    assert "run_command" in with_shell
+
+
+@pytest.mark.parametrize("command", ["dir | more", "echo hi > a.txt", "a && b", "x; y"])
+def test_shell_syntax_is_refused(command):
+    from max_cli.common.exceptions import ValidationError
+    from max_cli.core.agent import pc
+
+    with pytest.raises(ValidationError, match="Shell syntax"):
+        pc.command_words(command)
+
+
+@pytest.mark.parametrize(("answer", "runs"), [("yes", True), (None, False)])
+def test_a_command_runs_after_a_yes(tmp_path, answer, runs):
+    import sys
+
+    command = f'"{sys.executable}" --version'
+    model = ScriptedModel(
+        _answer(calls=(_call("run_command", {"command": command}),)), _answer("Done.")
+    )
+    asked = []
+    agent = _agent(model, tmp_path, ask=lambda q: asked.append(q) or answer, shell=True)
+
+    reply = agent.ask("which python is this?")
+
+    result = model.requests[1]["messages"][-1]["content"]
+    assert command in asked[0].text
+    assert ("Python 3." in result) == runs
+    assert (StepKind.COMMAND in [step.kind for step in reply.steps]) == runs
+
+
+def test_without_the_setting_a_command_call_is_refused(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("run_command", {"command": "git status"}),)),
+        _answer("OK."),
+    )
+
+    _agent(model, tmp_path, shell=False, ask=lambda q: "yes").ask("git status")
+
+    assert (
+        "there is no tool 'run_command'" in model.requests[1]["messages"][-1]["content"]
+    )
+
+
+def test_summaries_use_the_cheaper_model(tmp_path, monkeypatch):
+    from max_cli.config import settings
+    from max_cli.core.agent import agent as agent_module
+
+    monkeypatch.setattr(settings, "AI_FAST_MODEL", "cheap-model")
+    monkeypatch.setattr(agent_module, "COMPACT_AT_CHARS", 10)
+    monkeypatch.setattr(agent_module, "KEEP_RECENT_REQUESTS", 1)
+    model = ScriptedModel(
+        _answer("One."), _answer("Two."), _answer("Summary."), _answer("Three.")
+    )
+    agent = _agent(model, tmp_path, context=False)
+    agent.ask("first")
+    agent.ask("second")
+
+    agent.ask("third")
+
+    assert model.requests[2]["model"] == "cheap-model"  # the summary
+    assert model.requests[3]["model"] == "test-model"
+
+
+def test_relative_patterns_start_in_the_agents_folder(tmp_path, monkeypatch):
+    """The process runs elsewhere (the repo here, any folder in the dashboard);
+    `music/*.m4a` found nothing and the model retried call after call."""
+    _track_runs(monkeypatch)
+    (tmp_path / "music").mkdir()
+    (tmp_path / "music" / "a.m4a").write_bytes(b"\0")
+    model = ScriptedModel(*_convert({"format": "mp3"}, each=["music/*.m4a"]))
+
+    reply = _agent(model, tmp_path).ask("convert them")
+
+    ran = [step.text for step in reply.steps if step.kind == StepKind.RAN]
+    assert ran == ["video audio-convert: Read a.m4a"]
+
+
+def test_a_second_kind_of_change_asks_for_a_plan_first(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    for name in ("a.m4a", "b.m4a"):
+        (tmp_path / name).write_bytes(b"\0")
+    convert = {
+        "action": "video.audio-convert",
+        "arguments": {"target": "a.m4a", "format": "mp3"},
+    }
+    compress = {"action": "audio.compress", "arguments": {"target": "b.m4a"}}
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "video"}),)),
+        _answer(calls=(_call("load_group", {"name": "audio"}, "c2"),)),
+        _answer(calls=(_call("run_action", convert, "c3"),)),
+        _answer(calls=(_call("run_action", compress, "c4"),)),
+        _answer("OK."),
+    )
+
+    _agent(model, tmp_path, ask=lambda question: "go").ask("convert a, compress b")
+
+    assert (
+        "Call plan with all the steps first"
+        in model.requests[4]["messages"][-1]["content"]
+    )
+
+
+def test_an_identical_action_call_is_not_run_twice(tmp_path, monkeypatch):
+    seen = _track_runs(monkeypatch)
+    note = _note(tmp_path)
+    preview = {"action": "files.preview", "arguments": {"target": str(note)}}
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(calls=(_call("run_action", preview, "c2"),)),
+        _answer(calls=(_call("run_action", preview, "c3"),)),
+        _answer("Read it."),
+    )
+
+    _agent(model, tmp_path).ask("read the note")
+
+    assert (
+        "Already done in this request" in model.requests[3]["messages"][-1]["content"]
+    )
+    assert seen["most"] == 1
+
+
+def test_a_dry_run_request_says_so(tmp_path):
+    model = ScriptedModel(_answer("I'd convert them."))
+
+    _agent(model, tmp_path, dry_run=True, context=False).ask("convert them")
+
+    assert (
+        "Dry run: Max checks each action"
+        in model.requests[0]["messages"][-1]["content"]
+    )

@@ -4,8 +4,12 @@ a file, a folder or a web link with its default app.
 - `system_info`: disks, memory, CPU, battery and uptime (psutil).
 - `processes`: the programs using the most memory, optionally by name.
 - `open_target`: a file or folder (inside the allowed folders) or an http(s)
-  link. Programs and scripts are refused: opening one would run it, and the
-  agent never runs programs.
+  link. Programs and scripts are refused: opening one would run it.
+- `find_process` and `stop_process`: end a program the user names. System
+  processes, Max itself and other users' processes are refused; the agent
+  asks before each stop.
+- `run_command`: a program with its arguments (never through a shell), in a
+  folder, with a time limit. Only when AGENT_SHELL is on, after a yes.
 
 Reading changes nothing and never asks; opening needs no question either,
 as it changes no file.
@@ -32,6 +36,20 @@ RUNNABLE_SUFFIXES = frozenset(
     }
 )  # fmt: skip
 WEB_SCHEMES = ("http://", "https://")
+# Processes the agent never stops: the system's own, and the desktop.
+PROTECTED_PROCESSES = frozenset(
+    {
+        "system", "system idle process", "registry", "smss.exe", "csrss.exe",
+        "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe",
+        "svchost.exe", "fontdrvhost.exe", "dwm.exe", "explorer.exe",
+        "memory compression", "secure system", "init", "systemd", "launchd",
+        "kernel_task", "loginwindow", "windowserver", "sshd", "dbus-daemon",
+        "xorg", "gnome-shell", "kwin_x11", "kwin_wayland",
+    }
+)  # fmt: skip
+STOP_WAIT_SECONDS = 5
+COMMAND_TIMEOUT_SECONDS = 60
+MAX_COMMAND_OUTPUT = 4_000
 
 
 def system_info() -> str:
@@ -136,3 +154,141 @@ def open_target(target: str) -> None:
         subprocess.run(["open", str(path)], check=False)
     else:
         subprocess.run(["xdg-open", str(path)], check=False)
+
+
+# --- stopping a program ------------------------------------------------------
+
+
+def find_process(pid: int = 0, name: str = "") -> Any:
+    """The process to stop, by pid or by name (the biggest one of that name).
+    Raises ValidationError for one the agent must never stop."""
+    import getpass
+    import os
+
+    import psutil
+
+    if pid:
+        try:
+            process = psutil.Process(int(pid))
+        except (psutil.NoSuchProcess, ValueError):
+            raise ValidationError(f"No running program has pid {pid}.") from None
+    else:
+        wanted = name.strip().casefold()
+        if not wanted:
+            raise ValidationError("Name the program or give its pid.")
+        matches = [
+            found
+            for found in psutil.process_iter(["name", "memory_info"])
+            if wanted in str(found.info.get("name") or "").casefold()
+        ]
+        if not matches:
+            raise ValidationError(f"No running program is called {name}.")
+        process = max(
+            matches,
+            key=lambda found: getattr(found.info.get("memory_info"), "rss", 0),
+        )
+    own = {os.getpid(), os.getppid()}
+    if process.pid in own or process.pid in (0, 4):
+        raise ValidationError("That's Max itself or the system; I won't stop it.")
+    try:
+        process_name = process.name()
+        owner = process.username()
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        raise ValidationError(
+            "That program belongs to the system or another user; I won't stop it."
+        ) from None
+    if process_name.casefold() in PROTECTED_PROCESSES:
+        raise ValidationError(f"{process_name} is part of the system; I won't stop it.")
+    user = getpass.getuser().casefold()
+    if owner and owner.split("\\")[-1].casefold() != user:
+        raise ValidationError(f"{process_name} belongs to {owner}; I won't stop it.")
+    return process
+
+
+def describe_process(process: Any) -> str:
+    """`chrome.exe (pid 1234, 1.20 GB)`."""
+    import psutil
+
+    try:
+        memory = format_size(process.memory_info().rss)
+    except psutil.Error:
+        memory = "unknown size"
+    return f"{process.name()} (pid {process.pid}, {memory})"
+
+
+def stop_process(process: Any) -> str:
+    """Ask the process to end; force it after STOP_WAIT_SECONDS. What happened."""
+    import psutil
+
+    described = describe_process(process)
+    try:
+        process.terminate()
+        process.wait(timeout=STOP_WAIT_SECONDS)
+        return f"Stopped {described}."
+    except psutil.TimeoutExpired:
+        process.kill()
+        return f"{described} didn't close, so it was ended."
+    except psutil.NoSuchProcess:
+        return f"{described} had already ended."
+    except psutil.AccessDenied:
+        raise ValidationError(f"Windows refused to stop {described}.") from None
+
+
+# --- running a command --------------------------------------------------------
+
+
+def command_words(command: str) -> list[str]:
+    """`command` split into a program and its arguments. Shell syntax (pipes,
+    redirects, &&) is refused: there is no shell to run it."""
+    import shlex
+
+    if any(mark in command for mark in ("|", "&&", "||", ">", "<", ";", "`", "$(")):
+        raise ValidationError(
+            "Shell syntax (pipes, redirects, && or ;) isn't supported: run one "
+            "program with its arguments."
+        )
+    try:
+        words = shlex.split(command, posix=sys.platform != "win32")
+    except ValueError as e:
+        raise ValidationError(f"Can't read that command: {e}") from None
+    if not words:
+        raise ValidationError("The command is empty.")
+    return [word.strip('"') for word in words]
+
+
+def run_command(words: list[str], folder: Path) -> str:
+    """Run a program in `folder` and return what it printed, as JSON."""
+    import shutil
+    import subprocess
+
+    program = shutil.which(words[0]) or words[0]
+    try:
+        result = subprocess.run(
+            [program, *words[1:]],
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise ValidationError(
+            f"No program called {words[0]}. Windows commands such as dir or copy "
+            "live inside cmd, which isn't run; use Max's actions instead."
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise ValidationError(
+            f"{words[0]} was still running after {COMMAND_TIMEOUT_SECONDS} "
+            "seconds, so it was stopped."
+        ) from None
+    output = (result.stdout + result.stderr).strip()
+    return json.dumps(
+        {
+            "exit_code": result.returncode,
+            "output": output[-MAX_COMMAND_OUTPUT:],
+            "cut": len(output) > MAX_COMMAND_OUTPUT,
+        },
+        ensure_ascii=False,
+    )

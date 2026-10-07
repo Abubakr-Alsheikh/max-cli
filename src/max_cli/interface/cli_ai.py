@@ -79,6 +79,10 @@ def _answer(question: "Question") -> Optional[str]:
     """The agent's plan or question, answered in the terminal."""
     from max_cli.core.agent.agent import QuestionKind
 
+    if question.kind == QuestionKind.CONFIRM:
+        return (
+            "yes" if Confirm.ask(f"[yellow]{escape(question.text)}[/yellow]") else None
+        )
     if question.kind == QuestionKind.PLAN:
         typed = Prompt.ask(
             "[yellow]Go ahead?[/yellow] [dim](Enter or y: go · n: stop · or say "
