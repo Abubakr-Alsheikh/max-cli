@@ -1,9 +1,13 @@
 """Stop hook: before Claude ends a turn that edited Python, run ruff + pytest.
 
-Only runs when check_rules.py recorded a Python edit this session. On failure it
-blocks the stop and hands the failure back to Claude. After one blocked retry
-(stop_hook_active) it stops blocking and warns the user instead, matching the
-AGENTS.md 2-strike rule.
+Only runs when check_rules.py recorded a Python edit this session. pytest runs
+only the tests that belong to the edited files (`related_tests`): the edited
+test files, test files named after an edited module, and test files that
+import one. The whole suite takes 6-10 minutes, past this hook's time limit;
+`scripts/ci_local.py` and GitHub CI run it. On failure it blocks the stop and
+hands the failure back to Claude. After one blocked retry (stop_hook_active)
+it stops blocking and warns the user instead, matching the AGENTS.md 2-strike
+rule.
 """
 
 from __future__ import annotations
@@ -15,6 +19,50 @@ from pathlib import Path
 
 PYTEST_TIMEOUT_SECONDS = 300
 OUTPUT_TAIL_LINES = 40
+SOURCE_ROOT = "src/"
+TESTS_DIR = "tests"
+
+
+def _module_names(source: str) -> tuple[str, str]:
+    """`src/max_cli/core/agent/context.py` -> ("max_cli.core.agent.context",
+    "from max_cli.core.agent import context")."""
+    dotted = source.removeprefix(SOURCE_ROOT).removesuffix(".py").replace("/", ".")
+    package, _, name = dotted.rpartition(".")
+    return dotted, f"from {package} import {name}"
+
+
+def related_tests(edited: list[str], repo_root: Path) -> list[str]:
+    """The test files that cover the edited files, sorted."""
+    tests_root = repo_root / TESTS_DIR
+    test_files = sorted(tests_root.rglob("test_*.py"))
+    found: set[str] = set()
+    sources = []
+    for name in edited:
+        name = name.replace("\\", "/")
+        if name.startswith(f"{TESTS_DIR}/") and Path(name).name.startswith("test_"):
+            if (repo_root / name).is_file():
+                found.add(name)
+        elif name.startswith(SOURCE_ROOT) and name.endswith(".py"):
+            sources.append(name)
+    for test_file in test_files:
+        relative = test_file.relative_to(repo_root).as_posix()
+        if relative in found:
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for source in sources:
+            stem = Path(source).stem
+            dotted, from_import = _module_names(source)
+            if (
+                (stem != "__init__" and stem in test_file.stem)
+                or dotted in text
+                or from_import in text
+            ):
+                found.add(relative)
+                break
+    return sorted(found)
 
 
 def run(command: list[str], repo_root: Path) -> tuple[bool, str]:
@@ -46,19 +94,23 @@ def main() -> int:
 
     edited = sorted(set(marker.read_text(encoding="utf-8").split()))
     lint_ok, lint_out = run(["ruff", "check", "src", "tests"], repo_root)
-    tests_ok, tests_out = run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-x",
-            "--no-header",
-            "-p",
-            "no:cacheprovider",
-        ],
-        repo_root,
-    )
+    tests = related_tests(edited, repo_root)
+    tests_ok, tests_out = True, ""
+    if tests:
+        tests_ok, tests_out = run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-x",
+                "--no-header",
+                "-p",
+                "no:cacheprovider",
+                *tests,
+            ],
+            repo_root,
+        )
 
     if lint_ok and tests_ok:
         marker.unlink()
