@@ -632,3 +632,27 @@ class TestMemoryCommand:
         result = runner.invoke(ai_app, ["memory", "--forget", "nope"])
 
         assert "No note with id nope" in _plain(result)
+
+
+class TestAnswersInTheTerminal:
+    @pytest.mark.parametrize(
+        ("typed", "answer"),
+        [("", "go"), ("y", "go"), ("n", None), ("only mp3 files", "only mp3 files")],
+    )
+    def test_the_plan_question(self, monkeypatch, typed, answer):
+        from max_cli.core.agent.agent import Question, QuestionKind
+
+        monkeypatch.setattr(cli_ai.Prompt, "ask", lambda *args, **kwargs: typed)
+
+        assert cli_ai._answer(Question(QuestionKind.PLAN, "1. a\n2. b")) == answer
+
+    @pytest.mark.parametrize(("typed", "answer"), [("2", "Delete"), ("", None)])
+    def test_a_question_takes_an_options_number(self, monkeypatch, typed, answer):
+        from max_cli.core.agent.agent import Question, QuestionKind
+
+        monkeypatch.setattr(cli_ai.Prompt, "ask", lambda *args, **kwargs: typed)
+        question = Question(
+            QuestionKind.QUESTION, "Move or delete?", ("Move", "Delete")
+        )
+
+        assert cli_ai._answer(question) == answer

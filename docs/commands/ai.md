@@ -49,6 +49,10 @@ max "remember that my music lives in D:/Music"
 - **Read the recent activity:** what Max did lately and which file changes undo can reverse, so "undo that" and "what did I compress yesterday?" work. "Undo that" runs `files undo`, which asks first.
 - **Check the queued jobs:** which are running, with their progress, which wait, and how the latest ones ended, so "is my download done?" works.
 
+Every request also carries a few lines Max adds about where you are: what the folder holds (files by kind, subfolders), which queued jobs are running or waiting, and the last thing Max did. So "shrink these" works without the agent listing the folder first.
+
+**Plans and questions:** before work with three or more steps or many files, the agent shows its plan as a numbered list and waits. Press Enter (or `y`) to let it go ahead, `n` to stop it, or type what to change ("only the live recordings") and it shows a new plan. When a request is unclear and a wrong guess would cost (move or delete? which folder?), it asks you one question, with numbered choices when there are some; type the number or your own answer. On the dashboard both come up in a dialog. With `--dry-run` it shows the plan and asks nothing. Approving a plan doesn't skip the question before an action moves, overwrites or deletes files.
+
 Ask "how would you organize this folder?" and it answers from what's there. Every request and every action the agent runs, here or in the dashboard, goes into the activity log (`max` dashboard, Activity > History).
 
 **What the agent may do:**
@@ -76,7 +80,7 @@ The agent needs a model that can call tools: most OpenAI, Gemini, Claude and Lla
 
 ## chat
 
-Talk with the agent: each request runs Max's actions, and it remembers the conversation. The agent follows the same rules as `ask`. Type `help` for example requests, and `exit` or `quit` to leave. Max saves the conversation when you leave with `exit` or `quit` (Ctrl+C doesn't save it), and a new session starts from the last 20 messages of it.
+Talk with the agent: each request runs Max's actions, and it remembers the conversation. The agent follows the same rules as `ask`. Type `help` for example requests, and `exit` or `quit` to leave. Max saves the conversation after every request, so Ctrl+C or closing the window loses nothing, and a new session starts from the last 20 messages of it. When a chat grows long (about 12,000 tokens), Max turns its oldest turns into a short summary and keeps the last two requests as they were, so the chat stays within the token limit. The dashboard's AI page does the same.
 
 ```bash
 max ai chat [--clear] [--export FILE] [--import FILE]

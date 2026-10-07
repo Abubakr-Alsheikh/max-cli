@@ -20,9 +20,10 @@ from max_cli.core.operations.result import ActionResult
 
 # The first prompt (system message plus the two tool definitions) must stay
 # small: about 4 characters per token, so this is roughly 1,500 tokens.
-# 6,000 until phase 1 added job_status, remember, forget and select
-# (PLANS/active/agent-phase1-batch-verify-memory.md).
-FIRST_PROMPT_CHAR_BUDGET = 8_000
+# 6,000 until phase 1 added job_status, remember, forget and select; 8,000
+# until phase 2 added plan and ask_user (PLANS/completed/agent-phase1-...md,
+# PLANS/active/agent-phase2-plan-ask-context.md).
+FIRST_PROMPT_CHAR_BUDGET = 9_000
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -107,6 +108,8 @@ def test_the_tools_look_load_and_run():
         "recent_activity",
         "job_status",
         "remember",
+        "plan",
+        "ask_user",
         "forget",
         "load_group",
         "run_action",
@@ -1110,3 +1113,184 @@ def test_forget_deletes_the_note(tmp_path):
 
     assert AgentMemory().notes() == []
     assert "no note with that id" in model.requests[2]["messages"][-1]["content"]
+
+
+# --- phase 2: plans, questions, context, long chats --------------------------------
+
+PLAN_STEPS = ["Find the m4a files under Music", "Convert them to mp3"]
+
+
+def _plan_then_answer() -> ScriptedModel:
+    return ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": PLAN_STEPS}),)),
+        _answer("All right."),
+    )
+
+
+@pytest.mark.parametrize(
+    ("answer", "told"),
+    [
+        ("go", "The user said go"),
+        (None, "The user stopped the plan"),
+        ("only the live ones", "The user wants changes: only the live ones"),
+    ],
+)
+def test_a_plan_waits_for_the_users_answer(tmp_path, answer, told):
+    from max_cli.core.agent.agent import QuestionKind
+
+    asked = []
+    model = _plan_then_answer()
+    agent = _agent(
+        model, tmp_path, ask=lambda question: asked.append(question) or answer
+    )
+
+    reply = agent.ask("convert my music")
+
+    [question] = asked
+    assert question.kind == QuestionKind.PLAN
+    assert question.text == "1. Find the m4a files under Music\n2. Convert them to mp3"
+    assert reply.steps[0].kind == StepKind.PLAN
+    assert told in model.requests[1]["messages"][-1]["content"]
+
+
+def test_a_plan_with_one_step_is_refused(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": ["Convert"]}),)), _answer("OK.")
+    )
+
+    _agent(model, tmp_path, ask=lambda question: "go").ask("convert")
+
+    assert "at least 2 steps" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_without_a_way_to_ask_the_plan_just_shows(tmp_path):
+    model = _plan_then_answer()
+
+    reply = _agent(model, tmp_path).ask("convert my music")
+
+    assert reply.steps[0].kind == StepKind.PLAN
+    assert "Carry it out" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_ask_user_passes_the_options_and_returns_the_answer(tmp_path):
+    asked = []
+    model = ScriptedModel(
+        _answer(
+            calls=(
+                _call(
+                    "ask_user",
+                    {"question": "Move or delete them?", "options": ["Move", "Delete"]},
+                ),
+            )
+        ),
+        _answer("Moving them."),
+    )
+    agent = _agent(
+        model, tmp_path, ask=lambda question: asked.append(question) or "Move"
+    )
+
+    reply = agent.ask("get rid of the duplicates")
+
+    assert asked[0].options == ("Move", "Delete")
+    assert json.loads(model.requests[1]["messages"][-1]["content"]) == {
+        "answer": "Move"
+    }
+    assert reply.steps[0].kind == StepKind.ASKED
+
+
+def test_ask_user_without_anyone_to_ask_picks_the_safe_option(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("ask_user", {"question": "Which folder?"}),)),
+        _answer("OK."),
+    )
+
+    _agent(model, tmp_path).ask("tidy up")
+
+    assert "safest option" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_each_request_carries_the_folder_context(tmp_path):
+    for name in ("a.mp4", "b.mp4", "c.jpg"):
+        (tmp_path / name).write_bytes(b"\0")
+    (tmp_path / "sub").mkdir()
+    model = ScriptedModel(_answer("Hi."))
+
+    _agent(model, tmp_path).ask("what's here?")
+
+    sent = model.requests[0]["messages"][-1]["content"]
+    assert sent.startswith("what's here?\n\n(Context from Max")
+    assert "3 files (2 video, 1 image), 1 folder." in sent
+
+
+def test_context_can_be_left_out(tmp_path):
+    model = ScriptedModel(_answer("Hi."))
+
+    _agent(model, tmp_path, context=False).ask("hello")
+
+    assert model.requests[0]["messages"][-1]["content"] == "hello"
+
+
+def test_a_long_chat_turns_its_oldest_turns_into_a_summary(tmp_path, monkeypatch):
+    from max_cli.core.agent import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "COMPACT_AT_CHARS", 200)
+    monkeypatch.setattr(agent_module, "KEEP_RECENT_REQUESTS", 1)
+    model = ScriptedModel(
+        _answer("First answer " + "x" * 200),
+        _answer("Second answer"),
+        _answer("You asked about photos and videos."),  # the summary call
+        _answer("Third answer"),
+    )
+    agent = _agent(model, tmp_path, context=False)
+    agent.ask("first request about photos")
+    agent.ask("second request about videos")
+
+    reply = agent.ask("third request")
+
+    summary_call = model.requests[2]["messages"]
+    assert "first request about photos" in summary_call[1]["content"]
+    roles = [message["role"] for message in agent.messages]
+    assert roles == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert agent.messages[1]["content"].startswith(
+        "Summary of our earlier conversation:"
+    )
+    assert agent.messages[3]["content"] == "second request about videos"
+    assert any(
+        step.text == "Summarised the earlier conversation" for step in reply.steps
+    )
+
+
+def test_a_failed_summary_keeps_the_whole_chat(tmp_path, monkeypatch):
+    from max_cli.core.agent import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "COMPACT_AT_CHARS", 10)
+    monkeypatch.setattr(agent_module, "KEEP_RECENT_REQUESTS", 1)
+    error = openai.APIConnectionError.__new__(openai.APIConnectionError)
+
+    class FailsOnSummary(ScriptedModel):
+        def _create(self, **request: Any) -> Any:
+            if (
+                request.get("messages", [{}])[0].get("content")
+                == agent_module.SUMMARY_PROMPT
+            ):
+                raise error
+            return super()._create(**request)
+
+    model = FailsOnSummary(_answer("One."), _answer("Two."))
+    agent = _agent(model, tmp_path, context=False)
+    agent.ask("first")
+
+    agent.ask("second")
+
+    assert [m["content"] for m in agent.messages if m["role"] == "user"] == [
+        "first",
+        "second",
+    ]

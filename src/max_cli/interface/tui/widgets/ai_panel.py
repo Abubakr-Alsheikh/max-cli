@@ -28,7 +28,13 @@ from max_cli.interface.tui.messages import OpenPage
 from max_cli.interface.tui.widgets.sidebar import SECTION_KEYS
 
 if TYPE_CHECKING:
-    from max_cli.core.agent.agent import ActionCall, Agent, AgentReply, Step
+    from max_cli.core.agent.agent import (
+        ActionCall,
+        Agent,
+        AgentReply,
+        Question,
+        Step,
+    )
 
 EXAMPLES = (
     "Shrink the videos in this folder",
@@ -68,7 +74,7 @@ CARD_NOTES = {
 # A batch card lists this many failed files and outputs; the rest are counted.
 BATCH_LISTED = 8
 # Steps the turn lists on its look-ups line instead of drawing a card.
-LOOKUP_KINDS = ("loaded", "looked", "noted")
+LOOKUP_KINDS = ("loaded", "looked", "noted", "asked")
 
 
 def ai_is_set_up() -> bool:
@@ -261,6 +267,13 @@ class AgentTurn(Vertical):
     AgentTurn .turn-tools {
         height: auto;
     }
+    AgentTurn .turn-plan {
+        height: auto;
+        background: $boost;
+        border-left: wide $accent;
+        padding: 0 1;
+        margin: 0 0 1 0;
+    }
     AgentTurn Markdown {
         margin: 0;
         padding: 0 1 0 0;
@@ -322,6 +335,13 @@ class AgentTurn(Vertical):
             lookups = self.query_one(".turn-lookups", Static)
             lookups.update("· " + "  ·  ".join(self._lookups))
             lookups.display = True
+            return
+        if kind == "plan":
+            plan = Static(
+                Content.assemble(("PLAN\n", "bold $primary"), step.text),
+                classes="turn-plan",
+            )
+            self.query_one(".turn-tools").mount(plan)
             return
         # By tool call: actions run side by side and finish in any order.
         key = step.call_id or step.action_id
@@ -653,6 +673,7 @@ class AIPanel(Vertical):
                 # The dashboard runs the queue, so long jobs may wait there.
                 self._agent = Agent.from_settings(
                     confirm=self._confirm_from_thread,
+                    ask=self._answer_from_thread,
                     on_step=self._step_from_thread,
                     can_queue=True,
                 )
@@ -715,6 +736,37 @@ class AIPanel(Vertical):
         self.post_message(OpenPage("settings"))
 
     # --- questions from the worker ---------------------------------------------
+
+    def _answer_from_thread(self, question: "Question") -> Optional[str]:
+        """Runs in the worker: show the plan or question and wait. No answer
+        (the dashboard closing) is None, which stops the plan."""
+        from max_cli.core.agent.agent import QuestionKind
+        from max_cli.interface.tui.widgets.dialogs import QuestionDialog
+
+        answer: list[Optional[str]] = []
+        answered = threading.Event()
+
+        def done(reply: Optional[str]) -> None:
+            answer.append(reply)
+            answered.set()
+
+        def ask() -> None:
+            if self._turn is not None:
+                self._turn.waiting("Waiting for your answer")
+            self.app.push_screen(
+                QuestionDialog(
+                    question.text,
+                    question.options,
+                    plan=question.kind == QuestionKind.PLAN,
+                ),
+                done,
+            )
+
+        self.app.call_from_thread(ask)
+        while not answered.wait(CONFIRM_POLL_SECONDS):
+            if not self.app.is_running:
+                return None
+        return answer[0]
 
     def _confirm_from_thread(self, call: "ActionCall") -> bool:
         """Runs in the worker: ask on the UI thread and wait for the answer.

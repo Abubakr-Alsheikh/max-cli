@@ -16,6 +16,10 @@ Rules from PLANS/active/dashboard-first-ai-agent.md (D4, step 4):
   the run into a failure the model hears about.
 - `remember` and `forget` keep notes across sessions (`memory.py`); the
   system prompt lists them.
+- `plan` shows the steps and waits for the `ask` callback's go-ahead;
+  `ask_user` asks a question through the same callback.
+- Each request carries a few lines of context (`context.py`), and past
+  COMPACT_AT_CHARS the oldest turns become one summary.
 """
 
 import json
@@ -40,7 +44,9 @@ from max_cli.core.agent.tools import (
     LIST_FOLDER,
     LOAD_GROUP,
     LOOK_TOOLS,
+    PLAN,
     PROBE_LINK,
+    QUESTION_TOOLS,
     RECENT_ACTIVITY,
     REMEMBER,
     RUN_ACTION,
@@ -79,6 +85,27 @@ MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
 SIZE_SHOWN_FROM = 1024 * 1024  # a batch's question names its size from 1 MB
 DRY_RUN_NOTE = "Nothing ran and nothing changed. Tell the user what would happen."
 # select's filters; recursive and redo go to expand_each.
+MAX_PLAN_STEPS = 12
+MAX_OPTIONS = 6
+# Answers to a plan that mean "go ahead"; anything else is a change to make.
+GO_ANSWERS = frozenset({"go", "go ahead", "yes", "y", "ok", "okay", "sure"})
+NO_ANSWER_NOTE = (
+    "The user can't answer here. Choose the safest option, carry on, and say "
+    "what you assumed."
+)
+# Past this many characters of conversation (about 12,000 tokens) the oldest
+# turns become one summary; the last KEEP_RECENT_REQUESTS stay as they were.
+COMPACT_AT_CHARS = 48_000
+KEEP_RECENT_REQUESTS = 2
+MAX_SUMMARY_SOURCE_CHARS = 30_000
+MAX_TRANSCRIPT_TOOL_CHARS = 300
+SUMMARY_PROMPT = (
+    "Summarize this conversation between a user and Max, an assistant that "
+    "works on the user's files, so Max can continue it: the requests, what "
+    "Max did (actions, folders, files made), decisions, preferences and "
+    "anything unfinished. Plain text, at most 200 words."
+)
+SUMMARY_INTRO = "Summary of our earlier conversation:"
 SELECT_FILTERS = tuple(
     name for name in SELECT_FIELDS if name not in ("recursive", "redo")
 )
@@ -105,6 +132,7 @@ moves, overwrites or deletes files. If they say no, don't retry.
 - Results come back checked: report failed, missing or empty outputs; never claim it all worked.
 - "Undo that": the files group's undo action. job_status shows queued jobs.
 - Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
+- Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself.
 - When you're done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead.
 
@@ -140,7 +168,9 @@ class StepKind(str, Enum):
     DECLINED = "declined"  # the user said no
     PLANNED = "planned"  # dry run: checked, not run
     QUEUED = "queued"  # added to the queue; the dashboard runs it in the background
-    NOTED = "noted"  # saved or deleted a memory note
+    NOTED = "noted"  # saved or deleted a memory note, or summarised the chat
+    PLAN = "plan"  # showed the plan; text holds the numbered steps
+    ASKED = "asked"  # asked the user a question or for a go-ahead
 
 
 @dataclass(frozen=True)
@@ -296,8 +326,25 @@ def _done_already(names: tuple[str, ...]) -> dict[str, Any]:
     }
 
 
+class QuestionKind(str, Enum):
+    QUESTION = "question"  # ask_user: answer in words or pick an option
+    PLAN = "plan"  # plan: "go", None to stop, or the changes to make
+
+
+@dataclass(frozen=True)
+class Question:
+    """What the agent asks the user. `text` is the question, or the plan's
+    numbered steps."""
+
+    kind: QuestionKind
+    text: str
+    options: tuple[str, ...] = ()
+
+
 Confirm = Callable[[ActionCall], bool]
 OnStep = Callable[[Step], None]
+# The user's answer, or None when they gave none (closed it, cancelled).
+Ask = Callable[[Question], Optional[str]]
 
 
 def _ignore_step(step: Step) -> None:
@@ -324,6 +371,8 @@ class Agent:
         can_queue: bool = False,
         jobs_hint: str = JOBS_WINDOW,
         memory: Optional[AgentMemory] = None,
+        ask: Optional[Ask] = None,
+        context: bool = True,
     ) -> None:
         """`can_queue` lets the model queue long jobs, which the caller must
         then run: the dashboard's worker, or the background worker the CLI
@@ -343,6 +392,8 @@ class Agent:
         self.token_limit = token_limit
         self._report_lock = threading.Lock()
         self.memory = memory or AgentMemory()
+        self.ask_user = ask
+        self.context = context
         self.scope = PathScope(cwd or Path.cwd())
         self.scope.allow(_download_folder())
         self.loaded: set[str] = set()
@@ -410,8 +461,9 @@ class Agent:
 
     def _ask(self, request: str) -> AgentReply:
         self.scope.add_from(request)
-        self.messages.append({"role": "user", "content": request})
         reply = AgentReply("")
+        self._compact(reply)
+        self.messages.append({"role": "user", "content": self._with_context(request)})
         turns = calls = 0
         while True:
             response = self._complete()
@@ -438,6 +490,54 @@ class Agent:
                 reply.text = limit
                 self.messages.append({"role": "assistant", "content": limit})
                 return reply
+
+    def _with_context(self, request: str) -> str:
+        if not self.context:
+            return request
+        from max_cli.core.agent.context import request_context
+
+        found = request_context(self.scope.cwd)
+        return f"{request}\n\n{found}" if found else request
+
+    def _compact(self, reply: AgentReply) -> None:
+        """Turn the oldest turns into one summary when the conversation is
+        long. Keeps everything as it was when the summary call fails."""
+        from openai import APIError
+
+        size = len(json.dumps(self.messages[1:], default=str))
+        requests = [
+            index
+            for index, message in enumerate(self.messages)
+            if index and message.get("role") == "user"
+        ]
+        if size < COMPACT_AT_CHARS or len(requests) <= KEEP_RECENT_REQUESTS:
+            return
+        cut = requests[-KEEP_RECENT_REQUESTS]
+        transcript = _transcript(self.messages[1:cut])[-MAX_SUMMARY_SOURCE_CHARS:]
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SUMMARY_PROMPT},
+                    {"role": "user", "content": transcript},
+                ],
+            )
+        except APIError:
+            logger.warning("Couldn't summarise the conversation", exc_info=True)
+            return
+        summary = (response.choices[0].message.content or "").strip()
+        if not summary:
+            return
+        usage = getattr(response, "usage", None)
+        reply.tokens += int(getattr(usage, "total_tokens", 0) or 0)
+        self.messages[1:cut] = [
+            {"role": "user", "content": f"{SUMMARY_INTRO} {summary}"},
+            {"role": "assistant", "content": "Noted."},
+        ]
+        self._report(
+            reply,
+            Step(StepKind.NOTED, "summary", "Summarised the earlier conversation"),
+        )
 
     def _tools(self, tool_calls: list[Any], reply: AgentReply, done: int) -> list[str]:
         """An answer per tool call, in their order. Looks, checks and
@@ -537,6 +637,8 @@ class Agent:
             return self._look(name, arguments, reply)
         if name in (REMEMBER, FORGET):
             return self._note(name, arguments, reply)
+        if name in QUESTION_TOOLS:
+            return self._question(name, arguments, reply)
         if name == RUN_ACTION:
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
@@ -628,6 +730,60 @@ class Agent:
             )
         self._report(reply, Step(StepKind.NOTED, tool, f"Forgot: {gone.text}"))
         return json.dumps({"deleted": gone.id}, ensure_ascii=False)
+
+    def _question(self, tool: str, arguments: dict[str, Any], reply: AgentReply) -> str:
+        """plan or ask_user: show it, wait for the answer, tell the model."""
+        if tool == PLAN:
+            return self._plan(arguments.get("steps"), reply)
+        question = str(arguments.get("question", "")).strip()
+        if not question:
+            return "Error: 'question' is empty."
+        given = arguments.get("options") or []
+        options = tuple(str(option) for option in given if str(option).strip())
+        if self.ask_user is None or self.dry_run:
+            return NO_ANSWER_NOTE
+        answer = self.ask_user(
+            Question(QuestionKind.QUESTION, question, options[:MAX_OPTIONS])
+        )
+        self._report(
+            reply,
+            Step(
+                StepKind.ASKED,
+                tool,
+                f"Asked: {question} · {answer if answer else 'no answer'}",
+            ),
+        )
+        if not answer:
+            return "The user didn't answer. Stop here and ask in your reply."
+        return json.dumps({"answer": answer}, ensure_ascii=False)
+
+    def _plan(self, given: Any, reply: AgentReply) -> str:
+        if not isinstance(given, list):
+            return "Error: 'steps' must be a list of short steps."
+        steps = [str(step).strip() for step in given if str(step).strip()]
+        if len(steps) < 2:
+            return "Error: a plan needs at least 2 steps; for one step, just act."
+        numbered = "\n".join(
+            f"{number}. {step}"
+            for number, step in enumerate(steps[:MAX_PLAN_STEPS], start=1)
+        )
+        self._report(reply, Step(StepKind.PLAN, PLAN, numbered))
+        if self.dry_run:
+            return f"Dry run: plan shown. {DRY_RUN_NOTE}"
+        if self.ask_user is None:
+            return "Plan shown. Carry it out."
+        answer = self.ask_user(Question(QuestionKind.PLAN, numbered))
+        if answer is None:
+            self._report(reply, Step(StepKind.ASKED, PLAN, "You stopped the plan"))
+            return "The user stopped the plan. Do nothing more and say you stopped."
+        if answer.strip().casefold() in GO_ANSWERS:
+            self._report(reply, Step(StepKind.ASKED, PLAN, "You said go"))
+            return "The user said go. Carry out the plan."
+        self._report(reply, Step(StepKind.ASKED, PLAN, f"You asked for: {answer}"))
+        return (
+            f"The user wants changes: {answer}. Show a new plan with plan, or "
+            "answer them."
+        )
 
     def _load_group(self, name: str, reply: AgentReply) -> str:
         if name not in agent_groups():
@@ -1013,6 +1169,29 @@ class Agent:
             if step.kind in (StepKind.RAN, StepKind.FAILED, StepKind.QUEUED):
                 _log_action(step)
             self.on_step(step)
+
+
+def _transcript(messages: list[dict[str, Any]]) -> str:
+    """Messages as plain lines for the summary call: who said what, which
+    tools ran, the start of each tool result."""
+    lines = []
+    for message in messages:
+        role = message.get("role", "")
+        content = str(message.get("content") or "")
+        if role == "tool":
+            lines.append(f"result: {content[:MAX_TRANSCRIPT_TOOL_CHARS]}")
+            continue
+        calls = message.get("tool_calls") or []
+        names = ", ".join(
+            f"{call['function']['name']}({call['function']['arguments']})"
+            for call in calls
+        )
+        text = " ".join(
+            part for part in (content, f"[calls {names}]" if names else "") if part
+        )
+        if text:
+            lines.append(f"{role}: {text}")
+    return "\n".join(lines)
 
 
 def _assistant_message(content: Optional[str], tool_calls: list[Any]) -> dict[str, Any]:

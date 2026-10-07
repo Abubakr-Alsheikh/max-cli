@@ -24,6 +24,8 @@ RECENT_ACTIVITY = "recent_activity"
 JOB_STATUS = "job_status"
 REMEMBER = "remember"
 FORGET = "forget"
+PLAN = "plan"
+ASK_USER = "ask_user"
 LOOK_TOOLS = (
     LIST_FOLDER,
     INSPECT,
@@ -33,7 +35,8 @@ LOOK_TOOLS = (
     JOB_STATUS,
 )
 MEMORY_TOOLS = (REMEMBER, FORGET)
-TOOL_NAMES = (*LOOK_TOOLS, *MEMORY_TOOLS, LOAD_GROUP, RUN_ACTION)
+QUESTION_TOOLS = (PLAN, ASK_USER)
+TOOL_NAMES = (*LOOK_TOOLS, *MEMORY_TOOLS, *QUESTION_TOOLS, LOAD_GROUP, RUN_ACTION)
 # run_action's `select`: limits for the files a folder or pattern gives.
 SELECT_FIELDS = (
     "recursive",
@@ -169,6 +172,24 @@ def _look_definitions() -> list[dict[str, Any]]:
             "sessions, e.g. 'Music lives in D:/Music'.",
             {"text": {"type": "string"}},
             ["text"],
+        ),
+        _tool(
+            PLAN,
+            "Show the user your plan as short steps and wait for a go-ahead, "
+            "before work with 3+ steps or many files. The answer says go, "
+            "stop, or what to change.",
+            {"steps": {"type": "array", "items": {"type": "string"}}},
+            ["steps"],
+        ),
+        _tool(
+            ASK_USER,
+            "Ask the user one question when the request is unclear and a "
+            "wrong guess would cost. Never for what you can look up.",
+            {
+                "question": {"type": "string"},
+                "options": {"type": "array", "items": {"type": "string"}},
+            },
+            ["question"],
         ),
         _tool(
             FORGET,

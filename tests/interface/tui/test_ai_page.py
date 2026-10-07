@@ -243,6 +243,43 @@ async def test_a_batch_gets_one_card_that_counts_its_files(ai_on):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("press", "told"),
+    [("#question-go", "The user said go"), ("#question-cancel", "stopped the plan")],
+)
+async def test_a_plan_waits_in_a_dialog_and_shows_in_the_turn(ai_on, press, told):
+    from max_cli.interface.tui.widgets.dialogs import QuestionDialog
+
+    model = ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": ["Find them", "Convert them"]}, "p"),)),
+        _answer("Done what you said."),
+    )
+    seen: list[str] = []
+    original = model._create
+
+    def record(**request: Any) -> Any:
+        seen.append(str(request["messages"][-1]["content"]))
+        return original(**request)
+
+    model.chat.completions.create = record
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "convert my music")
+            assert await wait_until(
+                pilot, lambda: isinstance(app.screen, QuestionDialog)
+            )
+            body = str(app.screen.query_one("#question-body", Static).render())
+            app.screen.query_one(press, Button).press()
+            await _replied(app, pilot)
+            plan = str(app.query_one(".turn-plan", Static).render())
+
+    assert "1. Find them" in body and "2. Convert them" in body
+    assert "PLAN" in plan and "Convert them" in plan
+    assert told in seen[-1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "answer, kept", [("#confirm-no", True), ("#confirm-yes", False)]
 )
 async def test_a_delete_asks_first(ai_on, answer, kept):
