@@ -265,8 +265,11 @@ async def test_a_plan_waits_in_a_dialog_and_shows_in_the_turn(ai_on, press, told
     with patch(CLIENT_PATH, return_value=model):
         async with app.run_test(size=SIZE) as pilot:
             await _send(app, pilot, "convert my music")
+            # The dialog shows before its buttons are mounted.
             assert await wait_until(
-                pilot, lambda: isinstance(app.screen, QuestionDialog)
+                pilot,
+                lambda: isinstance(app.screen, QuestionDialog)
+                and bool(app.screen.query(press)),
             )
             body = str(app.screen.query_one("#question-body", Static).render())
             app.screen.query_one(press, Button).press()
