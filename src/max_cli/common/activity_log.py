@@ -141,9 +141,14 @@ class ActivityLog:
             if self._cleared:
                 on_disk = []
             merged = {entry.id: entry for entry in on_disk}
+            fresh = [entry for key, entry in self._changed.items() if key not in merged]
             merged.update(self._changed)
+            # Newest first. Entries added here go before older ones with the
+            # same timestamp: Windows' clock can give two entries one value,
+            # and the stable sort kept the one on disk first.
+            ordered = fresh[::-1] + [merged[entry.id] for entry in on_disk]
             self._entries = sorted(
-                merged.values(), key=lambda entry: entry.timestamp, reverse=True
+                ordered, key=lambda entry: entry.timestamp, reverse=True
             )[: self.MAX_ENTRIES]
             _write_json(self.LOG_FILE, [e.to_dict() for e in self._entries])
             self._changed = {}
