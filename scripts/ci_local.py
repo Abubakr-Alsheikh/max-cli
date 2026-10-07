@@ -1,17 +1,25 @@
 """Run the GitHub CI checks on this machine before you push.
 
-    python scripts/ci_local.py                 # quick: ruff, mypy ratchet, tests with coverage
-    python scripts/ci_local.py --full          # also tests on every CI Python, and the build
-    python scripts/ci_local.py --install-hook  # make `git push` run the quick check first
+    python scripts/ci_local.py                 # changed: about 1-3 minutes
+    python scripts/ci_local.py --quick         # the whole suite on this Python, with coverage
+    python scripts/ci_local.py --full          # the whole suite on every CI Python, and the build
+    python scripts/ci_local.py --install-hook  # make `git push` run the changed check first
 
-The quick check uses the Python you run it with. --full installs the package
-into a fresh uv virtualenv per Python version in .ci-venvs/ (uv downloads any
-missing Python), so it also catches a dependency missing from pyproject.toml
-and syntax that Python 3.9 rejects.
+The default (changed) check runs ruff, the mypy ratchet, an import of every
+module on Python 3.9 (when .ci-venvs/py3.9 exists), and only the tests that
+cover the files changed since main (`related_tests`). A change to
+pyproject.toml or a conftest.py runs the whole suite instead. GitHub CI runs
+everything on every PR, so the slow runs need not happen here; --quick and
+--full stay for when you want them.
 
-A pass on a clean tree records HEAD in the git directory (ci-local.json). The
-pre-push hook skips commits that already passed, and the Claude guard hook
-refuses `gh pr create` until HEAD has passed with --full.
+--full installs the package into a fresh uv virtualenv per Python version in
+.ci-venvs/ (uv downloads any missing Python), so it also catches a dependency
+missing from pyproject.toml.
+
+A pass on a clean tree records HEAD and its mode in the git directory
+(ci-local.json). The pre-push hook skips commits that already passed, and the
+Claude guard hook refuses `gh pr create` for a package change until HEAD has
+passed any check.
 
 CI itself lives in .github/workflows/ci.yml; tests/test_ci_local.py fails when
 the Python versions or the coverage floor here drift from it. CI's macOS and
@@ -45,6 +53,15 @@ ZERO_SHA = "0" * 40
 PACKAGE_PATHS = ("src/", "pyproject.toml")
 BASE_BRANCH = "origin/main"
 FAILURE_TAIL_LINES = 40
+CHANGED, QUICK, FULL = "changed", "quick", "full"
+MODE_STRENGTH = {CHANGED: 0, QUICK: 1, FULL: 2}
+SOURCE_ROOT = "src/"
+TESTS_DIR = "tests"
+# A change to one of these can break any test: run the whole suite.
+WHOLE_SUITE_TRIGGERS = ("pyproject.toml", "conftest.py")
+# Imports every max_cli module on the oldest CI Python (scripts/import_all.py).
+IMPORT_ALL_SCRIPT = "scripts/import_all.py"
+OLDEST_PYTHON = "3.9"
 HOOK_MARKER = "Installed by scripts/ci_local.py"
 HOOK_SCRIPT = f"""#!/bin/sh
 # {HOOK_MARKER} --install-hook.
@@ -153,10 +170,100 @@ def record_pass(mode: str) -> None:
         print("Uncommitted changes: this pass is not recorded for HEAD.")
         return
     head = git("rev-parse", "HEAD")
-    if read_stamp() == {"head": head, "mode": "full"}:
-        return  # a quick pass doesn't downgrade a full pass of the same commit
+    earlier = read_stamp()
+    if earlier.get("head") == head and MODE_STRENGTH.get(
+        earlier.get("mode", ""), -1
+    ) >= MODE_STRENGTH.get(mode, 0):
+        return  # a lighter pass doesn't downgrade a stronger one of the commit
     stamp = {"head": head, "mode": mode}
     stamp_path().write_text(json.dumps(stamp), encoding="utf-8")
+
+
+def _module_names(source: str) -> tuple[str, str]:
+    """`src/max_cli/core/agent/context.py` -> ("max_cli.core.agent.context",
+    "from max_cli.core.agent import context")."""
+    dotted = source.removeprefix(SOURCE_ROOT).removesuffix(".py").replace("/", ".")
+    package, _, name = dotted.rpartition(".")
+    return dotted, f"from {package} import {name}"
+
+
+def related_tests(changed: list[str], repo_root: Path = REPO_ROOT) -> list[str]:
+    """The test files that cover `changed` (repo-relative paths), sorted: the
+    changed test files, test files named after a changed module, and test
+    files that import one. The Claude stop hook uses it too."""
+    found: set[str] = set()
+    sources = []
+    for name in changed:
+        name = name.replace("\\", "/")
+        if name.startswith(f"{TESTS_DIR}/") and Path(name).name.startswith("test_"):
+            if (repo_root / name).is_file():
+                found.add(name)
+        elif name.startswith(SOURCE_ROOT) and name.endswith(".py"):
+            sources.append(name)
+    if not sources:
+        return sorted(found)
+    for test_file in sorted((repo_root / TESTS_DIR).rglob("test_*.py")):
+        relative = test_file.relative_to(repo_root).as_posix()
+        if relative in found:
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for source in sources:
+            stem = Path(source).stem
+            dotted, from_import = _module_names(source)
+            named = stem != "__init__" and stem in test_file.stem
+            if named or dotted in text or from_import in text:
+                found.add(relative)
+                break
+    return sorted(found)
+
+
+def changed_files() -> list[str]:
+    """Files changed on this branch since it left main. Empty when git can't
+    say (no origin/main): the caller then runs the whole suite."""
+    try:
+        base = git("merge-base", BASE_BRANCH, "HEAD")
+        return git("diff", "--name-only", f"{base}..HEAD").splitlines()
+    except subprocess.CalledProcessError:
+        return []
+
+
+def changed_steps() -> list[StepResult]:
+    python = sys.executable
+    results = []
+    for name, command in (
+        ("ruff check", [python, "-m", "ruff", "check", "."]),
+        ("mypy baseline", [python, "scripts/mypy_baseline.py"]),
+    ):
+        print(f"... {name}", flush=True)
+        results.append(announce(run_step(name, command)))
+    oldest = venv_python(WORK_DIR / f"py{OLDEST_PYTHON}")
+    if oldest.exists():
+        name = f"import every module (Python {OLDEST_PYTHON})"
+        print(f"... {name}", flush=True)
+        results.append(announce(run_step(name, [str(oldest), IMPORT_ALL_SCRIPT])))
+    else:
+        print(
+            f"... skipped the Python {OLDEST_PYTHON} import: no .ci-venvs/py"
+            f"{OLDEST_PYTHON} (one --full run makes it)",
+            flush=True,
+        )
+    changed = changed_files()
+    pytest = pytest_program(Path(sysconfig.get_path("scripts")))
+    if not changed or any(Path(name).name in WHOLE_SUITE_TRIGGERS for name in changed):
+        tests: list[str] = []  # every test
+        name = f"pytest, whole suite (Python {current_version()})"
+    else:
+        tests = related_tests(changed)
+        if not tests:
+            print("... no tests cover the changed files", flush=True)
+            return results
+        name = f"pytest, {len(tests)} related files (Python {current_version()})"
+    print(f"... {name}", flush=True)
+    results.append(announce(run_step(name, [pytest, *PYTEST_ARGS, *tests])))
+    return results
 
 
 def quick_steps() -> list[StepResult]:
@@ -326,19 +433,20 @@ def report(results: list[StepResult]) -> bool:
     return all(result.ok for result in results)
 
 
-def check(full: bool) -> int:
+def check(mode: str = CHANGED) -> int:
     if current_version() != TYPECHECK_PYTHON:
         print(
             f"Note: CI type-checks on Python {TYPECHECK_PYTHON}; you run {current_version()}."
         )
     started = time.monotonic()
-    results = full_steps() if full else quick_steps()
+    steps = {CHANGED: changed_steps, QUICK: quick_steps, FULL: full_steps}[mode]
+    results = steps()
     ok = report(results)
     print(
         f"\n{'All checks passed' if ok else 'Checks failed'} in {time.monotonic() - started:.0f}s."
     )
     if ok:
-        record_pass("full" if full else "quick")
+        record_pass(mode)
     return 0 if ok else 1
 
 
@@ -397,8 +505,8 @@ def pre_push(ref_lines: list[str]) -> int:
             "ci_local: commit or stash your changes, so the check tests what you push."
         )
         return 1
-    print("ci_local: running the quick CI check before the push.")
-    return check(full=False)
+    print("ci_local: checking what changed before the push.")
+    return check(CHANGED)
 
 
 def install_hook() -> int:
@@ -410,15 +518,18 @@ def install_hook() -> int:
     with hook.open("w", encoding="utf-8", newline="\n") as hook_file:
         hook_file.write(HOOK_SCRIPT)
     hook.chmod(0o755)
-    print(
-        f"Installed {hook}: `git push` now runs the quick check for unchecked commits."
-    )
+    print(f"Installed {hook}: `git push` now checks what changed in unchecked commits.")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--quick",
+        action="store_true",
+        help="the whole suite on this Python, with coverage",
+    )
     mode.add_argument(
         "--full", action="store_true", help="every CI Python, plus the build"
     )
@@ -431,7 +542,7 @@ def main() -> int:
         return install_hook()
     if args.pre_push:
         return pre_push(sys.stdin.read().splitlines())
-    return check(full=args.full)
+    return check(FULL if args.full else QUICK if args.quick else CHANGED)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 Only runs when check_rules.py recorded a Python edit this session. pytest runs
 only the tests that belong to the edited files (`related_tests`): the edited
 test files, test files named after an edited module, and test files that
-import one. The whole suite takes 6-10 minutes, past this hook's time limit;
+import one (`scripts/ci_local.related_tests`). The whole suite takes 6-10 minutes, past this hook's time limit;
 `scripts/ci_local.py` and GitHub CI run it. On failure it blocks the stop and
 hands the failure back to Claude. After one blocked retry (stop_hook_active)
 it stops blocking and warns the user instead, matching the AGENTS.md 2-strike
@@ -19,50 +19,16 @@ from pathlib import Path
 
 PYTEST_TIMEOUT_SECONDS = 300
 OUTPUT_TAIL_LINES = 40
-SOURCE_ROOT = "src/"
-TESTS_DIR = "tests"
-
-
-def _module_names(source: str) -> tuple[str, str]:
-    """`src/max_cli/core/agent/context.py` -> ("max_cli.core.agent.context",
-    "from max_cli.core.agent import context")."""
-    dotted = source.removeprefix(SOURCE_ROOT).removesuffix(".py").replace("/", ".")
-    package, _, name = dotted.rpartition(".")
-    return dotted, f"from {package} import {name}"
 
 
 def related_tests(edited: list[str], repo_root: Path) -> list[str]:
-    """The test files that cover the edited files, sorted."""
-    tests_root = repo_root / TESTS_DIR
-    test_files = sorted(tests_root.rglob("test_*.py"))
-    found: set[str] = set()
-    sources = []
-    for name in edited:
-        name = name.replace("\\", "/")
-        if name.startswith(f"{TESTS_DIR}/") and Path(name).name.startswith("test_"):
-            if (repo_root / name).is_file():
-                found.add(name)
-        elif name.startswith(SOURCE_ROOT) and name.endswith(".py"):
-            sources.append(name)
-    for test_file in test_files:
-        relative = test_file.relative_to(repo_root).as_posix()
-        if relative in found:
-            continue
-        try:
-            text = test_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for source in sources:
-            stem = Path(source).stem
-            dotted, from_import = _module_names(source)
-            if (
-                (stem != "__init__" and stem in test_file.stem)
-                or dotted in text
-                or from_import in text
-            ):
-                found.add(relative)
-                break
-    return sorted(found)
+    """scripts/ci_local.py decides which tests cover which files."""
+    sys.path.insert(0, str(repo_root / "scripts"))
+    try:
+        import ci_local
+    finally:
+        sys.path.pop(0)
+    return list(ci_local.related_tests(edited, repo_root))
 
 
 def run(command: list[str], repo_root: Path) -> tuple[bool, str]:

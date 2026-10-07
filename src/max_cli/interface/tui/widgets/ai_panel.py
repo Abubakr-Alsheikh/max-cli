@@ -74,7 +74,7 @@ CARD_NOTES = {
 # A batch card lists this many failed files and outputs; the rest are counted.
 BATCH_LISTED = 8
 # Steps the turn lists on its look-ups line instead of drawing a card.
-LOOKUP_KINDS = ("loaded", "looked", "noted", "asked")
+LOOKUP_KINDS = ("loaded", "looked", "noted", "asked", "opened")
 
 
 def ai_is_set_up() -> bool:

@@ -3,9 +3,10 @@
 Bash/PowerShell:
 - deny: skipping git hooks (--no-verify), force-pushing, committing .env files
 - deny: `gh pr create` for a branch that changes the package (src/,
-        pyproject.toml) until `python scripts/ci_local.py --full` passed
-        for it. Docs, tests, scripts and skills don't need the local run:
-        GitHub CI tests every PR, and the full run takes 10-20 minutes.
+        pyproject.toml) until `python scripts/ci_local.py` passed for it
+        (the default check of what changed takes 1-3 minutes; --quick and
+        --full count too). Docs, tests, scripts and skills don't need it:
+        GitHub CI tests every PR.
 - ask:  installing packages (AGENTS.md: ask before adding dependencies),
         git reset --hard / git clean -f (destroys uncommitted work)
 Write/Edit:
@@ -41,12 +42,13 @@ PR_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
 CI_LOCAL_STAMP = "ci-local.json"
 CI_LOCAL_REASON = (
     "This branch changes the package (src/ or pyproject.toml): run "
-    "`python scripts/ci_local.py --full` on a clean tree first; it runs the "
-    "GitHub CI checks locally and records HEAD when they pass."
+    "`python scripts/ci_local.py` on a clean tree first (1-3 minutes: lint, "
+    "types, the tests of what changed); it records HEAD when it passes."
 )
 # Changes under these need the full local run before a PR.
 PACKAGE_PATHS = ("src/", "pyproject.toml")
 BASE_BRANCH = "origin/main"
+PASSING_MODES = ("changed", "quick", "full")  # scripts/ci_local.py's checks
 ASK_EDIT_FILES = {
     "pyproject.toml": "AGENTS.md: ask before changing dependencies or entry points.",
 }
@@ -104,7 +106,7 @@ def head_passed_local_ci() -> bool:
             return True
         stamp_file = _git("rev-parse", "--git-path", CI_LOCAL_STAMP)
         stamp = json.loads(Path(stamp_file).read_text(encoding="utf-8"))
-        if stamp.get("mode") != "full":
+        if stamp.get("mode") not in PASSING_MODES:
             return False
         passed = stamp.get("head", "")
         is_ancestor = subprocess.run(

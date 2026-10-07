@@ -62,27 +62,34 @@ After you fix type errors, run `python scripts/mypy_baseline.py --update` to loc
 `scripts/ci_local.py` runs the checks from `.github/workflows/ci.yml` on your machine, so a push doesn't fail on GitHub for a reason you could have caught first.
 
 ```bash
-# Quick: ruff, the mypy ratchet, and the tests with the 70% coverage floor (about 2 minutes)
+# Default (1-3 minutes): ruff, the mypy ratchet, every module imported on Python 3.9,
+# and only the tests that cover the files changed since main. A change to
+# pyproject.toml or a conftest.py runs the whole suite.
 python scripts/ci_local.py
 
-# Full (about 4 minutes): the tests on Python 3.9, 3.10, 3.11 and 3.12 in fresh virtualenvs,
-# two at a time, plus the package build. A step that hangs stops after 10 minutes.
-# Needs uv, which downloads any Python you don't have.
+# Quick: the whole suite on this Python with the 70% coverage floor (about 10 minutes)
+python scripts/ci_local.py --quick
+
+# Full (about 20 minutes): the whole suite on Python 3.9, 3.10, 3.11 and 3.12 in fresh
+# virtualenvs, two at a time, plus the package build. Needs uv, which downloads any
+# Python you don't have. Its first run also makes the 3.9 virtualenv the default check uses.
 python scripts/ci_local.py --full
 
 # Short of memory? Run the Python versions one at a time (slower)
 CI_LOCAL_PARALLEL=1 python scripts/ci_local.py --full
 
-# Once per clone: make `git push` run the quick check on commits that haven't passed yet
+# Once per clone: make `git push` run the default check on commits that haven't passed yet
 python scripts/ci_local.py --install-hook
 ```
+
+GitHub CI runs the whole suite on every Python and system for every PR, so the default check is enough before you push: it catches what you broke in the files you touched, in a few minutes.
 
 CI also runs on macOS and Linux. The script can't reproduce those, so watch for file-order and path differences.
 
 ## Submitting PRs
 
 1. Create a feature branch
-2. Make changes. If they touch the package (`src/` or `pyproject.toml`), run `python scripts/ci_local.py --full` once before the PR. Docs, tests and scripts can go straight to the PR: GitHub CI tests every PR.
+2. Make changes. If they touch the package (`src/` or `pyproject.toml`), run `python scripts/ci_local.py` (1-3 minutes) before the PR. Docs, tests and scripts can go straight to the PR. GitHub CI tests every PR on every Python, and its checks must pass before a merge.
 3. Commit with a Conventional Commits message (see below)
 4. Push and create a PR
 
