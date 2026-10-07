@@ -18,12 +18,14 @@ import sys
 from pathlib import Path
 
 PYTEST_TIMEOUT_SECONDS = 300
+# This repo's scripts/, which holds ci_local.py: the hook lives in .claude/hooks.
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 OUTPUT_TAIL_LINES = 40
 
 
 def related_tests(edited: list[str], repo_root: Path) -> list[str]:
     """scripts/ci_local.py decides which tests cover which files."""
-    sys.path.insert(0, str(repo_root / "scripts"))
+    sys.path.insert(0, str(SCRIPTS_DIR))
     try:
         import ci_local
     finally:
