@@ -150,9 +150,12 @@ max "shrink every video in this folder"
 max ai ask "merge the PDFs in Downloads into one file"
 max "sort my Music folder into Artist/Album folders" --dry-run   # show the plan, change nothing
 max ai chat                                                    # it remembers the conversation
+max "convert every m4a under Music, subfolders too, to mp3"     # one batch, one question
+max "remember that my music lives in D:/Music"                  # kept for later sessions
+max ai memory                                                  # what it remembers
 ```
 
-The agent uses Max's own commands and nothing else: it can't run other programs. It looks first (lists folders, reads file details, finds files by kind, size or age), then acts. It runs a batch over many files in one step, skips files that already have a result, and runs independent actions in parallel. From the CLI it sends long jobs (video and audio work, OCR, downloads) to the background queue.
+The agent uses Max's own commands and nothing else: it can't run other programs. It looks first (lists folders, reads file details, finds files by kind, size or age), then acts. It runs a batch over a whole folder in one step (subfolders, names, sizes and ages narrow it), asks once with the file count and size, skips files that already have a result, and runs independent actions in parallel. It checks every result and tells you about missing or empty files. Long jobs (video and audio work, OCR, downloads) and big batches go to the background queue, and it can tell you how they're doing. It remembers lasting facts and preferences you give it (`max ai memory` shows them). Before multi-step work it shows its plan and waits for your go-ahead, and it asks when a request is unclear instead of guessing.
 
 It stays inside the current folder, folders you name and your download folder. It asks before it moves, overwrites or deletes files, whatever `CONFIRM_DESTRUCTIVE` says. Each request has a limit on steps, actions and tokens. The dashboard's AI page runs the same agent. See [AI](docs/commands/ai.md).
 

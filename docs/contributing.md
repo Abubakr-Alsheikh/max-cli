@@ -70,6 +70,9 @@ python scripts/ci_local.py
 # Needs uv, which downloads any Python you don't have.
 python scripts/ci_local.py --full
 
+# Short of memory? Run the Python versions one at a time (slower)
+CI_LOCAL_PARALLEL=1 python scripts/ci_local.py --full
+
 # Once per clone: make `git push` run the quick check on commits that haven't passed yet
 python scripts/ci_local.py --install-hook
 ```

@@ -206,6 +206,82 @@ async def test_actions_run_side_by_side_each_get_their_card(ai_on):
 
 
 @pytest.mark.asyncio
+async def test_a_batch_gets_one_card_that_counts_its_files(ai_on):
+    from max_cli.interface.tui.widgets.ai_panel import BatchCard
+
+    names = ("a.txt", "b.txt", "c.txt")
+    for name in names:
+        (ai_on / name).write_text(name, encoding="utf-8")
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}, "call-1"),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.preview", "arguments": {}, "each": list(names)},
+                    "batch",
+                ),
+            )
+        ),
+        _answer(calls=(_call("remember", {"text": "Notes live here"}, "note"),)),
+        _answer("Read all three."),
+    )
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "read the notes and remember where they are")
+            await _replied(app, pilot)
+            cards = list(app.query(ToolCard))
+            lookups = str(app.query_one(".turn-lookups", Static).render())
+
+    [card] = cards
+    assert isinstance(card, BatchCard)
+    assert card.has_class("-ok")
+    assert "3 done" in str(card.title)
+    assert "Remembered: Notes live here" in lookups
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("press", "told"),
+    [("#question-go", "The user said go"), ("#question-cancel", "stopped the plan")],
+)
+async def test_a_plan_waits_in_a_dialog_and_shows_in_the_turn(ai_on, press, told):
+    from max_cli.interface.tui.widgets.dialogs import QuestionDialog
+
+    model = ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": ["Find them", "Convert them"]}, "p"),)),
+        _answer("Done what you said."),
+    )
+    seen: list[str] = []
+    original = model._create
+
+    def record(**request: Any) -> Any:
+        seen.append(str(request["messages"][-1]["content"]))
+        return original(**request)
+
+    model.chat.completions.create = record
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "convert my music")
+            # The dialog shows before its buttons are mounted.
+            assert await wait_until(
+                pilot,
+                lambda: isinstance(app.screen, QuestionDialog)
+                and bool(app.screen.query(press)),
+            )
+            body = str(app.screen.query_one("#question-body", Static).render())
+            app.screen.query_one(press, Button).press()
+            await _replied(app, pilot)
+            plan = str(app.query_one(".turn-plan", Static).render())
+
+    assert "1. Find them" in body and "2. Convert them" in body
+    assert "PLAN" in plan and "Convert them" in plan
+    assert told in seen[-1]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "answer, kept", [("#confirm-no", True), ("#confirm-yes", False)]
 )

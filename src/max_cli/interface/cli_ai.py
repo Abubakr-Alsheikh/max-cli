@@ -11,7 +11,13 @@ from max_cli.common.exceptions import MaxError
 from max_cli.common.logger import console, log_error, log_success
 
 if TYPE_CHECKING:
-    from max_cli.core.agent.agent import ActionCall, Agent, AgentReply, Step
+    from max_cli.core.agent.agent import (
+        ActionCall,
+        Agent,
+        AgentReply,
+        Question,
+        Step,
+    )
 
 app = typer.Typer()
 
@@ -63,6 +69,36 @@ def _confirm(call: "ActionCall") -> bool:
     )
 
 
+# Answers to the plan question that mean "go" or "stop"; any other text is a
+# change for the agent to make.
+PLAN_YES = frozenset({"", "y", "yes", "go", "ok"})
+PLAN_NO = frozenset({"n", "no", "stop", "cancel"})
+
+
+def _answer(question: "Question") -> Optional[str]:
+    """The agent's plan or question, answered in the terminal."""
+    from max_cli.core.agent.agent import QuestionKind
+
+    if question.kind == QuestionKind.PLAN:
+        typed = Prompt.ask(
+            "[yellow]Go ahead?[/yellow] [dim](Enter or y: go · n: stop · or say "
+            "what to change)[/dim]",
+            default="",
+            show_default=False,
+        ).strip()
+        if typed.casefold() in PLAN_YES:
+            return "go"
+        return None if typed.casefold() in PLAN_NO else typed
+    console.print(f"[bold yellow]?[/bold yellow] {escape(question.text)}")
+    for number, option in enumerate(question.options, start=1):
+        console.print(f"  [cyan]{number}[/cyan]  {escape(option)}")
+    typed = Prompt.ask("[yellow]Your answer[/yellow]", default="", show_default=False)
+    typed = typed.strip()
+    if typed.isdigit() and 1 <= int(typed) <= len(question.options):
+        return question.options[int(typed) - 1]
+    return typed or None
+
+
 def _show_arguments(step: "Step") -> None:
     width = max((len(name) for name in step.arguments), default=0)
     for name, value in step.arguments.items():
@@ -83,6 +119,12 @@ class _StepPrinter:
     def __call__(self, step: "Step") -> None:
         kind = step.kind.value
         mark, style = STEP_STYLES.get(kind, ("·", "dim"))
+        if kind == "plan":
+            console.print("  [bold cyan]Plan[/bold cyan]")
+            for line in step.text.splitlines():
+                console.print(f"    {escape(line)}")
+            self.last_call = ""
+            return
         if kind in ("started", "planned", "refused", "declined", "queued"):
             title = {
                 "started": step.label,
@@ -127,6 +169,7 @@ def _make_agent(dry_run: bool = False) -> "Agent":
     # background after the reply, so the terminal is free at once.
     return Agent.from_settings(
         confirm=_confirm,
+        ask=_answer,
         on_step=_StepPrinter(),
         dry_run=dry_run,
         can_queue=True,
@@ -192,6 +235,7 @@ def ask_ai(
         with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
             # The agent may ask a question; the spinner would draw over it.
             agent.confirm = _paused(status, _confirm)
+            agent.ask_user = _paused(status, _answer)
             reply = agent.ask(prompt)
     except MaxError as e:
         log_error(escape(str(e)))
@@ -200,13 +244,14 @@ def ask_ai(
     _start_queued_jobs(reply)
 
 
-def _paused(status: Any, confirm: Any) -> Any:
-    """`confirm` with the spinner stopped while it asks."""
+def _paused(status: Any, asker: Any) -> Any:
+    """`asker` (a confirmation or a question) with the spinner stopped while
+    it waits for an answer."""
 
-    def ask(call: "ActionCall") -> bool:
+    def ask(about: Any) -> Any:
         status.stop()
         try:
-            return bool(confirm(call))
+            return asker(about)
         finally:
             status.start()
 
@@ -398,6 +443,7 @@ def chat_session(
         try:
             with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
                 agent.confirm = _paused(status, _confirm)
+                agent.ask_user = _paused(status, _answer)
                 reply = agent.ask(user_input)
         except MaxError as e:
             log_error(escape(str(e)))
@@ -408,8 +454,10 @@ def chat_session(
             {"role": "user", "content": user_input},
             {"role": "assistant", "content": reply.text},
         ]
+        # Saved after every request: Ctrl+C or a closed window lost the
+        # whole session when it was saved only on exit.
+        eng._save_history()
 
-    eng._save_history()
     console.print("[cyan]Goodbye![/cyan]")
 
 
@@ -516,3 +564,60 @@ def extract_data_cmd(
             log_success(f"Saved to: {output}")
     except Exception as e:
         log_error(f"Extraction failed: {e}")
+
+
+@app.command("memory")
+def agent_memory_cmd(
+    forget: Optional[str] = typer.Option(
+        None, "--forget", help="Delete the note with this id."
+    ),
+    clear: bool = typer.Option(False, "--clear", help="Delete every note."),
+    force: bool = typer.Option(False, "--force", "-f", help="Don't ask first."),
+):
+    """
+    Show what the agent remembers between sessions, or delete notes.
+
+    The agent saves a note when you tell it a lasting fact or preference
+    ("my music lives in D:/Music"). Every new session starts with them.
+
+    Examples:
+        max ai memory
+        max ai memory --forget 3fa2c1
+        max ai memory --clear
+    """
+    from max_cli.core.agent.memory import AgentMemory, memory_file
+    from max_cli.interface.confirm import skip_confirmation
+
+    memory = AgentMemory()
+    if forget:
+        gone = memory.forget(forget)
+        if gone is None:
+            log_error(f"No note with id {forget}. `max ai memory` lists them.")
+            return
+        log_success(f"Forgot: {gone.text}")
+        return
+    if clear:
+        count = len(memory.notes())
+        if not count:
+            console.print("[dim]No notes to delete.[/dim]")
+            return
+        if not skip_confirmation(force) and not Confirm.ask(
+            f"Delete all {count} note{'s' if count != 1 else ''}?"
+        ):
+            return
+        memory.clear()
+        log_success(f"Deleted {count} note{'s' if count != 1 else ''}.")
+        return
+    notes = memory.notes()
+    if not notes:
+        console.print(
+            "[dim]No notes yet. Tell the agent a lasting fact, e.g. "
+            '"remember that my music lives in D:/Music".[/dim]'
+        )
+        return
+    for note in notes:
+        console.print(
+            f"  [cyan]{note.id}[/cyan]  {escape(note.text)}  [dim]{note.saved[:10]}[/dim]"
+        )
+    plural = "s" if len(notes) != 1 else ""
+    console.print(f"[dim]{len(notes)} note{plural} in {memory_file()}[/dim]")

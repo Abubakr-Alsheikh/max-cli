@@ -21,8 +21,32 @@ INSPECT = "inspect"
 FIND_FILES = "find_files"
 PROBE_LINK = "probe_link"
 RECENT_ACTIVITY = "recent_activity"
-LOOK_TOOLS = (LIST_FOLDER, INSPECT, FIND_FILES, PROBE_LINK, RECENT_ACTIVITY)
-TOOL_NAMES = (*LOOK_TOOLS, LOAD_GROUP, RUN_ACTION)
+JOB_STATUS = "job_status"
+REMEMBER = "remember"
+FORGET = "forget"
+PLAN = "plan"
+ASK_USER = "ask_user"
+LOOK_TOOLS = (
+    LIST_FOLDER,
+    INSPECT,
+    FIND_FILES,
+    PROBE_LINK,
+    RECENT_ACTIVITY,
+    JOB_STATUS,
+)
+MEMORY_TOOLS = (REMEMBER, FORGET)
+QUESTION_TOOLS = (PLAN, ASK_USER)
+TOOL_NAMES = (*LOOK_TOOLS, *MEMORY_TOOLS, *QUESTION_TOOLS, LOAD_GROUP, RUN_ACTION)
+# run_action's `select`: limits for the files a folder or pattern gives.
+SELECT_FIELDS = (
+    "recursive",
+    "redo",
+    "name",
+    "min_size_mb",
+    "max_size_mb",
+    "newer_than_days",
+    "older_than_days",
+)
 
 
 def agent_groups() -> list[str]:
@@ -135,6 +159,44 @@ def _look_definitions() -> list[dict[str, Any]]:
             {"limit": {"type": "integer", "description": "How many, at most 15."}},
             [],
         ),
+        _tool(
+            JOB_STATUS,
+            "Queued jobs: running and waiting ones with progress, then the "
+            "latest finished ones with errors and outputs.",
+            {"limit": {"type": "integer", "description": "How many, at most 15."}},
+            [],
+        ),
+        _tool(
+            REMEMBER,
+            "Save one lasting fact or preference the user gave, for later "
+            "sessions, e.g. 'Music lives in D:/Music'.",
+            {"text": {"type": "string"}},
+            ["text"],
+        ),
+        _tool(
+            PLAN,
+            "Show the user your plan as short steps and wait for a go-ahead, "
+            "before work with 3+ steps or many files. The answer says go, "
+            "stop, or what to change.",
+            {"steps": {"type": "array", "items": {"type": "string"}}},
+            ["steps"],
+        ),
+        _tool(
+            ASK_USER,
+            "Ask the user one question when the request is unclear and a "
+            "wrong guess would cost. Never for what you can look up.",
+            {
+                "question": {"type": "string"},
+                "options": {"type": "array", "items": {"type": "string"}},
+            },
+            ["question"],
+        ),
+        _tool(
+            FORGET,
+            "Delete a saved note by its [id] when it's wrong.",
+            {"id": {"type": "string"}},
+            ["id"],
+        ),
     ]
 
 
@@ -154,6 +216,21 @@ def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
             "type": "array",
             "items": {"type": "string"},
             "description": "Files, folders or patterns (*.m4a): one run per file.",
+        },
+        "select": {
+            "type": "object",
+            "description": "Which files a folder or pattern gives: recursive "
+            "(subfolders), redo (files already done), name (e.g. IMG_*), sizes, ages.",
+            "properties": {
+                "recursive": {"type": "boolean"},
+                "redo": {"type": "boolean"},
+                "name": {"type": "string"},
+                "min_size_mb": {"type": "number"},
+                "max_size_mb": {"type": "number"},
+                "newer_than_days": {"type": "number"},
+                "older_than_days": {"type": "number"},
+            },
+            "additionalProperties": False,
         },
     }
     if can_queue:
@@ -198,8 +275,10 @@ def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
             "function": {
                 "name": RUN_ACTION,
                 "description": (
-                    "Run one action, such as video.compress, with arguments "
-                    "that match the schema load_group returned."
+                    "Run an action, such as video.compress, with arguments "
+                    "that match the schema load_group returned. For many files "
+                    "use one call: a folder or pattern in `each`, narrowed "
+                    "with `select`."
                 ),
                 "parameters": {
                     "type": "object",

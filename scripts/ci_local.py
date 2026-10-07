@@ -69,7 +69,8 @@ STEP_TIMEOUT_SECONDS = 1200
 TIMING_MARKER = "timing"
 # Test suites at once in --full. Four at once starved each other and made a
 # timing-sensitive test hang; two keeps the run short and the machine usable.
-PARALLEL_SUITES = 2
+# CI_LOCAL_PARALLEL=1 runs one at a time, for a machine short of memory.
+PARALLEL_SUITES = max(1, int(os.environ.get("CI_LOCAL_PARALLEL", "2") or "2"))
 
 
 @dataclass

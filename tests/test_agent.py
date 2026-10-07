@@ -20,7 +20,10 @@ from max_cli.core.operations.result import ActionResult
 
 # The first prompt (system message plus the two tool definitions) must stay
 # small: about 4 characters per token, so this is roughly 1,500 tokens.
-FIRST_PROMPT_CHAR_BUDGET = 6_000
+# 6,000 until phase 1 added job_status, remember, forget and select; 8,000
+# until phase 2 added plan and ask_user (PLANS/completed/agent-phase1-...md,
+# PLANS/active/agent-phase2-plan-ask-context.md).
+FIRST_PROMPT_CHAR_BUDGET = 9_000
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -103,6 +106,11 @@ def test_the_tools_look_load_and_run():
         "find_files",
         "probe_link",
         "recent_activity",
+        "job_status",
+        "remember",
+        "plan",
+        "ask_user",
+        "forget",
         "load_group",
         "run_action",
     ]
@@ -913,3 +921,376 @@ def test_files_whose_results_share_a_name_run_once_for_the_agent(tmp_path, monke
     assert summary["worked"] == 1
     assert summary["failed"][0]["file"] == "song.wav"
     assert "same name" in summary["failed"][0]["error"]
+
+
+# --- phase 1: select, preview, auto-queue, checks, jobs, memory -------------------
+
+
+def _select_call(select: dict, target: str) -> tuple:
+    call = {
+        "action": "video.audio-convert",
+        "arguments": {"target": target, "format": "mp3"},
+        "select": select,
+    }
+    return (
+        _answer(calls=(_call("load_group", {"name": "video"}),)),
+        _answer(calls=(_call("run_action", call, "batch"),)),
+        _answer("Done."),
+    )
+
+
+def test_select_reaches_subfolders_and_narrows_by_name(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    (tmp_path / "live").mkdir()
+    for name in ("live/set live.m4a", "live/studio.m4a", "top live.m4a"):
+        (tmp_path / name).write_bytes(b"\0")
+    model = ScriptedModel(
+        *_select_call({"recursive": True, "name": "*live*"}, str(tmp_path))
+    )
+
+    reply = _agent(model, tmp_path).ask("convert the live recordings")
+
+    ran = sorted(step.text for step in reply.steps if step.kind == StepKind.RAN)
+    assert ran == [
+        "video audio-convert: Read set live.m4a",
+        "video audio-convert: Read top live.m4a",
+    ]
+
+
+def test_a_select_limit_that_isnt_a_number_goes_back_to_the_model(
+    tmp_path, monkeypatch
+):
+    seen = _track_runs(monkeypatch)
+    model = ScriptedModel(*_select_call({"min_size_mb": "big"}, str(tmp_path)))
+
+    _agent(model, tmp_path).ask("convert the big ones")
+
+    answer = model.requests[2]["messages"][-1]["content"]
+    assert "select.min_size_mb must be a number" in answer
+    assert seen["most"] == 0
+
+
+def test_the_batch_question_names_the_count_the_size_and_the_skipped():
+    from max_cli.core.agent.agent import _files_text
+
+    text = _files_text(["a", "b", "c", "d"], 4, 3 * 1024 * 1024, 2)
+
+    assert text == "4 files, 3.00 MB (a, b, c ...); 2 done already, skipped"
+
+
+def test_a_dry_run_batch_lists_the_files_it_would_run(tmp_path, monkeypatch):
+    seen = _track_runs(monkeypatch)
+    folder = _music_folder(tmp_path)
+    model = ScriptedModel(*_convert({"target": str(folder), "format": "mp3"}))
+
+    _agent(model, tmp_path, dry_run=True).ask("convert them")
+
+    preview = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert preview["dry_run"] is True
+    assert preview["would_run"] == 1
+    assert preview["files"] == ["new.m4a"]
+    assert preview["done_already"] == ["done.m4a"]
+    assert seen["most"] == 0
+
+
+def test_a_big_batch_of_a_queueable_action_goes_to_the_queue(tmp_path, monkeypatch):
+    from max_cli.core.agent import agent as agent_module
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    seen = _track_runs(monkeypatch)
+    monkeypatch.setattr(agent_module, "AUTO_QUEUE_FILES", 1)
+    for name in ("a.m4a", "b.m4a"):
+        (tmp_path / name).write_bytes(b"\0")
+    model = ScriptedModel(*_convert({"target": str(tmp_path), "format": "mp3"}))
+
+    reply = _agent(model, tmp_path, can_queue=True).ask("convert all of them")
+
+    answer = json.loads(model.requests[2]["messages"][-1]["content"])
+    assert answer["queued"] == 2
+    assert "Max queued it" in answer["note"]
+    assert [step.kind for step in reply.steps].count(StepKind.QUEUED) == 2
+    assert len(get_task_manager().get_pending()) == 2
+    assert seen["most"] == 0
+
+
+def _runs_returning(monkeypatch, outputs: list) -> None:
+    from max_cli.core.catalog import runner
+
+    monkeypatch.setattr(
+        runner,
+        "run_action",
+        lambda action, given: ActionResult(True, "Converted", list(outputs)),
+    )
+
+
+def _one_convert(target: Path) -> tuple:
+    return _convert({"target": str(target), "format": "mp3"})
+
+
+@pytest.mark.parametrize(
+    ("make", "found"),
+    [
+        (lambda folder: folder / "never-made.mp3", "found no never-made.mp3"),
+        (
+            lambda folder: (folder / "empty.mp3").write_bytes(b"")
+            or folder / "empty.mp3",
+            "empty.mp3 is empty",
+        ),
+    ],
+)
+def test_a_missing_or_empty_output_turns_the_run_into_a_failure(
+    tmp_path, monkeypatch, make, found
+):
+    song = tmp_path / "song.m4a"
+    song.write_bytes(b"\0")
+    _runs_returning(monkeypatch, [make(tmp_path)])
+    model = ScriptedModel(*_one_convert(song))
+
+    reply = _agent(model, tmp_path).ask("convert it")
+
+    [failed] = [step for step in reply.steps if step.kind == StepKind.FAILED]
+    assert found in failed.text
+    assert found in json.loads(model.requests[2]["messages"][-1]["content"])["check"]
+
+
+def test_a_real_output_passes_the_check(tmp_path, monkeypatch):
+    song = tmp_path / "song.m4a"
+    song.write_bytes(b"\0")
+    made = tmp_path / "song.mp3"
+    made.write_bytes(b"ID3")
+    _runs_returning(monkeypatch, [made])
+    model = ScriptedModel(*_one_convert(song))
+
+    reply = _agent(model, tmp_path).ask("convert it")
+
+    assert [step.kind for step in reply.steps][-1] == StepKind.RAN
+    assert "check" not in json.loads(model.requests[2]["messages"][-1]["content"])
+
+
+def test_job_status_shows_waiting_and_finished_jobs():
+    from max_cli.core.agent import looks
+    from max_cli.core.engines.task_manager import get_task_manager
+    from max_cli.core.engines.task_queue import TaskItem, TaskType
+
+    manager = get_task_manager()
+    manager.add(TaskItem(type=TaskType.ACTION, title="Compress holiday.mp4"))
+
+    status = json.loads(looks.job_status())
+
+    [waiting] = status["running_or_waiting"]
+    assert waiting["title"] == "Compress holiday.mp4"
+    assert waiting["status"] == "pending"
+    assert status["finished"] == []
+
+
+def test_remember_saves_a_note_the_next_session_starts_with(tmp_path):
+    from max_cli.core.agent.memory import AgentMemory
+
+    model = ScriptedModel(
+        _answer(calls=(_call("remember", {"text": "Music lives in D:/Music"}),)),
+        _answer("Noted."),
+    )
+    reply = _agent(model, tmp_path).ask("my music lives in D:/Music, remember that")
+
+    [note] = AgentMemory().notes()
+    later = _agent(ScriptedModel(_answer("Hi.")), tmp_path)
+    assert note.text == "Music lives in D:/Music"
+    assert reply.steps[0].kind == StepKind.NOTED
+    assert f"[{note.id}] Music lives in D:/Music" in later.system_prompt()
+
+
+def test_forget_deletes_the_note(tmp_path):
+    from max_cli.core.agent.memory import AgentMemory
+
+    note = AgentMemory().remember("Use 128 kbps")
+    model = ScriptedModel(
+        _answer(calls=(_call("forget", {"id": note.id}),)),
+        _answer(calls=(_call("forget", {"id": "nope"}, "call-2"),)),
+        _answer("Forgot it."),
+    )
+
+    _agent(model, tmp_path).ask("that's wrong, forget it")
+
+    assert AgentMemory().notes() == []
+    assert "no note with that id" in model.requests[2]["messages"][-1]["content"]
+
+
+# --- phase 2: plans, questions, context, long chats --------------------------------
+
+PLAN_STEPS = ["Find the m4a files under Music", "Convert them to mp3"]
+
+
+def _plan_then_answer() -> ScriptedModel:
+    return ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": PLAN_STEPS}),)),
+        _answer("All right."),
+    )
+
+
+@pytest.mark.parametrize(
+    ("answer", "told"),
+    [
+        ("go", "The user said go"),
+        (None, "The user stopped the plan"),
+        ("only the live ones", "The user wants changes: only the live ones"),
+    ],
+)
+def test_a_plan_waits_for_the_users_answer(tmp_path, answer, told):
+    from max_cli.core.agent.agent import QuestionKind
+
+    asked = []
+    model = _plan_then_answer()
+    agent = _agent(
+        model, tmp_path, ask=lambda question: asked.append(question) or answer
+    )
+
+    reply = agent.ask("convert my music")
+
+    [question] = asked
+    assert question.kind == QuestionKind.PLAN
+    assert question.text == "1. Find the m4a files under Music\n2. Convert them to mp3"
+    assert reply.steps[0].kind == StepKind.PLAN
+    assert told in model.requests[1]["messages"][-1]["content"]
+
+
+def test_a_plan_with_one_step_is_refused(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("plan", {"steps": ["Convert"]}),)), _answer("OK.")
+    )
+
+    _agent(model, tmp_path, ask=lambda question: "go").ask("convert")
+
+    assert "at least 2 steps" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_without_a_way_to_ask_the_plan_just_shows(tmp_path):
+    model = _plan_then_answer()
+
+    reply = _agent(model, tmp_path).ask("convert my music")
+
+    assert reply.steps[0].kind == StepKind.PLAN
+    assert "Carry it out" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_ask_user_passes_the_options_and_returns_the_answer(tmp_path):
+    asked = []
+    model = ScriptedModel(
+        _answer(
+            calls=(
+                _call(
+                    "ask_user",
+                    {"question": "Move or delete them?", "options": ["Move", "Delete"]},
+                ),
+            )
+        ),
+        _answer("Moving them."),
+    )
+    agent = _agent(
+        model, tmp_path, ask=lambda question: asked.append(question) or "Move"
+    )
+
+    reply = agent.ask("get rid of the duplicates")
+
+    assert asked[0].options == ("Move", "Delete")
+    assert json.loads(model.requests[1]["messages"][-1]["content"]) == {
+        "answer": "Move"
+    }
+    assert reply.steps[0].kind == StepKind.ASKED
+
+
+def test_ask_user_without_anyone_to_ask_picks_the_safe_option(tmp_path):
+    model = ScriptedModel(
+        _answer(calls=(_call("ask_user", {"question": "Which folder?"}),)),
+        _answer("OK."),
+    )
+
+    _agent(model, tmp_path).ask("tidy up")
+
+    assert "safest option" in model.requests[1]["messages"][-1]["content"]
+
+
+def test_each_request_carries_the_folder_context(tmp_path):
+    for name in ("a.mp4", "b.mp4", "c.jpg"):
+        (tmp_path / name).write_bytes(b"\0")
+    (tmp_path / "sub").mkdir()
+    model = ScriptedModel(_answer("Hi."))
+
+    _agent(model, tmp_path).ask("what's here?")
+
+    sent = model.requests[0]["messages"][-1]["content"]
+    assert sent.startswith("what's here?\n\n(Context from Max")
+    assert "3 files (2 video, 1 image), 1 folder." in sent
+
+
+def test_context_can_be_left_out(tmp_path):
+    model = ScriptedModel(_answer("Hi."))
+
+    _agent(model, tmp_path, context=False).ask("hello")
+
+    assert model.requests[0]["messages"][-1]["content"] == "hello"
+
+
+def test_a_long_chat_turns_its_oldest_turns_into_a_summary(tmp_path, monkeypatch):
+    from max_cli.core.agent import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "COMPACT_AT_CHARS", 200)
+    monkeypatch.setattr(agent_module, "KEEP_RECENT_REQUESTS", 1)
+    model = ScriptedModel(
+        _answer("First answer " + "x" * 200),
+        _answer("Second answer"),
+        _answer("You asked about photos and videos."),  # the summary call
+        _answer("Third answer"),
+    )
+    agent = _agent(model, tmp_path, context=False)
+    agent.ask("first request about photos")
+    agent.ask("second request about videos")
+
+    reply = agent.ask("third request")
+
+    summary_call = model.requests[2]["messages"]
+    assert "first request about photos" in summary_call[1]["content"]
+    roles = [message["role"] for message in agent.messages]
+    assert roles == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert agent.messages[1]["content"].startswith(
+        "Summary of our earlier conversation:"
+    )
+    assert agent.messages[3]["content"] == "second request about videos"
+    assert any(
+        step.text == "Summarised the earlier conversation" for step in reply.steps
+    )
+
+
+def test_a_failed_summary_keeps_the_whole_chat(tmp_path, monkeypatch):
+    from max_cli.core.agent import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "COMPACT_AT_CHARS", 10)
+    monkeypatch.setattr(agent_module, "KEEP_RECENT_REQUESTS", 1)
+    error = openai.APIConnectionError.__new__(openai.APIConnectionError)
+
+    class FailsOnSummary(ScriptedModel):
+        def _create(self, **request: Any) -> Any:
+            if (
+                request.get("messages", [{}])[0].get("content")
+                == agent_module.SUMMARY_PROMPT
+            ):
+                raise error
+            return super()._create(**request)
+
+    model = FailsOnSummary(_answer("One."), _answer("Two."))
+    agent = _agent(model, tmp_path, context=False)
+    agent.ask("first")
+
+    agent.ask("second")
+
+    assert [m["content"] for m in agent.messages if m["role"] == "user"] == [
+        "first",
+        "second",
+    ]

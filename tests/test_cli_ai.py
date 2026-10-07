@@ -28,7 +28,16 @@ DOWNLOAD_PATH = "max_cli.core.engines.ai_engine.download_image"
 # styles inside CliRunner. Strip them before substring checks.
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
-VISIBLE_COMMANDS = ["ask", "analyze", "create", "edit", "chat", "search", "extract"]
+VISIBLE_COMMANDS = [
+    "ask",
+    "analyze",
+    "create",
+    "edit",
+    "chat",
+    "search",
+    "extract",
+    "memory",
+]
 HIDDEN_ALIASES = ["a", "ana", "c", "ch", "s"]
 
 
@@ -599,3 +608,51 @@ def test_a_queued_job_runs_in_the_background(
     # The model heard where the user follows the job.
     system = model.requests[0]["messages"][0]["content"]
     assert "'max queue status'" in system
+
+
+class TestMemoryCommand:
+    def test_lists_forgets_and_clears_notes(self):
+        from max_cli.core.agent.memory import AgentMemory
+
+        kept = AgentMemory().remember("Music lives in D:/Music")
+        gone = AgentMemory().remember("Use 128 kbps")
+
+        listed = runner.invoke(ai_app, ["memory"])
+        forgot = runner.invoke(ai_app, ["memory", "--forget", gone.id])
+        cleared = runner.invoke(ai_app, ["memory", "--clear", "--force"])
+
+        assert listed.exit_code == 0
+        assert kept.id in _plain(listed)
+        assert "Music lives in D:/Music" in _plain(listed)
+        assert "Forgot: Use 128 kbps" in _plain(forgot)
+        assert "Deleted 1 note." in _plain(cleared)
+        assert AgentMemory().notes() == []
+
+    def test_an_unknown_id_is_an_error(self):
+        result = runner.invoke(ai_app, ["memory", "--forget", "nope"])
+
+        assert "No note with id nope" in _plain(result)
+
+
+class TestAnswersInTheTerminal:
+    @pytest.mark.parametrize(
+        ("typed", "answer"),
+        [("", "go"), ("y", "go"), ("n", None), ("only mp3 files", "only mp3 files")],
+    )
+    def test_the_plan_question(self, monkeypatch, typed, answer):
+        from max_cli.core.agent.agent import Question, QuestionKind
+
+        monkeypatch.setattr(cli_ai.Prompt, "ask", lambda *args, **kwargs: typed)
+
+        assert cli_ai._answer(Question(QuestionKind.PLAN, "1. a\n2. b")) == answer
+
+    @pytest.mark.parametrize(("typed", "answer"), [("2", "Delete"), ("", None)])
+    def test_a_question_takes_an_options_number(self, monkeypatch, typed, answer):
+        from max_cli.core.agent.agent import Question, QuestionKind
+
+        monkeypatch.setattr(cli_ai.Prompt, "ask", lambda *args, **kwargs: typed)
+        question = Question(
+            QuestionKind.QUESTION, "Move or delete?", ("Move", "Delete")
+        )
+
+        assert cli_ai._answer(question) == answer

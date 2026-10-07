@@ -8,6 +8,7 @@
   age.
 - `probe_link`: what a link holds before downloading it (`grab.probe`).
 - `recent_activity`: what Max did lately and what undo can reverse.
+- `job_status`: the queued jobs, running, waiting and finished.
 
 They change nothing and never ask. Paths go through the same folder limits
 as actions.
@@ -15,6 +16,7 @@ as actions.
 
 import dataclasses
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -121,6 +123,55 @@ SECONDS_PER_DAY = 86_400
 FIND_SORTS = ("size", "newest", "oldest", "name")
 
 
+@dataclass(frozen=True)
+class FileFilter:
+    """Name, size and age limits; 0 or "" leaves a limit out. find_files and
+    the agent's batches (`run_action` with `select`) use the same rules."""
+
+    name: str = ""
+    min_size_mb: float = 0
+    max_size_mb: float = 0
+    newer_than_days: float = 0
+    older_than_days: float = 0
+
+    @property
+    def pattern(self) -> str:
+        """`name` as a case-free pattern: a plain word matches anywhere."""
+        pattern = self.name.strip().casefold()
+        if pattern and not any(mark in pattern for mark in "*?["):
+            pattern = f"*{pattern}*"
+        return pattern
+
+    def keeps(self, entry: Path, size: int, modified: float, now: float) -> bool:
+        import fnmatch
+
+        pattern = self.pattern
+        age_days = (now - modified) / SECONDS_PER_DAY
+        size_mb = size / BYTES_PER_MB
+        return not (
+            (pattern and not fnmatch.fnmatch(entry.name.casefold(), pattern))
+            or (self.min_size_mb and size_mb < self.min_size_mb)
+            or (self.max_size_mb and size_mb > self.max_size_mb)
+            or (self.newer_than_days and age_days > self.newer_than_days)
+            or (self.older_than_days and age_days < self.older_than_days)
+        )
+
+    def select(self, files: list[Path]) -> list[Path]:
+        """The files that pass; a file that can't be read is left out."""
+        import time
+
+        now = time.time()
+        kept = []
+        for entry in files:
+            try:
+                info = entry.stat()
+            except OSError:
+                continue
+            if self.keeps(entry, info.st_size, info.st_mtime, now):
+                kept.append(entry)
+        return kept
+
+
 def find_files(
     path: Path,
     kind: str = "",
@@ -140,7 +191,6 @@ def find_files(
     only files with no same-name file of that type beside them: the work
     still to do, for a conversion. Hidden files and folders are skipped.
     """
-    import fnmatch
     import time
     from datetime import datetime
 
@@ -149,9 +199,9 @@ def find_files(
     if sort not in FIND_SORTS:
         sort = "size"
     now = time.time()
-    pattern = name.strip().casefold()
-    if pattern and not any(mark in pattern for mark in "*?["):
-        pattern = f"*{pattern}*"
+    limits = FileFilter(
+        name, min_size_mb, max_size_mb, newer_than_days, older_than_days
+    )
     done_suffix = (
         f".{missing.strip().lstrip('.').casefold()}" if missing.strip() else ""
     )
@@ -172,19 +222,9 @@ def find_files(
         if scanned > MAX_SCANNED:
             stopped = True
             break
-        age_days = (now - info.st_mtime) / SECONDS_PER_DAY
-        size_mb = info.st_size / BYTES_PER_MB
         if kind and kind_of(entry) != kind:
             continue
-        if pattern and not fnmatch.fnmatch(entry.name.casefold(), pattern):
-            continue
-        if min_size_mb and size_mb < min_size_mb:
-            continue
-        if max_size_mb and size_mb > max_size_mb:
-            continue
-        if newer_than_days and age_days > newer_than_days:
-            continue
-        if older_than_days and age_days < older_than_days:
+        if not limits.keeps(entry, info.st_size, info.st_mtime, now):
             continue
         if done_suffix and (
             entry.suffix.casefold() == done_suffix
@@ -321,3 +361,47 @@ def recent_activity(limit: int = 10) -> str:
         for group in TransactionLog.list_groups()[:limit]
     ]
     return _to_json({"actions": actions, "file_changes_undo_can_reverse": changes})
+
+
+# --- job_status ------------------------------------------------------------------
+
+MAX_JOBS = 15
+MAX_JOB_OUTPUTS = 5
+
+
+def _job(task: Any) -> dict[str, Any]:
+    status = getattr(task.status, "value", task.status)
+    job: dict[str, Any] = {
+        "id": task.id,
+        "title": task.title,
+        "status": status,
+        "added": task.created_at[:16].replace("T", " "),
+    }
+    if status == "running":
+        job["progress"] = f"{task.progress:.0f}%"
+        if task.eta:
+            job["eta"] = task.eta
+    if task.error:
+        job["error"] = task.error
+    if task.output_files:
+        job["outputs"] = task.output_files[:MAX_JOB_OUTPUTS]
+    return job
+
+
+def job_status(limit: int = 10) -> str:
+    """The background queue: jobs running or waiting, then the latest
+    finished ones (done, failed or cancelled), newest first."""
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    limit = max(1, min(int(limit or 10), MAX_JOBS))
+    manager = get_task_manager()
+    manager.try_refresh()
+    active = [task for task in manager.get_all() if task.is_active]
+    return _to_json(
+        {
+            "worker_running": manager.worker_alive(),
+            "running_or_waiting": [_job(task) for task in active[:limit]],
+            "more_waiting": max(0, len(active) - limit),
+            "finished": [_job(task) for task in manager.get_history(limit=limit)],
+        }
+    )
