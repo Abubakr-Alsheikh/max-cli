@@ -4,6 +4,10 @@
 
 ### New
 
+- **The AI agent works on whole folders.** One request covers a folder and its subfolders, narrowed by name, size or age ("convert every m4a under Music to mp3"). You get one question with the file count, size and skipped files; big batches of long jobs go to the background queue; the dashboard shows one card per batch with its progress. A dry run lists the files it would run on.
+- **The agent checks its work.** A missing or empty result counts as a failure and the agent says so.
+- **The agent remembers.** Tell it a lasting fact or preference and later sessions start with it. `max ai memory` lists the notes, `--forget ID` deletes one and `--clear` deletes them all.
+- The agent can check the queued jobs ("is my download done?") and undo Max's last file change.
 - **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders. The Tags card shows for audio, and for video when you tick Tags.
 
 ### Changed

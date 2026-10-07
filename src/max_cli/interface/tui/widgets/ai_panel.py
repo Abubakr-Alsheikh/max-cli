@@ -65,6 +65,10 @@ CARD_NOTES = {
     "planned": "dry run, not run",
     "queued": "queued, J shows its progress",
 }
+# A batch card lists this many failed files and outputs; the rest are counted.
+BATCH_LISTED = 8
+# Steps the turn lists on its look-ups line instead of drawing a card.
+LOOKUP_KINDS = ("loaded", "looked", "noted")
 
 
 def ai_is_set_up() -> bool:
@@ -162,6 +166,80 @@ class ToolCard(Collapsible):
         return Content("\n").join(lines) if lines else Content("")
 
 
+class BatchCard(ToolCard):
+    """One action over many files: a card for the whole batch, its title
+    counting the files done, failed and running; expanded, the failures and
+    the files made. One card per file made a 200-file batch unreadable."""
+
+    def __init__(self, step: "Step") -> None:
+        self.running: set[str] = set()
+        self.done = 0
+        self.queued = 0
+        self.failed: list[str] = []
+        self.outputs: list[str] = []
+        super().__init__(step)
+
+    def show(self, step: "Step", spinner: str = "") -> None:
+        kind = step.kind.value
+        if kind == "started":
+            self.running.add(step.call_id)
+        elif kind in ("ran", "failed"):
+            self.running.discard(step.call_id)
+            if kind == "ran":
+                self.done += 1
+                if step.result is not None:
+                    self.outputs += [str(path) for path in step.result.output_files]
+            else:
+                self.failed.append(step.text.removeprefix(f"{step.label}: "))
+        elif kind == "queued":
+            self.queued += 1
+        if self.running:
+            state = "-running"
+        elif self.queued:
+            state = "-queued"
+        else:
+            state = "-failed" if self.failed and not self.done else "-ok"
+        if self.state:
+            self.remove_class(self.state)
+        self.state = state
+        self.add_class(state)
+        self.title = self._counts_title(spinner)
+        self._body.update(self._lines())
+
+    def spin(self, frame: str) -> None:
+        if self.state == "-running":
+            self.title = self._counts_title(frame)
+
+    def _counts_title(self, spinner: str = "") -> str:
+        parts = []
+        if self.done:
+            parts.append(f"{self.done} done")
+        if self.failed:
+            parts.append(f"{len(self.failed)} failed")
+        if self.queued:
+            parts.append(f"{self.queued} queued, J shows them")
+        if self.running:
+            parts.append(f"{len(self.running)} running")
+        mark = spinner or {"-ok": "✓", "-failed": "✗", "-queued": "⧗"}.get(
+            self.state, ""
+        )
+        return f"{mark} {self.label}  ·  {'  ·  '.join(parts)}".strip()
+
+    def _lines(self) -> Content:
+        lines = [
+            Content.assemble(("✗ ", "$error"), failure)
+            for failure in self.failed[:BATCH_LISTED]
+        ]
+        lines += [
+            Content.assemble(("→ ", "$text-muted"), output)
+            for output in self.outputs[-BATCH_LISTED:]
+        ]
+        hidden = max(0, len(self.outputs) - BATCH_LISTED)
+        if hidden:
+            lines.append(Content.styled(f"and {hidden} more files", "$text-muted"))
+        return Content("\n").join(lines) if lines else Content("")
+
+
 class AgentTurn(Vertical):
     """Max's answer to one request: status, action cards, then the reply."""
 
@@ -235,8 +313,9 @@ class AgentTurn(Vertical):
 
     def add_step(self, step: "Step") -> None:
         kind = step.kind.value
-        if kind in ("loaded", "looked"):
-            # What it read before acting: folders, files, a group's actions.
+        if kind in LOOKUP_KINDS:
+            # What it read before acting (folders, files, a group's actions)
+            # and the notes it saved.
             self._lookups.append(
                 f"{step.action_id} actions" if kind == "loaded" else step.text
             )
@@ -246,8 +325,17 @@ class AgentTurn(Vertical):
             return
         # By tool call: actions run side by side and finish in any order.
         key = step.call_id or step.action_id
-        card = self._cards.get(key)
-        if kind == "started" or card is None or card.state != "-running":
+        batch_key, _, file_number = key.partition(":")
+        card = self._cards.get(batch_key if file_number else key)
+        if file_number:
+            # One file of a batch ("call:3"): the batch's card counts it.
+            if isinstance(card, BatchCard):
+                card.show(step)
+            else:
+                card = BatchCard(step)
+                self._cards[batch_key] = card
+                self.query_one(".turn-tools").mount(card)
+        elif kind == "started" or card is None or card.state != "-running":
             card = ToolCard(step)
             self._cards[key] = card
             self.query_one(".turn-tools").mount(card)

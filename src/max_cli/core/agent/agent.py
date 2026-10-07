@@ -10,6 +10,12 @@ Rules from PLANS/active/dashboard-first-ai-agent.md (D4, step 4):
 - `dry_run` checks and reports each action without running it.
 - The actions the model asks for in one turn run at the same time (up to
   PARALLEL_ACTIONS), unless their paths overlap.
+- A batch (`each`, narrowed with `select`) asks once, with the file count and
+  size; over AUTO_QUEUE_FILES files a queueable action goes to the queue.
+- Every result is checked: an output file that is missing or empty turns
+  the run into a failure the model hears about.
+- `remember` and `forget` keep notes across sessions (`memory.py`); the
+  system prompt lists them.
 """
 
 import json
@@ -25,15 +31,20 @@ from typing import Any, Callable, Optional, Union
 
 from max_cli.common.exceptions import AIError, ConfigurationError, MaxError
 from max_cli.core.agent import looks
+from max_cli.core.agent.memory import AgentMemory
 from max_cli.core.agent.scope import PathScope
 from max_cli.core.agent.tools import (
+    FORGET,
     INSPECT,
+    JOB_STATUS,
     LIST_FOLDER,
     LOAD_GROUP,
     LOOK_TOOLS,
     PROBE_LINK,
     RECENT_ACTIVITY,
+    REMEMBER,
     RUN_ACTION,
+    SELECT_FIELDS,
     TOOL_NAMES,
     agent_groups,
     group_actions,
@@ -60,8 +71,17 @@ CLASH_NOTE = (
     "Not run: its result would have the same name as another file's. "
     "Run it on its own with an output name."
 )
-MAX_EACH = 100  # files one run_action call may list in `each`
+MAX_EACH = 500  # files one run_action call may run
+# A batch of a queueable action with more files than this goes to the queue
+# when the agent can queue: it would hold the conversation for a long time.
+AUTO_QUEUE_FILES = 20
 MAX_LISTED_OUTPUTS = 20  # output files named in a batch's summary
+SIZE_SHOWN_FROM = 1024 * 1024  # a batch's question names its size from 1 MB
+DRY_RUN_NOTE = "Nothing ran and nothing changed. Tell the user what would happen."
+# select's filters; recursive and redo go to expand_each.
+SELECT_FILTERS = tuple(
+    name for name in SELECT_FIELDS if name not in ("recursive", "redo")
+)
 
 SYSTEM_PROMPT = """You are Max, an assistant that does file and media work on \
 the user's computer by running Max's actions. You can only act through the \
@@ -81,9 +101,15 @@ need a folder outside them, ask the user to name it.
 - Act; don't ask for permission. Max itself asks the user before an action \
 moves, overwrites or deletes files. If they say no, don't retry.
 - Plan first: work out which files the request needs. Skip files that already have the result (find_files with missing "mp3" lists the .m4a files without an .mp3) and say which you skipped. Never redo finished work unless asked.
-- One action on several files: one run_action with the files, a folder or a pattern in `each`; Max runs them together, asks once, skips finished ones.
+- Many files: ONE run_action with a folder, pattern or files in `each` (narrowed with `select`), never a call per file. Max asks once, skips finished files and queues big batches.
+- Results come back checked: report failed, missing or empty outputs; never claim it all worked.
+- "Undo that": the files group's undo action. job_status shows queued jobs.
+- Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
 - When you're done, say in one or two short sentences what you did and where the results are.
-- If no action fits, say so and suggest what Max can do instead."""
+- If no action fits, say so and suggest what Max can do instead.
+
+Your notes from earlier sessions:
+{memory}"""
 
 
 QUEUE_RULE = """
@@ -114,6 +140,7 @@ class StepKind(str, Enum):
     DECLINED = "declined"  # the user said no
     PLANNED = "planned"  # dry run: checked, not run
     QUEUED = "queued"  # added to the queue; the dashboard runs it in the background
+    NOTED = "noted"  # saved or deleted a memory note
 
 
 @dataclass(frozen=True)
@@ -209,6 +236,7 @@ class _Outcome:
     text: str
     ok: bool
     result: Optional[ActionResult] = None
+    problem: str = ""  # what the check after the run found wrong
 
 
 @dataclass(frozen=True)
@@ -227,7 +255,9 @@ class _Batch:
         outputs: list[str] = []
         for run, outcome in zip(self.runs, outcomes):
             if not outcome.ok:
-                why = outcome.result.message if outcome.result else outcome.text
+                why = outcome.problem or (
+                    outcome.result.message if outcome.result else outcome.text
+                )
                 name = run.paths[0].name if run.paths else run.label
                 failed.append({"file": name, "error": why})
             elif outcome.result is not None:
@@ -293,6 +323,7 @@ class Agent:
         token_limit: int = TOKEN_LIMIT,
         can_queue: bool = False,
         jobs_hint: str = JOBS_WINDOW,
+        memory: Optional[AgentMemory] = None,
     ) -> None:
         """`can_queue` lets the model queue long jobs, which the caller must
         then run: the dashboard's worker, or the background worker the CLI
@@ -311,6 +342,7 @@ class Agent:
         self.parallel = max(1, parallel)
         self.token_limit = token_limit
         self._report_lock = threading.Lock()
+        self.memory = memory or AgentMemory()
         self.scope = PathScope(cwd or Path.cwd())
         self.scope.allow(_download_folder())
         self.loaded: set[str] = set()
@@ -342,6 +374,7 @@ class Agent:
             groups=group_lines(),
             cwd=self.scope.cwd,
             queue_rule=QUEUE_RULE.format(jobs=self.jobs_hint) if self.can_queue else "",
+            memory=self.memory.prompt_lines() or "(none yet)",
         )
 
     # --- the loop -----------------------------------------------------------
@@ -502,13 +535,20 @@ class Agent:
             return self._load_group(str(arguments.get("name", "")), reply)
         if name in LOOK_TOOLS:
             return self._look(name, arguments, reply)
+        if name in (REMEMBER, FORGET):
+            return self._note(name, arguments, reply)
         if name == RUN_ACTION:
             given = arguments.get("arguments") or {}
             if not isinstance(given, Mapping):
                 return "Error: 'arguments' must be an object."
             queue = arguments.get("queue") is True
             each = arguments.get("each")
-            if each is None and _names_many(str(arguments.get("action", "")), given):
+            select = arguments.get("select") or {}
+            if not isinstance(select, Mapping):
+                return "Error: 'select' must be an object."
+            if each is None and (
+                select or _names_many(str(arguments.get("action", "")), given)
+            ):
                 each = []  # the file argument holds the folder or pattern
             if each is not None:
                 if not isinstance(each, list):
@@ -520,6 +560,7 @@ class Agent:
                     reply,
                     queue=queue,
                     call_id=call_id,
+                    select=dict(select),
                 )
             return self._run(
                 str(arguments.get("action", "")),
@@ -539,6 +580,9 @@ class Agent:
             elif tool == RECENT_ACTIVITY:
                 found = looks.recent_activity(int(arguments.get("limit") or 10))
                 what = "Read the recent activity"
+            elif tool == JOB_STATUS:
+                found = looks.job_status(int(arguments.get("limit") or 10))
+                what = "Checked the queued jobs"
             else:
                 path = self.scope.resolve(str(arguments.get("path") or "."))
                 if not self.scope.allows(path):
@@ -567,6 +611,23 @@ class Agent:
             if arguments.get(key) not in (None, "")
         }
         return looks.find_files(path, **filters), f"Searched {name}"
+
+    def _note(self, tool: str, arguments: dict[str, Any], reply: AgentReply) -> str:
+        """remember or forget: the memory notes later sessions start with."""
+        if tool == REMEMBER:
+            try:
+                note = self.memory.remember(str(arguments.get("text", "")))
+            except MaxError as e:
+                return f"Error: {e}"
+            self._report(reply, Step(StepKind.NOTED, tool, f"Remembered: {note.text}"))
+            return json.dumps({"saved": note.id, "text": note.text}, ensure_ascii=False)
+        gone = self.memory.forget(str(arguments.get("id", "")))
+        if gone is None:
+            return (
+                "Error: no note with that id. Your notes show their ids in [brackets]."
+            )
+        self._report(reply, Step(StepKind.NOTED, tool, f"Forgot: {gone.text}"))
+        return json.dumps({"deleted": gone.id}, ensure_ascii=False)
 
     def _load_group(self, name: str, reply: AgentReply) -> str:
         if name not in agent_groups():
@@ -643,7 +704,7 @@ class Agent:
                     call_id=call_id,
                 ),
             )
-            return "Dry run: checked, not run. Carry on as if it worked."
+            return f"Dry run: checked {call.describe()}. {DRY_RUN_NOTE}"
         # A dry run (smart-sort --dry-run, organize --dry-run) changes
         # nothing, so it doesn't ask.
         changes_files = action.danger in CONFIRM_DANGERS and not arguments.get(
@@ -722,21 +783,26 @@ class Agent:
                 ),
             )
             return _Outcome(f"Error: {e}", False)
-        kind = StepKind.RAN if result.ok else StepKind.FAILED
+        problem = _check_outputs(result) if result.ok else ""
+        ok = result.ok and not problem
+        message = f"{result.message} But {problem}" if problem else result.message
         self._report(
             reply,
             Step(
-                kind,
+                StepKind.RAN if ok else StepKind.FAILED,
                 run.action_id,
-                f"{run.label}: {result.message}",
+                f"{run.label}: {message}",
                 result,
                 arguments=shown,
                 seconds=time.monotonic() - started,
                 call_id=run.call_id,
             ),
         )
-        text = json.dumps(result.to_dict(), ensure_ascii=False, default=str)
-        return _Outcome(text[:MAX_RESULT_CHARS], result.ok, result)
+        answer = result.to_dict()
+        if problem:
+            answer["check"] = problem
+        text = json.dumps(answer, ensure_ascii=False, default=str)
+        return _Outcome(text[:MAX_RESULT_CHARS], ok, result, problem)
 
     def _run_each(
         self,
@@ -746,11 +812,19 @@ class Agent:
         reply: AgentReply,
         queue: bool = False,
         call_id: str = "",
+        select: Optional[dict[str, Any]] = None,
     ) -> Union[str, _Batch]:
         """One action over several files: each file in turn fills the action's
         file argument. Every file is checked first; then one question covers
-        the files that passed, and they run together."""
+        the files that passed, and they run together. `select` narrows the
+        files a folder or pattern gives."""
         from max_cli.core.catalog.runner import coerce_args
+
+        select = select or {}
+        try:
+            limits = _file_filter(select)
+        except ValueError as e:
+            return f"Error: {e}"
 
         try:
             action = get_action(action_id)
@@ -782,10 +856,15 @@ class Agent:
             if outside:
                 return f"Error: {', '.join(outside)} is outside the folders I may use."
             try:
-                found = expand_each(action, {**given, param.name: wanted})
+                found = expand_each(
+                    action,
+                    {**given, param.name: wanted},
+                    recursive=select.get("recursive") is True,
+                    redo=select.get("redo") is True,
+                )
             except MaxError as e:
                 return f"Error: {e}"
-            each = [str(path) for path in found.files]
+            each = [str(path) for path in limits.select(found.files)]
             done_already = found.done_already
             refused = [(path.name, CLASH_NOTE) for path in found.clashes]
             if not each:
@@ -800,7 +879,11 @@ class Agent:
         if not each:
             return "Error: 'each' must list at least one file."
         if len(each) > MAX_EACH:
-            return f"Error: 'each' takes at most {MAX_EACH} files; split the list."
+            return (
+                f"Error: that's {len(each)} files; one call takes at most "
+                f"{MAX_EACH}. Narrow it with select (name, size, age) or a "
+                "subfolder."
+            )
         label = f"{action.group} {action.name}"
         checked: list[tuple[str, ActionCall, dict[str, Any], tuple[Path, ...]]] = []
         for number, path in enumerate(each):
@@ -834,9 +917,13 @@ class Agent:
                 dict(refused), ensure_ascii=False
             )
         names = [Path(each_path).name for each_path in each]
+        size = _total_size(Path(each_path) for each_path in each)
         whole = ActionCall(
             action,
-            {**checked[0][1].arguments, param.name: _files_text(names, len(checked))},
+            {
+                **checked[0][1].arguments,
+                param.name: _files_text(names, len(checked), size, len(done_already)),
+            },
         )
         if self.dry_run:
             self._report(
@@ -849,7 +936,20 @@ class Agent:
                     call_id=call_id,
                 ),
             )
-            return "Dry run: checked, not run. Carry on as if it worked."
+            return json.dumps(
+                {
+                    "dry_run": True,
+                    "action": label,
+                    "would_run": len(checked),
+                    "size": _size_text(size),
+                    "files": names[:MAX_LISTED_OUTPUTS],
+                    "more_files": max(0, len(names) - MAX_LISTED_OUTPUTS),
+                    "refused": [{"file": n, "error": why} for n, why in refused],
+                    **_done_already(tuple(path.name for path in done_already)),
+                    "note": DRY_RUN_NOTE,
+                },
+                ensure_ascii=False,
+            )[:MAX_RESULT_CHARS]
         changes_files = action.danger in CONFIRM_DANGERS and not given.get("dry_run")
         if changes_files and not self.confirm(whole):
             self._report(
@@ -863,7 +963,8 @@ class Agent:
                 ),
             )
             return DECLINED_NOTE
-        if queue and self.can_queue and action.queueable:
+        too_many = len(checked) > AUTO_QUEUE_FILES
+        if (queue or too_many) and self.can_queue and action.queueable:
             from max_cli.core.catalog.runner import enqueue_action
 
             for each_id, call, file_given, _paths_found in checked:
@@ -885,8 +986,14 @@ class Agent:
                 {
                     "queued": len(checked),
                     "failed": [{"file": n, "error": why} for n, why in refused],
-                    "note": "They run in the background; the user follows "
-                    f"them with {self.jobs_hint}. Don't wait for them.",
+                    "note": (
+                        f"{len(checked)} files is a long job, so Max queued it. "
+                        if too_many and not queue
+                        else ""
+                    )
+                    + "They run in the background; the user follows them with "
+                    f"{self.jobs_hint}, and job_status shows how far they got. "
+                    "Don't wait for them.",
                 },
                 ensure_ascii=False,
             )
@@ -952,10 +1059,76 @@ def _each_param(action: Action) -> Optional[Any]:
     return None
 
 
-def _files_text(names: list[str], count: int) -> str:
-    """`11 files (a.m4a, b.m4a, c.m4a ...)` for the one question a batch asks."""
+def _files_text(names: list[str], count: int, size: int = 0, done: int = 0) -> str:
+    """`142 files, 3.2 GB (a.m4a, b.m4a, c.m4a ...); 18 done already, skipped`
+    for the one question a batch asks."""
     shown = ", ".join(names[:3]) + (" ..." if len(names) > 3 else "")
-    return f"{count} file{'s' if count != 1 else ''} ({shown})"
+    text = f"{count} file{'s' if count != 1 else ''}"
+    if size >= SIZE_SHOWN_FROM:
+        text += f", {_size_text(size)}"
+    text += f" ({shown})"
+    if done:
+        text += f"; {done} done already, skipped"
+    return text
+
+
+def _total_size(paths: Any) -> int:
+    total = 0
+    for path in paths:
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _size_text(size: int) -> str:
+    from max_cli.common.utils import format_size
+
+    return format_size(size)
+
+
+def _file_filter(select: Mapping[str, Any]) -> "looks.FileFilter":
+    """select's limits; ValueError names one that isn't a number."""
+    limits: dict[str, Any] = {}
+    for name in SELECT_FILTERS:
+        value = select.get(name)
+        if value is None or value == "":
+            continue
+        if name == "name":
+            limits[name] = str(value)
+            continue
+        try:
+            limits[name] = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"select.{name} must be a number, not {value!r}."
+            ) from None
+    return looks.FileFilter(**limits)
+
+
+def _check_outputs(result: ActionResult) -> str:
+    """What's wrong with the files a run reported, or "" when they look right:
+    each must exist, and a file must not be empty."""
+    missing: list[str] = []
+    empty: list[str] = []
+    for output in result.output_files:
+        path = Path(output)
+        try:
+            if not path.exists():
+                missing.append(path.name)
+            elif path.is_file() and path.stat().st_size == 0:
+                empty.append(path.name)
+        except OSError:
+            missing.append(path.name)
+    problems = []
+    if missing:
+        problems.append(f"the check found no {', '.join(missing[:5])}")
+    if empty:
+        problems.append(
+            f"{', '.join(empty[:5])} {'is' if len(empty) == 1 else 'are'} empty"
+        )
+    return "; ".join(problems) + ("." if problems else "")
 
 
 def _overlap(runs: list[_Run]) -> bool:

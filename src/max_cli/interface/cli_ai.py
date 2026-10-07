@@ -516,3 +516,60 @@ def extract_data_cmd(
             log_success(f"Saved to: {output}")
     except Exception as e:
         log_error(f"Extraction failed: {e}")
+
+
+@app.command("memory")
+def agent_memory_cmd(
+    forget: Optional[str] = typer.Option(
+        None, "--forget", help="Delete the note with this id."
+    ),
+    clear: bool = typer.Option(False, "--clear", help="Delete every note."),
+    force: bool = typer.Option(False, "--force", "-f", help="Don't ask first."),
+):
+    """
+    Show what the agent remembers between sessions, or delete notes.
+
+    The agent saves a note when you tell it a lasting fact or preference
+    ("my music lives in D:/Music"). Every new session starts with them.
+
+    Examples:
+        max ai memory
+        max ai memory --forget 3fa2c1
+        max ai memory --clear
+    """
+    from max_cli.core.agent.memory import AgentMemory, memory_file
+    from max_cli.interface.confirm import skip_confirmation
+
+    memory = AgentMemory()
+    if forget:
+        gone = memory.forget(forget)
+        if gone is None:
+            log_error(f"No note with id {forget}. `max ai memory` lists them.")
+            return
+        log_success(f"Forgot: {gone.text}")
+        return
+    if clear:
+        count = len(memory.notes())
+        if not count:
+            console.print("[dim]No notes to delete.[/dim]")
+            return
+        if not skip_confirmation(force) and not Confirm.ask(
+            f"Delete all {count} note{'s' if count != 1 else ''}?"
+        ):
+            return
+        memory.clear()
+        log_success(f"Deleted {count} note{'s' if count != 1 else ''}.")
+        return
+    notes = memory.notes()
+    if not notes:
+        console.print(
+            "[dim]No notes yet. Tell the agent a lasting fact, e.g. "
+            '"remember that my music lives in D:/Music".[/dim]'
+        )
+        return
+    for note in notes:
+        console.print(
+            f"  [cyan]{note.id}[/cyan]  {escape(note.text)}  [dim]{note.saved[:10]}[/dim]"
+        )
+    plural = "s" if len(notes) != 1 else ""
+    console.print(f"[dim]{len(notes)} note{plural} in {memory_file()}[/dim]")

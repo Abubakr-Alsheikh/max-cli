@@ -206,6 +206,42 @@ async def test_actions_run_side_by_side_each_get_their_card(ai_on):
 
 
 @pytest.mark.asyncio
+async def test_a_batch_gets_one_card_that_counts_its_files(ai_on):
+    from max_cli.interface.tui.widgets.ai_panel import BatchCard
+
+    names = ("a.txt", "b.txt", "c.txt")
+    for name in names:
+        (ai_on / name).write_text(name, encoding="utf-8")
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}, "call-1"),)),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {"action": "files.preview", "arguments": {}, "each": list(names)},
+                    "batch",
+                ),
+            )
+        ),
+        _answer(calls=(_call("remember", {"text": "Notes live here"}, "note"),)),
+        _answer("Read all three."),
+    )
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "read the notes and remember where they are")
+            await _replied(app, pilot)
+            cards = list(app.query(ToolCard))
+            lookups = str(app.query_one(".turn-lookups", Static).render())
+
+    [card] = cards
+    assert isinstance(card, BatchCard)
+    assert card.has_class("-ok")
+    assert "3 done" in str(card.title)
+    assert "Remembered: Notes live here" in lookups
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "answer, kept", [("#confirm-no", True), ("#confirm-yes", False)]
 )
