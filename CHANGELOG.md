@@ -11,6 +11,10 @@
 - **The agent shows its plan.** Before multi-step work it lists the steps and waits: go ahead, stop, or say what to change. When a request is unclear it asks you one question with choices instead of guessing. On the dashboard both open a dialog.
 - **The agent knows where you are.** Each request carries what the folder holds, the running jobs and Max's last action.
 - **The agent sees the computer.** It reports free disk space, memory, CPU and battery, lists the programs using the most memory, opens a file, folder or link you ask to see (never programs), and asks the vision model about an image.
+- **The agent can stop a program** you name, after asking; never the system's own.
+- **Commands, if you allow them.** Turn on Settings > AI agent > Let the agent run commands and the agent can run a program with its arguments when no Max action fits, after showing you the command and getting your yes. Off by default.
+- **A cheaper model for summaries** (`AI_FAST_MODEL`).
+- `scripts/agent_eval.py` scores the agent's choices with your real model.
 - Long chats stay within the token limit: Max summarises the oldest turns. `ai chat` saves after every request, so Ctrl+C no longer loses the session.
 - **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders. The Tags card shows for audio, and for video when you tick Tags.
 
@@ -20,6 +24,8 @@
 
 ### Fixed
 
+- The agent's relative paths and patterns (`music/*.m4a`) now start in the agent's folder. They started in the folder Max was launched from, so a batch could find no files and the model retried call after call.
+- The agent no longer runs an identical action twice in one request, and dry runs tell the model nothing ran on purpose.
 - Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and some readers, Max's own among them (mutagen before 1.48), took its last character, `?`, for track 63. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
 - The Browse window's **Max downloads** place opens the folder the Download page saves into, not the empty folder of the Save to setting. Folder pickers list the page's files too, dimmed, so a folder of songs no longer looks empty.
 

@@ -86,6 +86,18 @@ GitHub CI runs the whole suite on every Python and system for every PR, so the d
 
 CI also runs on macOS and Linux. The script can't reproduce those, so watch for file-order and path differences.
 
+## Agent evals
+
+`scripts/agent_eval.py` asks the AI agent set requests with your configured AI model and scores what it chose: one batch call instead of a call per file, a plan before multi-step work, looking before advising, saving a fact it was told.
+
+```bash
+python scripts/agent_eval.py               # every scenario
+python scripts/agent_eval.py --only batch  # one of them
+python scripts/agent_eval.py --list
+```
+
+Each scenario runs in dry-run mode in a temporary folder, with Max's activity log and the agent's notes in a temporary home, so nothing of yours changes. It costs a few model requests per run, and models vary from run to run: run it twice before you trust a change to the agent's prompt or tools. Add a scenario to `SCENARIOS` when you fix a choice the agent got wrong.
+
 ## Submitting PRs
 
 1. Create a feature branch

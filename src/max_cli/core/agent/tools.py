@@ -30,6 +30,8 @@ SYSTEM_INFO = "system_info"
 PROCESSES = "processes"
 OPEN = "open"
 LOOK_AT_IMAGE = "look_at_image"
+STOP_PROCESS = "stop_process"
+RUN_COMMAND = "run_command"
 LOOK_TOOLS = (
     LIST_FOLDER,
     INSPECT,
@@ -48,6 +50,8 @@ TOOL_NAMES = (
     *MEMORY_TOOLS,
     *QUESTION_TOOLS,
     OPEN,
+    STOP_PROCESS,
+    RUN_COMMAND,
     LOAD_GROUP,
     RUN_ACTION,
 )
@@ -124,7 +128,7 @@ def _tool(
     }
 
 
-def _look_definitions() -> list[dict[str, Any]]:
+def _look_definitions(can_shell: bool = False) -> list[dict[str, Any]]:
     """find_files, probe_link and recent_activity."""
     from max_cli.common.file_kinds import KIND_SUFFIXES
 
@@ -207,6 +211,14 @@ def _look_definitions() -> list[dict[str, Any]]:
             ["target"],
         ),
         _tool(
+            STOP_PROCESS,
+            "End a running program the user wants closed, by pid or name. Max "
+            "asks the user first; system programs are refused.",
+            {"pid": {"type": "integer"}, "name": {"type": "string"}},
+            [],
+        ),
+        *([_command_definition()] if can_shell else []),
+        _tool(
             REMEMBER,
             "Save one lasting fact or preference the user gave, for later "
             "sessions, e.g. 'Music lives in D:/Music'.",
@@ -240,9 +252,23 @@ def _look_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
+def _command_definition() -> dict[str, Any]:
+    return _tool(
+        RUN_COMMAND,
+        "Run one program with its arguments in an allowed folder, e.g. "
+        "'git status' or 'ffprobe a.mp4'. No shell syntax. The user sees the "
+        "command and says yes first. Only when no Max action fits.",
+        {"command": {"type": "string"}, "folder": {"type": "string"}},
+        ["command"],
+    )
+
+
+def tool_definitions(
+    can_queue: bool = False, can_shell: bool = False
+) -> list[dict[str, Any]]:
     """The tools, in the OpenAI chat-completions format. `can_queue` adds the
-    run_action option that queues a long job (the dashboard runs the queue)."""
+    run_action option that queues a long job (the dashboard runs the queue);
+    `can_shell` adds run_command (the AGENT_SHELL setting)."""
     run_properties: dict[str, Any] = {
         "action": {
             "type": "string",
@@ -291,7 +317,7 @@ def tool_definitions(can_queue: bool = False) -> list[dict[str, Any]]:
             "a video's length and codecs, an image's size and camera, a PDF's "
             "pages; for a music or photo folder, a summary. Changes nothing.",
         ),
-        *_look_definitions(),
+        *_look_definitions(can_shell),
         {
             "type": "function",
             "function": {

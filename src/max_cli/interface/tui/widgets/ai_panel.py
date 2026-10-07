@@ -64,6 +64,7 @@ CARD_STATES = {
     "declined": ("-", "-skipped"),
     "planned": ("→", "-planned"),
     "queued": ("⧗", "-queued"),
+    "command": ("$", "-ok"),
 }
 CARD_NOTES = {
     "refused": "outside the folders Max may use",
@@ -74,7 +75,7 @@ CARD_NOTES = {
 # A batch card lists this many failed files and outputs; the rest are counted.
 BATCH_LISTED = 8
 # Steps the turn lists on its look-ups line instead of drawing a card.
-LOOKUP_KINDS = ("loaded", "looked", "noted", "asked", "opened")
+LOOKUP_KINDS = ("loaded", "looked", "noted", "asked", "opened", "stopped")
 
 
 def ai_is_set_up() -> bool:
@@ -741,7 +742,7 @@ class AIPanel(Vertical):
         """Runs in the worker: show the plan or question and wait. No answer
         (the dashboard closing) is None, which stops the plan."""
         from max_cli.core.agent.agent import QuestionKind
-        from max_cli.interface.tui.widgets.dialogs import QuestionDialog
+        from max_cli.interface.tui.widgets.dialogs import ConfirmDialog, QuestionDialog
 
         answer: list[Optional[str]] = []
         answered = threading.Event()
@@ -750,9 +751,15 @@ class AIPanel(Vertical):
             answer.append(reply)
             answered.set()
 
+        def yes_or_no(answered_yes: Optional[bool]) -> None:
+            done("yes" if answered_yes else None)
+
         def ask() -> None:
             if self._turn is not None:
                 self._turn.waiting("Waiting for your answer")
+            if question.kind == QuestionKind.CONFIRM:
+                self.app.push_screen(ConfirmDialog(question.text), yes_or_no)
+                return
             self.app.push_screen(
                 QuestionDialog(
                     question.text,

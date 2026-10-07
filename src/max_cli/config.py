@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Ask before moving, overwriting or deleting files. Off works like
     # --force everywhere, except `files shred`, which can't be undone.
     CONFIRM_DESTRUCTIVE: bool = True
+    # The AI agent may run commands (programs, not shell syntax), asking
+    # before each one. Off unless you turn it on.
+    AGENT_SHELL: bool = False
+    # A cheaper model of the main provider for the agent's chat summaries;
+    # empty uses the main model.
+    AI_FAST_MODEL: str = ""
 
     # AI Configuration
     # If using OpenAI, leave BASE_URL as None.

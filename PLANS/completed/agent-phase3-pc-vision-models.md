@@ -1,6 +1,6 @@
 # Plan: AI agent, phase 3: the computer, images, models and evals
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** P1
 **Updated:** 2026-10-07
 
@@ -27,22 +27,31 @@ choices. Follows phases 1 and 2 (`../completed/agent-phase1-*.md`,
       (`AIEngine.analyze_image_content`), images up to 20 MB.
 - [x] Tests, docs.
 
-### 3b: waiting for the maintainer's decision
+### 3b: chosen by the maintainer (2026-10-07)
 
-- [ ] A shell tool: off by default (`AGENT_SHELL`), every command shown and
+- [x] A shell tool: off by default (`AGENT_SHELL`), every command shown and
       asked before it runs, never with `shell=True`, inside the allowed
       folders, with a time limit and its output capped.
-- [ ] Stop a process: asks first, never system processes.
-- [ ] A cheaper model for looks and summaries (`AI_FAST_MODEL`), the main
-      model for plans and actions; prompt caching where the provider has it.
-- [ ] Agent evals: `scripts/agent_eval.py` runs scripted requests against
+- [x] Stop a process: asks first, never system processes.
+- [x] A cheaper model for summaries (`AI_FAST_MODEL`); prompt caching
+      where the provider has it.
+- [x] Agent evals: `scripts/agent_eval.py` runs scripted requests against
       the configured model in a temporary folder and scores the tool calls
       (batched or not, plan shown, results checked). Costs API calls.
 
 ## Decisions
 
+- The cheaper model takes only the chat summaries: the agent is one
+  conversation, and every turn picks tools, which needs the main model.
 - Opening needs no question: it changes no file. Running a program does,
   so `open` refuses programs, scripts and shortcuts.
+- Prompt caching needs no code: OpenAI and Gemini cache a request's
+  unchanging start by themselves, and Max keeps the system prompt and tools
+  the same between requests (the context goes at the end of the message).
+- The evals found two bugs on their first run: relative paths started in the
+  process's folder, and the model repeated identical calls after a dry-run
+  answer. Both fixed; a request turning to a second kind of change without a
+  plan now gets "call plan first".
 - The first prompt is about 10,000 characters (2,500 tokens);
-  `tests/test_agent.py` allows 10,500. Prompt caching in 3b would cut what
-  it costs per turn.
+  `tests/test_agent.py` allows 10,500; provider-side caching of that
+  unchanging start cuts what it costs per turn.
