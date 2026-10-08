@@ -100,5 +100,5 @@ def test_a_call_per_file_fails(tmp_path):
 def test_the_scenarios_keep_their_checks():
     names = [scenario.name for scenario in agent_eval.SCENARIOS]
 
-    assert names == ["batch", "plan", "look-first", "memory"]
+    assert names == ["batch", "track-numbers", "plan", "look-first", "memory"]
     assert all(scenario.checks for scenario in agent_eval.SCENARIOS)

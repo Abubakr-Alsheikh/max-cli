@@ -178,3 +178,23 @@ class TestQueue:
         assert engine.compress_video.call_args.args[:2] == (dummy_video, output_path)
         assert engine.compress_video.call_args.kwargs["crf"] == 23
         assert result["output_files"] == [str(output_path)]
+
+
+def test_guides_name_only_actions_that_exist():
+    """A guide sends the agent to another action by id; a renamed action
+    would leave it pointing at nothing."""
+    import re
+
+    from max_cli.core.catalog import group_names
+
+    actions = [action for name in group_names() for action in load_group(name).actions]
+    ids = {action.id for action in actions}
+    groups = {action.group for action in actions}
+    mention = re.compile(r"\b(" + "|".join(sorted(groups)) + r")\.([a-z][a-z-]*[a-z])")
+    guided = [action for action in actions if action.guide]
+
+    assert len(guided) >= 20
+    for action in guided:
+        for group, name in mention.findall(action.guide):
+            assert f"{group}.{name}" in ids, f"{action.id}'s guide names {group}.{name}"
+        assert action.guide in action_schema(action)["description"]

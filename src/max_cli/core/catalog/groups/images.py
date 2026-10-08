@@ -36,6 +36,11 @@ GROUP = Group(
         Action(
             group="images",
             name="compress",
+            guide=(
+                "Use it to make images smaller; it can also resize and convert in "
+                "the same pass. Only new dimensions: images.resize; only a new "
+                "format: images.convert."
+            ),
             summary="Make images smaller: compress, resize and convert in one pass.",
             operation=f"{OPS}:compress",
             params=(
@@ -91,6 +96,10 @@ GROUP = Group(
         Action(
             group="images",
             name="resize",
+            guide=(
+                "Use it to change dimensions only. To make files smaller: "
+                "images.compress."
+            ),
             summary="Change image dimensions. Give a width, a height or a scale.",
             operation=f"{OPS}:resize",
             params=(
@@ -122,6 +131,10 @@ GROUP = Group(
         Action(
             group="images",
             name="convert",
+            guide=(
+                "Use it to change format only (png to webp). To make files smaller: "
+                "images.compress."
+            ),
             summary="Convert images to another format.",
             operation=f"{OPS}:convert",
             params=(

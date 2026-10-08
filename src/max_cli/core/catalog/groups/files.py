@@ -22,6 +22,11 @@ GROUP = Group(
         Action(
             group="files",
             name="order",
+            guide=(
+                "Use it to put numbers in file NAMES so they sort in an order. Not "
+                "for music track numbers (what players show): audio.batch with "
+                "start sets those without renaming."
+            ),
             summary="Put a number in front of every file name (1_report.pdf)."
             " Numbered files are skipped.",
             operation=f"{OPS}:order",
@@ -41,6 +46,10 @@ GROUP = Group(
         Action(
             group="files",
             name="smart-sort",
+            guide=(
+                "Use it to sort mixed files into topic folders. Not for music by "
+                "artist and album: audio.organize."
+            ),
             summary="Let the AI group a folder's files into subfolders by meaning.",
             operation=f"{OPS}:smart_sort",
             params=(
@@ -54,6 +63,10 @@ GROUP = Group(
         Action(
             group="files",
             name="duplicates",
+            guide=(
+                "It compares content, not names: renamed copies are found, "
+                "different files with one name are not."
+            ),
             summary="Find files with identical content; optionally delete the extra"
             " copies (backed up for undo).",
             operation=f"{OPS}:duplicates",
@@ -187,6 +200,10 @@ GROUP = Group(
         Action(
             group="files",
             name="undo",
+            guide=(
+                "Use it for 'undo that': it reverses Max's last recorded rename, "
+                "move or delete. files.history shows what it can undo."
+            ),
             summary="Undo the last rename, move or delete that Max recorded.",
             operation=f"{OPS}:undo",
             params=(),

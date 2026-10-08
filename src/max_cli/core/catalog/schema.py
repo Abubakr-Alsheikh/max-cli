@@ -33,7 +33,15 @@ def action_schema(action: Action) -> dict[str, Any]:
     """A tool definition: name, description and a JSON Schema for the arguments."""
     return {
         "name": action.id,
-        "description": f"{action.summary} (danger: {action.danger.value})",
+        "description": " ".join(
+            part
+            for part in (
+                action.summary,
+                action.guide,
+                f"(danger: {action.danger.value})",
+            )
+            if part
+        ),
         "parameters": {
             "type": "object",
             "properties": {param.name: _param_schema(param) for param in action.params},

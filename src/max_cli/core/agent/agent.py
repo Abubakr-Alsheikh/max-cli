@@ -73,10 +73,16 @@ CONFIRM_DANGERS = frozenset({Danger.MOVES, Danger.OVERWRITES, Danger.DELETES})
 MAX_STEPS = 12  # model turns per request
 MAX_ACTIONS = 40  # tool calls per request
 PARALLEL_ACTIONS = 4  # actions from one turn that run at the same time
-TOKEN_LIMIT = 60_000  # tokens per request, prompts and answers together
+# Tokens per request, prompts and answers together. Each turn resends the
+# conversation, so a request with two loaded groups used 60,000 in a few turns.
+TOKEN_LIMIT = 100_000
 MAX_RESULT_CHARS = 4_000  # of an action's result sent back to the model
 DECLINED_NOTE = (
     "The user said no, so it didn't run. Don't run it again unless they ask."
+)
+ASKED_BEFORE_NOTE = (
+    "The user already said no to {label} in this request, so Max didn't ask "
+    "again. Use another action or ask what they want."
 )
 NOT_RUN_NOTE = "Not run: the action limit for this request was reached."
 CLASH_NOTE = (
@@ -152,8 +158,8 @@ moves, overwrites or deletes files. If they say no, don't retry.
 - "Undo that": the files group's undo action. job_status shows queued jobs.
 - Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
 - The computer: system_info and processes; stop_process ends a program the user wants closed (Max asks them). open shows the user a file, folder or link they asked to see; never programs. look_at_image when you must see what a picture shows.
-- Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself.
-- When you're done, say in one or two short sentences what you did and where the results are.
+- Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself. A worded answer is the user's instruction: follow it.
+- When done, say in one or two short sentences what you did and where the results are.
 - If no action fits, say so and suggest what Max can do instead.
 
 Your notes from earlier sessions:
@@ -422,6 +428,7 @@ class Agent:
         self._changing_actions: set[str] = set()
         self._plan_shown = False
         self._actions_asked: set[str] = set()
+        self._declined: set[str] = set()  # action ids the user said no to
         self.ask_user = ask
         self.context = context
         if shell is None:
@@ -501,6 +508,7 @@ class Agent:
         self._changing_actions = set()
         self._plan_shown = False
         self._actions_asked = set()
+        self._declined = set()
         reply = AgentReply("")
         self._compact(reply)
         self.messages.append({"role": "user", "content": self._with_context(request)})
@@ -946,7 +954,10 @@ class Agent:
         self._report(reply, Step(StepKind.PLAN, PLAN, numbered))
         self._plan_shown = True
         if self.dry_run:
-            return f"Dry run: plan shown. {DRY_RUN_NOTE}"
+            return (
+                "Dry run: the plan is shown and counts as approved. Carry it out "
+                "now: Max checks each step and runs nothing."
+            )
         if self.ask_user is None:
             return "Plan shown. Carry it out."
         answer = self.ask_user(Question(QuestionKind.PLAN, numbered))
@@ -1083,7 +1094,10 @@ class Agent:
         changes_files = action.danger in CONFIRM_DANGERS and not arguments.get(
             "dry_run"
         )
+        if changes_files and action.id in self._declined:
+            return ASKED_BEFORE_NOTE.format(label=label)
         if changes_files and not self.confirm(call):
+            self._declined.add(action.id)
             self._report(
                 reply,
                 Step(
@@ -1329,7 +1343,10 @@ class Agent:
                 ensure_ascii=False,
             )[:MAX_RESULT_CHARS]
         changes_files = action.danger in CONFIRM_DANGERS and not given.get("dry_run")
+        if changes_files and action.id in self._declined:
+            return ASKED_BEFORE_NOTE.format(label=label)
         if changes_files and not self.confirm(whole):
+            self._declined.add(action.id)
             self._report(
                 reply,
                 Step(

@@ -1611,3 +1611,27 @@ def test_a_dry_run_request_says_so(tmp_path):
         "Dry run: Max checks each action"
         in model.requests[0]["messages"][-1]["content"]
     )
+
+
+def test_a_declined_action_is_not_asked_about_again(tmp_path, monkeypatch):
+    _track_runs(monkeypatch)
+    note = _note(tmp_path)
+    shred = {"action": "files.shred", "arguments": {"target": str(note)}}
+    shred_again = {
+        "action": "files.shred",
+        "arguments": {"target": str(note), "passes": 1},
+    }
+    model = ScriptedModel(
+        _answer(calls=(_call("load_group", {"name": "files"}),)),
+        _answer(calls=(_call("run_action", shred, "c2"),)),
+        _answer(calls=(_call("run_action", shred_again, "c3"),)),
+        _answer("OK, I left it."),
+    )
+    agent = _agent(model, tmp_path, answer=False)
+
+    agent.ask("shred the note")
+
+    assert len(agent.asked) == 1
+    assert (
+        "already said no to files shred" in model.requests[3]["messages"][-1]["content"]
+    )

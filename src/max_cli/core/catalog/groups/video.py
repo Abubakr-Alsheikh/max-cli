@@ -56,6 +56,10 @@ GROUP = Group(
         Action(
             group="video",
             name="compress",
+            guide=(
+                "Use it to make a video smaller. To change only the container (mkv "
+                "to mp4) without losing quality: video.convert."
+            ),
             summary="Compress a video to H.264 MP4.",
             operation=f"{OPS}:compress",
             params=(
@@ -82,6 +86,10 @@ GROUP = Group(
         Action(
             group="video",
             name="convert",
+            guide=(
+                "Use it to change the container (mkv to mp4): fast, no quality "
+                "lost. To make it smaller: video.compress."
+            ),
             summary="Convert a video container, for example MKV to MP4.",
             operation=f"{OPS}:convert",
             params=(
@@ -100,6 +108,10 @@ GROUP = Group(
         Action(
             group="video",
             name="to-audio",
+            guide=(
+                "Use it for the soundtrack of a video file. For audio files: "
+                "video.audio-convert."
+            ),
             summary="Extract the audio track into its own file.",
             operation=f"{OPS}:to_audio",
             params=(
@@ -207,6 +219,10 @@ GROUP = Group(
         Action(
             group="video",
             name="louder",
+            guide=(
+                "Use it to raise a quiet file by a fixed amount. For even loudness "
+                "across files: video.normalize."
+            ),
             summary="Raise the volume of a video or audio file.",
             operation=f"{OPS}:louder",
             params=(
@@ -314,6 +330,9 @@ GROUP = Group(
         Action(
             group="video",
             name="normalize",
+            guide=(
+                "Use it to make files equally loud. For one quiet file: video.louder."
+            ),
             summary="Even out loudness to a target level.",
             operation=f"{OPS}:normalize",
             params=(
@@ -335,6 +354,7 @@ GROUP = Group(
         Action(
             group="video",
             name="denoise",
+            guide=("For video files. For audio files: audio.denoise."),
             summary="Remove background noise from audio or video.",
             operation=f"{OPS}:denoise",
             params=(
@@ -366,6 +386,11 @@ GROUP = Group(
         Action(
             group="video",
             name="audio-convert",
+            guide=(
+                "Use it to change an audio file's format (m4a to mp3, wav to flac). "
+                "For the sound of a video: video.to-audio. To make audio smaller: "
+                "audio.compress."
+            ),
             summary="Convert audio between formats, for example WAV to MP3.",
             operation=f"{OPS}:audio_convert",
             params=(

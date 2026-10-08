@@ -66,6 +66,9 @@ GROUP = Group(
         Action(
             group="pdf",
             name="merge",
+            guide=(
+                "Use it to join PDFs. When the result must also be small: pdf.bundle."
+            ),
             summary="Combine PDFs into one file.",
             operation=f"{OPS}:merge",
             params=(
@@ -82,6 +85,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="compress",
+            guide=(
+                "Best for scans: pages become images. For PDFs made from text, try "
+                "pdf.optimize first, which keeps the text selectable."
+            ),
             summary="Shrink a PDF, or every PDF in a folder, by rasterizing pages."
             " Best for scans.",
             operation=f"{OPS}:compress",
@@ -90,6 +97,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="bundle",
+            guide=(
+                "Use it when merged PDFs must also be small; for joining only: "
+                "pdf.merge."
+            ),
             summary="Merge PDFs and compress the result in one step.",
             operation=f"{OPS}:bundle",
             params=(
@@ -261,6 +272,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="optimize",
+            guide=(
+                "Use it for PDFs made from text (reports, exports): keeps text "
+                "selectable. For scans: pdf.compress."
+            ),
             summary="Remove unused objects, compress images and prepare for the web.",
             operation=f"{OPS}:optimize",
             params=(
