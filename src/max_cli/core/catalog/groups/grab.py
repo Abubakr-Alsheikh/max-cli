@@ -28,6 +28,14 @@ GROUP = Group(
         Action(
             group="grab",
             name="download",
+            guide=(
+                "Use for: saving a video, its audio or a whole playlist from "
+                "YouTube and many other sites. How: media_type audio gives MP3s; "
+                "quality ss to x (360p to best); playlist_items such as 1-5,8 picks "
+                "items; artist, album, genre and year go into the files' tags; "
+                "track_numbers numbers a playlist's files by their place in it; "
+                "sort_into album or artist/album saves into folders."
+            ),
             summary="Download a video, its audio, or a playlist.",
             operation=f"{OPS}:download",
             params=(

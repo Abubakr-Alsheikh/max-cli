@@ -180,9 +180,10 @@ class TestQueue:
         assert result["output_files"] == [str(output_path)]
 
 
-def test_guides_name_only_actions_that_exist():
-    """A guide sends the agent to another action by id; a renamed action
-    would leave it pointing at nothing."""
+def test_every_agent_action_has_a_guide_that_names_real_actions():
+    """The agent picks among similar actions by their guides: "Use for: ...
+    Not for: ... (another.action). How: ...". A guide must name only actions
+    that exist, or it sends the agent nowhere."""
     import re
 
     from max_cli.core.catalog import group_names
@@ -190,11 +191,13 @@ def test_guides_name_only_actions_that_exist():
     actions = [action for name in group_names() for action in load_group(name).actions]
     ids = {action.id for action in actions}
     groups = {action.group for action in actions}
-    mention = re.compile(r"\b(" + "|".join(sorted(groups)) + r")\.([a-z][a-z-]*[a-z])")
-    guided = [action for action in actions if action.guide]
+    mention = re.compile(r"(" + "|".join(sorted(groups)) + r")\.([a-z][a-z-]*[a-z])")
 
-    assert len(guided) >= 20
-    for action in guided:
-        for group, name in mention.findall(action.guide):
-            assert f"{group}.{name}" in ids, f"{action.id}'s guide names {group}.{name}"
-        assert action.guide in action_schema(action)["description"]
+    for name in group_names():
+        for action in actions_for(name, Surface.AGENT):
+            assert action.guide.startswith("Use for: "), f"{action.id} has no guide"
+            for group, named in mention.findall(action.guide):
+                assert f"{group}.{named}" in ids, (
+                    f"{action.id}'s guide names {group}.{named}"
+                )
+            assert action.guide in action_schema(action)["description"]

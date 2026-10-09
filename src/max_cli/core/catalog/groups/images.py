@@ -37,9 +37,12 @@ GROUP = Group(
             group="images",
             name="compress",
             guide=(
-                "Use it to make images smaller; it can also resize and convert in "
-                "the same pass. Only new dimensions: images.resize; only a new "
-                "format: images.convert."
+                "Use for: making images smaller for email, the web or storage; it "
+                "can also resize and convert in the same pass. Not for: changing "
+                "only the dimensions (images.resize) or only the format "
+                "(images.convert). How: quality 1-100 (80 to 85 looks the same and "
+                "is much smaller); max_dim caps the longest side; strip removes "
+                "camera data."
             ),
             summary="Make images smaller: compress, resize and convert in one pass.",
             operation=f"{OPS}:compress",
@@ -97,8 +100,10 @@ GROUP = Group(
             group="images",
             name="resize",
             guide=(
-                "Use it to change dimensions only. To make files smaller: "
-                "images.compress."
+                "Use for: changing image dimensions, such as for a website or an "
+                "avatar. Not for: making files smaller at the same size "
+                "(images.compress). How: width or height alone keeps the "
+                "proportions; scale 0.5 halves both."
             ),
             summary="Change image dimensions. Give a width, a height or a scale.",
             operation=f"{OPS}:resize",
@@ -132,8 +137,9 @@ GROUP = Group(
             group="images",
             name="convert",
             guide=(
-                "Use it to change format only (png to webp). To make files smaller: "
-                "images.compress."
+                "Use for: changing the image format: png to webp for the web, heic "
+                "or webp to jpg to open anywhere, png to ico for an icon. Not for: "
+                "making files smaller (images.compress). How: to is the new format."
             ),
             summary="Convert images to another format.",
             operation=f"{OPS}:convert",
@@ -152,6 +158,10 @@ GROUP = Group(
         Action(
             group="images",
             name="strip",
+            guide=(
+                "Use for: removing GPS location, camera and date data before "
+                "sharing photos. The picture stays the same."
+            ),
             summary="Remove GPS and other EXIF data from images, for privacy.",
             operation=f"{OPS}:strip",
             params=(_target(), _workers()),

@@ -57,8 +57,11 @@ GROUP = Group(
             group="video",
             name="compress",
             guide=(
-                "Use it to make a video smaller. To change only the container (mkv "
-                "to mp4) without losing quality: video.convert."
+                "Use for: making videos smaller to share, upload or save space. Not "
+                "for: changing only the container (video.convert) or audio files "
+                "(audio.compress). How: level high keeps the most quality, balanced "
+                "is the usual pick, max makes the smallest file; it writes a new "
+                "file beside the original."
             ),
             summary="Compress a video to H.264 MP4.",
             operation=f"{OPS}:compress",
@@ -87,8 +90,10 @@ GROUP = Group(
             group="video",
             name="convert",
             guide=(
-                "Use it to change the container (mkv to mp4): fast, no quality "
-                "lost. To make it smaller: video.compress."
+                "Use for: changing a video's container (mkv, mov or avi to mp4) so "
+                "it plays somewhere; fast and keeps the quality. Not for: making it "
+                "smaller (video.compress) or audio files (video.audio-convert). "
+                "How: format is the new container, mp4 by default."
             ),
             summary="Convert a video container, for example MKV to MP4.",
             operation=f"{OPS}:convert",
@@ -109,8 +114,10 @@ GROUP = Group(
             group="video",
             name="to-audio",
             guide=(
-                "Use it for the soundtrack of a video file. For audio files: "
-                "video.audio-convert."
+                "Use for: saving the sound of a video as an audio file (a talk, a "
+                "song from a music video). Not for: files that are already audio "
+                "(video.audio-convert). How: format mp3, wav, flac or aac; quality "
+                "s, m, h or x, higher is bigger."
             ),
             summary="Extract the audio track into its own file.",
             operation=f"{OPS}:to_audio",
@@ -140,6 +147,12 @@ GROUP = Group(
         Action(
             group="video",
             name="gif",
+            guide=(
+                "Use for: a short looping clip to share in a chat or a document. "
+                "Not for: long clips, which make huge GIFs: cut first (video.cut). "
+                "How: width in pixels (480) and fps (15); lower both for a smaller "
+                "file."
+            ),
             summary="Turn a video clip into a GIF.",
             operation=f"{OPS}:gif",
             params=(
@@ -168,6 +181,12 @@ GROUP = Group(
         Action(
             group="video",
             name="cut",
+            guide=(
+                "Use for: keeping one part of a video or audio file (trim the start "
+                "or end, take a clip). Not for: joining files (video.concat). How: "
+                "start as 00:01:30 or seconds; end or duration says where it stops, "
+                "and without either it runs to the end."
+            ),
             summary="Keep part of a video or audio file.",
             operation=f"{OPS}:cut",
             params=(
@@ -201,6 +220,10 @@ GROUP = Group(
         Action(
             group="video",
             name="snap",
+            guide=(
+                "Use for: a still picture from a video, such as a thumbnail. How: "
+                "time is the moment to capture, as 00:00:05 or seconds."
+            ),
             summary="Save a JPG screenshot from a video.",
             operation=f"{OPS}:snap",
             params=(
@@ -220,8 +243,9 @@ GROUP = Group(
             group="video",
             name="louder",
             guide=(
-                "Use it to raise a quiet file by a fixed amount. For even loudness "
-                "across files: video.normalize."
+                "Use for: one quiet file that needs a fixed boost. Not for: making "
+                "several files equally loud (video.normalize). How: db is how much "
+                "louder, 5 by default; 3 to 10 is usual, more can distort."
             ),
             summary="Raise the volume of a video or audio file.",
             operation=f"{OPS}:louder",
@@ -244,6 +268,10 @@ GROUP = Group(
         Action(
             group="video",
             name="mute",
+            guide=(
+                "Use for: removing all sound from a video. Not for: removing only "
+                "background noise (video.denoise)."
+            ),
             summary="Remove the audio track from a video.",
             operation=f"{OPS}:mute",
             params=(_each_target((file_kinds.VIDEO,)), _output()),
@@ -253,6 +281,12 @@ GROUP = Group(
         Action(
             group="video",
             name="concat",
+            guide=(
+                "Use for: joining several videos into one, in the order given. Not "
+                "for: one clip from a longer video (video.cut). How: method fast "
+                "joins without re-encoding and needs files with the same format and "
+                "size; safe re-encodes, so mixed files work, but it is slower."
+            ),
             summary="Join several videos into one.",
             operation=f"{OPS}:concat",
             params=(
@@ -275,6 +309,11 @@ GROUP = Group(
         Action(
             group="video",
             name="brightness",
+            guide=(
+                "Use for: footage that is too dark, too bright or flat. Not for: a "
+                "style or mood (video.color). How: brightness and contrast are "
+                "factors around 1.0 (1.2 is 20% more); small steps look natural."
+            ),
             summary="Adjust brightness and contrast.",
             operation=f"{OPS}:brightness",
             params=(
@@ -301,6 +340,11 @@ GROUP = Group(
         Action(
             group="video",
             name="color",
+            guide=(
+                "Use for: giving a video a look: vivid, vintage, noir (black and "
+                "white), warm, cool or fade. Not for: fixing dark footage "
+                "(video.brightness)."
+            ),
             summary="Apply a colour grading preset.",
             operation=f"{OPS}:color",
             params=(
@@ -321,6 +365,10 @@ GROUP = Group(
         Action(
             group="video",
             name="stabilize",
+            guide=(
+                "Use for: shaky handheld footage. It is slow on long videos and "
+                "crops the edges a little."
+            ),
             summary="Stabilize shaky footage.",
             operation=f"{OPS}:stabilize",
             params=(_each_target((file_kinds.VIDEO,)), _output()),
@@ -331,7 +379,10 @@ GROUP = Group(
             group="video",
             name="normalize",
             guide=(
-                "Use it to make files equally loud. For one quiet file: video.louder."
+                "Use for: making one or several files equally loud, such as podcast "
+                "episodes or a playlist. Not for: one quiet file by a fixed amount "
+                "(video.louder). How: level is the target loudness in dB, -20 by "
+                "default; -16 is louder."
             ),
             summary="Even out loudness to a target level.",
             operation=f"{OPS}:normalize",
@@ -354,7 +405,12 @@ GROUP = Group(
         Action(
             group="video",
             name="denoise",
-            guide=("For video files. For audio files: audio.denoise."),
+            guide=(
+                "Use for: background noise in the sound of a video. Not for: audio "
+                "files (audio.denoise). How: mode auto, hiss, hum (electrical buzz) "
+                "or speech (keeps voices clear); strength mild, medium or "
+                "aggressive, which can sound robotic."
+            ),
             summary="Remove background noise from audio or video.",
             operation=f"{OPS}:denoise",
             params=(
@@ -387,9 +443,11 @@ GROUP = Group(
             group="video",
             name="audio-convert",
             guide=(
-                "Use it to change an audio file's format (m4a to mp3, wav to flac). "
-                "For the sound of a video: video.to-audio. To make audio smaller: "
-                "audio.compress."
+                "Use for: changing an audio file's format (m4a, wav or flac to mp3, "
+                "and back) so it plays or fits somewhere. Not for: the sound of a "
+                "video (video.to-audio) or making audio smaller in the same format "
+                "(audio.compress). How: format mp3, aac, flac, wav or ogg; quality "
+                "s, m or h."
             ),
             summary="Convert audio between formats, for example WAV to MP3.",
             operation=f"{OPS}:audio_convert",

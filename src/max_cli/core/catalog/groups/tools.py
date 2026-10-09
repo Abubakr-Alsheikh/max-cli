@@ -11,6 +11,10 @@ GROUP = Group(
         Action(
             group="tools",
             name="share",
+            guide=(
+                "Use for: sending a link or a short text to a phone: it shows a QR "
+                "code to scan."
+            ),
             summary="Show a QR code for a link or text, to open it on your phone.",
             operation=f"{OPS}:share",
             params=(Param("data", ParamKind.TEXT, "Text or link to put in the code."),),
@@ -19,6 +23,10 @@ GROUP = Group(
         Action(
             group="tools",
             name="paste",
+            guide=(
+                "Use for: saving a screenshot or an image on the clipboard as a "
+                "file. How: output names the file."
+            ),
             summary="Save the image on your clipboard, such as a screenshot, to a file.",
             operation=f"{OPS}:paste",
             params=(
@@ -42,6 +50,10 @@ GROUP = Group(
         Action(
             group="tools",
             name="copy",
+            guide=(
+                "Use for: putting a text file's contents on the clipboard, to paste "
+                "somewhere else."
+            ),
             summary="Copy a text file's contents to the clipboard.",
             operation=f"{OPS}:copy",
             params=(Param("target", ParamKind.FILE, "Text file to copy."),),

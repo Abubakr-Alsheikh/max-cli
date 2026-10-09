@@ -23,9 +23,11 @@ GROUP = Group(
             group="files",
             name="order",
             guide=(
-                "Use it to put numbers in file NAMES so they sort in an order. Not "
-                "for music track numbers (what players show): audio.batch with "
-                "start sets those without renaming."
+                "Use for: putting numbers in front of file NAMES (01_, 02_ ...) so "
+                "they sort in a fixed order; it renames the files. Not for: the "
+                "track numbers music players show (audio.batch with start), or "
+                "sorting into folders (files.smart-sort, audio.organize). How: "
+                "start is the first number; dry_run shows the new names first."
             ),
             summary="Put a number in front of every file name (1_report.pdf)."
             " Numbered files are skipped.",
@@ -47,8 +49,9 @@ GROUP = Group(
             group="files",
             name="smart-sort",
             guide=(
-                "Use it to sort mixed files into topic folders. Not for music by "
-                "artist and album: audio.organize."
+                "Use for: sorting a messy folder of mixed files into topic folders "
+                "(Invoices, Photos, Projects) with the AI. Not for: music by artist "
+                "or album (audio.organize). How: dry_run shows the plan first."
             ),
             summary="Let the AI group a folder's files into subfolders by meaning.",
             operation=f"{OPS}:smart_sort",
@@ -64,8 +67,10 @@ GROUP = Group(
             group="files",
             name="duplicates",
             guide=(
-                "It compares content, not names: renamed copies are found, "
-                "different files with one name are not."
+                "Use for: finding identical files to free space; it compares "
+                "content, not names. How: recursive includes subfolders; delete "
+                "removes the extra copies (backed up, so undo works); without "
+                "delete it only lists them."
             ),
             summary="Find files with identical content; optionally delete the extra"
             " copies (backed up for undo).",
@@ -97,6 +102,11 @@ GROUP = Group(
         Action(
             group="files",
             name="shred",
+            guide=(
+                "Use for: destroying a sensitive file for good, with no backup and "
+                "no undo. Not for: ordinary deleting or tidying. How: passes is how "
+                "many times it's overwritten."
+            ),
             summary="Destroy a file for good: overwrite it with random data, then"
             " delete it. No backup, no undo.",
             operation=f"{OPS}:shred",
@@ -116,6 +126,10 @@ GROUP = Group(
         Action(
             group="files",
             name="preview",
+            guide=(
+                "Use for: reading the start of a text file or seeing a file's "
+                "details. Changes nothing."
+            ),
             summary="Show a file's details and the start of its content.",
             operation=f"{OPS}:preview",
             params=(
@@ -133,6 +147,10 @@ GROUP = Group(
         Action(
             group="files",
             name="backup",
+            guide=(
+                "Use for: a safety copy of a file before a risky change. How: label "
+                "names the copy."
+            ),
             summary="Save a copy of a file in ~/.max_cli/backups.",
             operation=f"{OPS}:backup",
             params=(
@@ -154,6 +172,11 @@ GROUP = Group(
         Action(
             group="files",
             name="backups",
+            guide=(
+                "Use for: listing the backups Max made and putting one back. How: "
+                "filter narrows by name; restore picks the backup to put back; "
+                "output says where."
+            ),
             summary="List your backups, or restore one.",
             operation=f"{OPS}:backups",
             params=(
@@ -184,6 +207,10 @@ GROUP = Group(
         Action(
             group="files",
             name="backup-cleanup",
+            guide=(
+                "Use for: freeing the space old backups take. How: days is how old "
+                "a backup must be to go."
+            ),
             summary="Delete backups older than a number of days.",
             operation=f"{OPS}:backup_cleanup",
             params=(
@@ -201,7 +228,7 @@ GROUP = Group(
             group="files",
             name="undo",
             guide=(
-                "Use it for 'undo that': it reverses Max's last recorded rename, "
+                "Use for: 'undo that': it reverses Max's latest recorded rename, "
                 "move or delete. files.history shows what it can undo."
             ),
             summary="Undo the last rename, move or delete that Max recorded.",
@@ -212,6 +239,10 @@ GROUP = Group(
         Action(
             group="files",
             name="history",
+            guide=(
+                "Use for: seeing the recent file changes undo can reverse. Changes "
+                "nothing."
+            ),
             summary="List recent file operations you can undo.",
             operation=f"{OPS}:history",
             params=(
