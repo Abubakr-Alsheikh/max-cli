@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -237,15 +239,53 @@ def ask_ai(
     try:
         agent = _make_agent(dry_run)
         with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
-            # The agent may ask a question; the spinner would draw over it.
-            agent.confirm = _paused(status, _confirm)
-            agent.ask_user = _paused(status, _answer)
-            reply = agent.ask(prompt)
+            with _stop_on_ctrl_c(agent):
+                # The agent may ask a question; the spinner would draw over it.
+                agent.confirm = _paused(status, _confirm)
+                agent.ask_user = _paused(status, _answer)
+                reply = agent.ask(prompt)
     except MaxError as e:
         log_error(escape(str(e)))
         raise typer.Exit(1) from None
+    except KeyboardInterrupt:
+        console.print("[yellow]Stopped.[/yellow]")
+        raise typer.Exit(STOPPED_EXIT_CODE) from None
     _show_reply(reply)
     _start_queued_jobs(reply)
+
+
+# The exit code of a run the user stopped with Ctrl+C, as shells use it.
+STOPPED_EXIT_CODE = 130
+
+
+@contextmanager
+def _stop_on_ctrl_c(agent: "Agent") -> Iterator[None]:
+    """The first Ctrl+C stops the agent after its current step; a second
+    quits at once (KeyboardInterrupt)."""
+    import signal
+
+    presses = 0
+
+    def handler(signum: int, frame: Any) -> None:
+        nonlocal presses
+        presses += 1
+        if presses > 1:
+            raise KeyboardInterrupt
+        agent.stop()
+        console.print(
+            "\n[yellow]Stopping after the current step...[/yellow] "
+            "[dim](Ctrl+C again to quit now)[/dim]"
+        )
+
+    try:
+        previous = signal.signal(signal.SIGINT, handler)
+    except ValueError:  # not the main thread: nothing to catch here
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous)
 
 
 def _paused(status: Any, asker: Any) -> Any:
@@ -446,12 +486,16 @@ def chat_session(
             continue
         try:
             with console.status("[bold cyan]Thinking...[/bold cyan]") as status:
-                agent.confirm = _paused(status, _confirm)
-                agent.ask_user = _paused(status, _answer)
-                reply = agent.ask(user_input)
+                with _stop_on_ctrl_c(agent):
+                    agent.confirm = _paused(status, _confirm)
+                    agent.ask_user = _paused(status, _answer)
+                    reply = agent.ask(user_input)
         except MaxError as e:
             log_error(escape(str(e)))
             continue
+        except KeyboardInterrupt:
+            console.print("[yellow]Stopped.[/yellow]")
+            break
         _show_reply(reply)
         _start_queued_jobs(reply)
         eng.history += [
@@ -625,3 +669,36 @@ def agent_memory_cmd(
         )
     plural = "s" if len(notes) != 1 else ""
     console.print(f"[dim]{len(notes)} note{plural} in {memory_file()}[/dim]")
+
+
+@app.command("undo")
+def undo_last_request(
+    force: bool = typer.Option(False, "--force", "-f", help="Don't ask first."),
+):
+    """
+    Put back what the agent's last request changed.
+
+    The files it made go to Max's backups (~/.max_cli/backups/agent-undo), and
+    the moves, renames and deletes it recorded are reversed. A file changed
+    since is left alone. Asking the agent "undo what you just did" does the
+    same.
+    """
+    from max_cli.core.agent import changes
+    from max_cli.interface.confirm import skip_confirmation
+
+    last = changes.load()
+    if last is None or not last.any():
+        console.print("[dim]Nothing to undo: no request has changed files yet.[/dim]")
+        return
+    console.print(
+        f'Last request: [cyan]"{escape(last.request)}"[/cyan] '
+        f"[dim]{last.at.replace('T', ' ')}[/dim]"
+    )
+    console.print(f"It changed: {escape(last.describe())}")
+    if not skip_confirmation(force) and not Confirm.ask("Put it back?"):
+        return
+    report = changes.undo(last)
+    if report.failed:
+        log_error(escape(report.message()))
+    else:
+        log_success(escape(report.message()))

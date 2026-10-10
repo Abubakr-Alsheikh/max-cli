@@ -77,6 +77,9 @@ Ask "how would you organize this folder?" and it answers from what's there. Ever
 - After every action, Max checks the files it reports: each must exist and not be empty. A missing or empty result counts as a failure, and the agent tells you about it instead of saying it all worked.
 - From the terminal, it can queue long jobs instead of waiting for them: most video work (compress, convert, cut, denoise and the rest that take `--queue`), `audio compress` and `audio denoise`, `pdf ocr` and downloads. After the answer, Max starts the background worker and tells you how many jobs it queued. Your terminal is free at once, `max queue status` shows the jobs, and closing the terminal doesn't stop them. See [Queue](queue.md).
 - One request stops after 12 rounds with the model, 40 actions or 100,000 tokens. Ask it to go on if there's more.
+- **Stop it any time:** press Ctrl+C once and it stops after its current step, then says how many actions finished; press it again to quit at once. On the dashboard, press **Stop**.
+- **Undo a whole request:** say "undo what you just did", or run `max ai undo`. Max remembers what the last request changed: the files it made go to Max's backups (`~/.max_cli/backups/agent-undo/`, so you can still get them back), and the moves, renames and deletes it recorded are reversed. It asks first, and leaves alone a file you changed since. Changes made in place with no record (such as tags written by `audio batch`) can't be undone, and it says so.
+- **Jobs that ended:** each request tells the agent which queued jobs finished or failed since your last one, so it can mention them.
 - Once you say no to an action, it doesn't ask about that action again in the same request. Answer a question in words ("why not use audio batch?") and it takes that as your instruction.
 - Every action it can run carries a guide in three parts: **Use for** (the jobs it fits), **Not for** (the similar action to use instead), and **How** (the arguments that matter, with usual values). For example, `files order` says it renames files and points to `audio batch` for the track numbers music players show. So it picks the right one of similar actions, whatever the request.
 - It remembers lasting facts and preferences you give it, between sessions: "remember that my music lives in D:/Music", "I like 192 kbps MP3s". Every new session starts with these notes, and it deletes a note you correct. See [memory](#memory).
@@ -103,6 +106,16 @@ max ai chat [--clear] [--export FILE] [--import FILE]
 - `--clear` - Delete the saved conversation
 - `--export`, `-e` - Save the conversation to a JSON file
 - `--import`, `-i` - Load a conversation from a JSON file
+
+## undo
+
+Put back what the agent's last request changed.
+
+```bash
+max ai undo [--force]
+```
+
+The files the request made go to `~/.max_cli/backups/agent-undo/<time>/`, and the moves, renames and deletes it recorded are reversed, newest first. A file changed since the request is left alone. It asks first unless you pass `--force`. Asking the agent "undo what you just did" does the same.
 
 ## memory
 

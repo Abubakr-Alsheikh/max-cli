@@ -75,7 +75,15 @@ CARD_NOTES = {
 # A batch card lists this many failed files and outputs; the rest are counted.
 BATCH_LISTED = 8
 # Steps the turn lists on its look-ups line instead of drawing a card.
-LOOKUP_KINDS = ("loaded", "looked", "noted", "asked", "opened", "stopped")
+LOOKUP_KINDS = (
+    "loaded",
+    "looked",
+    "noted",
+    "asked",
+    "opened",
+    "stopped",
+    "undone",
+)
 
 
 def ai_is_set_up() -> bool:
@@ -484,11 +492,14 @@ class AIPanel(Vertical):
         color: $text-muted;
         content-align: right middle;
     }
-    #ai-new {
+    #ai-new, #ai-notes {
         height: 1;
         min-width: 12;
         border: none;
         padding: 0 1;
+    }
+    #ai-stop {
+        display: none;
     }
     """
 
@@ -538,9 +549,12 @@ class AIPanel(Vertical):
                     id="ai-input",
                 )
                 yield Button("Send", id="ai-send", variant="success")
+                # Shown instead of Send while a request runs.
+                yield Button("Stop", id="ai-stop", variant="error")
             with Horizontal(id="ai-options"):
                 yield Checkbox("Dry run (change nothing)", id="ai-dry-run")
                 yield Static("", id="ai-status")
+                yield Button("Notes", id="ai-notes", tooltip="What the agent remembers")
                 yield Button("New chat", id="ai-new")
 
     @staticmethod
@@ -589,6 +603,11 @@ class AIPanel(Vertical):
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         self.query_one("#ai-send", Button).disabled = busy
+        self.query_one("#ai-send", Button).display = not busy
+        stop = self.query_one("#ai-stop", Button)
+        stop.display = busy
+        stop.disabled = False
+        stop.label = "Stop"
         for button in self.query(".ai-example"):
             button.disabled = busy
 
@@ -719,6 +738,22 @@ class AIPanel(Vertical):
     def _on_undo(self, event: Button.Pressed) -> None:
         event.stop()
         self.post_message(OpenPage("activity", tab="undo"))
+
+    @on(Button.Pressed, "#ai-stop")
+    def _on_stop(self, event: Button.Pressed) -> None:
+        """Stop the request after its current step."""
+        event.stop()
+        if self._agent is not None and self._busy:
+            self._agent.stop()
+            event.button.disabled = True
+            event.button.label = "Stopping"
+
+    @on(Button.Pressed, "#ai-notes")
+    def _on_notes(self, event: Button.Pressed) -> None:
+        from max_cli.interface.tui.widgets.notes_dialog import NotesDialog
+
+        event.stop()
+        self.app.push_screen(NotesDialog())
 
     @on(Button.Pressed, "#ai-new")
     def _on_new_chat(self) -> None:

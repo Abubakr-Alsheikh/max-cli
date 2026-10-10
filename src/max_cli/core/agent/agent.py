@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
 from max_cli.common.exceptions import AIError, ConfigurationError, MaxError
+from max_cli.core.agent import changes as request_changes
 from max_cli.core.agent import looks
 from max_cli.core.agent.memory import AgentMemory
 from max_cli.core.agent.scope import PathScope
@@ -58,6 +59,7 @@ from max_cli.core.agent.tools import (
     STOP_PROCESS,
     SYSTEM_INFO,
     TOOL_NAMES,
+    UNDO_REQUEST,
     agent_groups,
     group_actions,
     group_lines,
@@ -103,6 +105,7 @@ DRY_RUN_CONTEXT = (
     "(Dry run: Max checks each action and runs nothing. Ask for each step "
     "once, then say what would happen.)"
 )
+STOPPED_NOTE = "Not run: the user stopped the request."
 REPEAT_NOTE = (
     "Already done in this request with these exact arguments: its answer is "
     "above. Don't repeat it."
@@ -155,7 +158,7 @@ moves, overwrites or deletes files. If they say no, don't retry.
 - Plan first: work out which files the request needs. Skip files that already have the result (find_files with missing "mp3" lists the .m4a files without an .mp3) and say which you skipped. Never redo finished work unless asked.
 - Many files: ONE run_action with a folder, pattern or files in `each` (narrowed with `select`), never a call per file. Max asks once, skips finished files and queues big batches.
 - Results come back checked: report failed, missing or empty outputs; never claim it all worked.
-- "Undo that": the files group's undo action. job_status shows queued jobs.
+- "Undo that", "undo what you did": undo_request puts back Max's last request. job_status shows queued jobs.
 - Save lasting facts and preferences the user gives (where files live, quality) with remember; use your notes below.
 - The computer: system_info and processes; stop_process ends a program the user wants closed (Max asks them). open shows the user a file, folder or link they asked to see; never programs. look_at_image when you must see what a picture shows.
 - Work with 3+ steps or many files: call plan first and follow the answer. If the request is unclear and a wrong guess would cost, ask_user; otherwise decide yourself. A worded answer is the user's instruction: follow it.
@@ -198,6 +201,7 @@ class StepKind(str, Enum):
     PLAN = "plan"  # showed the plan; text holds the numbered steps
     OPENED = "opened"  # opened a file, folder or link for the user
     STOPPED = "stopped"  # ended a program the user agreed to stop
+    UNDONE = "undone"  # put back the last request's changes
     COMMAND = "command"  # ran a command (AGENT_SHELL); text holds its output's end
     ASKED = "asked"  # asked the user a question or for a go-ahead
 
@@ -252,6 +256,7 @@ class AgentReply:
     tokens: int = 0
     model: str = ""  # the model that answered
     fallback: bool = False  # the main provider failed and the fallback answered
+    stopped: bool = False  # the user stopped it (Agent.stop)
 
     def facts(self) -> str:
         """`2 actions · 3,248 tokens · gemini-2.5-flash (fallback)`."""
@@ -429,6 +434,10 @@ class Agent:
         self._plan_shown = False
         self._actions_asked: set[str] = set()
         self._declined: set[str] = set()  # action ids the user said no to
+        # Agent.stop sets it, from another thread; each request clears it.
+        self._stop_requested = threading.Event()
+        # What this request changed, for undo_request (changes.py).
+        self._changes = request_changes.RequestChanges("")
         self.ask_user = ask
         self.context = context
         if shell is None:
@@ -461,6 +470,11 @@ class Agent:
             )
         return cls(client, chat_model(), **kwargs)
 
+    def stop(self) -> None:
+        """Stop the running request after the current step. Safe from any
+        thread: the dashboard's Stop button, the CLI's Ctrl+C."""
+        self._stop_requested.set()
+
     def system_prompt(self) -> str:
         """The first prompt: the group list only, never the actions."""
         return SYSTEM_PROMPT.format(
@@ -492,16 +506,23 @@ class Agent:
                 "ai", "agent", "failed", {"prompt": request, "error": str(e)}
             )
             raise
+        finally:
+            if self._changes.any():
+                request_changes.save(self._changes)
         ActivityLog().add_entry(
             "ai",
             "agent",
-            "success",
+            "cancelled" if reply.stopped else "success",
             {"prompt": request, "message": reply.text, "tokens": reply.tokens},
             duration_ms=int((time.monotonic() - started) * 1000),
         )
         return reply
 
     def _ask(self, request: str) -> AgentReply:
+        self._stop_requested.clear()
+        self._changes = request_changes.RequestChanges(request)
+        # Notes may have changed since (the dashboard's Notes, max ai memory).
+        self.messages[0] = {"role": "system", "content": self.system_prompt()}
         self.scope.add_from(request)
         # The kinds of file-changing actions this request ran, and whether it
         # showed a plan: a second kind without a plan asks for one first.
@@ -514,6 +535,8 @@ class Agent:
         self.messages.append({"role": "user", "content": self._with_context(request)})
         turns = calls = 0
         while True:
+            if self._stop_requested.is_set():
+                return self._stopped(reply)
             response = self._complete()
             turns += 1
             usage = getattr(response, "usage", None)
@@ -533,6 +556,8 @@ class Agent:
                 self.messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": content}
                 )
+            if self._stop_requested.is_set():
+                return self._stopped(reply)
             limit = self._limit_reached(turns, calls, reply.tokens)
             if limit:
                 reply.text = limit
@@ -601,6 +626,9 @@ class Agent:
         for index, tool_call in enumerate(tool_calls):
             if done + index >= self.max_actions:
                 answers.append(NOT_RUN_NOTE)
+                continue
+            if self._stop_requested.is_set():
+                answers.append(STOPPED_NOTE)
                 continue
             answer = self._tool(
                 tool_call.function.name,
@@ -694,6 +722,8 @@ class Agent:
             return self._question(name, arguments, reply)
         if name == OPEN:
             return self._open(str(arguments.get("target", "")), reply)
+        if name == UNDO_REQUEST:
+            return self._undo_request(reply)
         if name == STOP_PROCESS:
             return self._stop_process(arguments, reply)
         if name == RUN_COMMAND and self.shell:
@@ -816,6 +846,57 @@ class Agent:
         shown = Path(target).name if not pc.is_web_link(target) else target
         self._report(reply, Step(StepKind.OPENED, OPEN, f"Opened {shown}"))
         return json.dumps({"opened": target}, ensure_ascii=False)
+
+    def _stopped(self, reply: AgentReply) -> AgentReply:
+        finished = sum(
+            step.kind in (StepKind.RAN, StepKind.QUEUED) for step in reply.steps
+        )
+        reply.stopped = True
+        reply.text = (
+            f"Stopped, as you asked. {finished} action"
+            f"{'s' if finished != 1 else ''} finished before that."
+        )
+        self.messages.append({"role": "assistant", "content": reply.text})
+        return reply
+
+    def _undo_request(self, reply: AgentReply) -> str:
+        """Put back what the last request changed, after the user's yes."""
+        last = request_changes.load()
+        if last is None or not last.any():
+            return "Nothing to undo: Max has no record of a request that changed files."
+        when = last.at.replace("T", " ")[:16]
+        what = last.describe()
+        if self.dry_run:
+            return f"Dry run: would undo {what}. {DRY_RUN_NOTE}"
+        if not self._yes(
+            f'Undo your request "{last.request[:80]}" ({when})? It puts back {what}.'
+        ):
+            self._report(
+                reply, Step(StepKind.DECLINED, UNDO_REQUEST, "Kept the changes")
+            )
+            return DECLINED_NOTE
+        report = request_changes.undo(last)
+        self._report(reply, Step(StepKind.UNDONE, UNDO_REQUEST, report.message()))
+        return json.dumps(
+            {"undone": report.message(), "backup_folder": report.backup_folder},
+            ensure_ascii=False,
+        )
+
+    def _record(self, action: Action, result: ActionResult) -> None:
+        """Remember what a run changed, for undo_request. Called from the
+        threads actions run in, so under the report lock."""
+        with self._report_lock:
+            if result.undo_group:
+                self._changes.undo_groups.append(result.undo_group)
+            elif action.danger == Danger.WRITES_NEW:
+                for output in result.output_files:
+                    made = request_changes.MadeFile.of(Path(output))
+                    if made is not None:
+                        self._changes.made.append(made)
+            elif action.danger in CONFIRM_DANGERS:
+                label = f"{action.group} {action.name}"
+                if label not in self._changes.in_place:
+                    self._changes.in_place.append(label)
 
     def _yes(self, question: str) -> bool:
         """The user's yes to `question`. No way to ask counts as no."""
@@ -1139,8 +1220,11 @@ class Agent:
     def _execute(self, run: _Run, reply: AgentReply) -> _Outcome:
         """Run a checked action; its result (or error) for the model. Called
         from a worker thread when actions run side by side."""
-        from max_cli.core.catalog.runner import run_action
+        from max_cli.common.exceptions import OperationCancelled
+        from max_cli.core.catalog.runner import run_action, takes
 
+        if self._stop_requested.is_set():
+            return _Outcome(STOPPED_NOTE, False)
         shown = run.call.shown_arguments()
         self._report(
             reply,
@@ -1153,8 +1237,24 @@ class Agent:
             ),
         )
         started = time.monotonic()
+        extra: dict[str, Any] = {}
+        if takes(run.call.action, "should_cancel"):
+            extra["should_cancel"] = self._stop_requested.is_set
         try:
-            result = run_action(run.call.action, run.given)
+            result = run_action(run.call.action, run.given, **extra)
+        except OperationCancelled:
+            self._report(
+                reply,
+                Step(
+                    StepKind.FAILED,
+                    run.action_id,
+                    f"{run.label}: stopped",
+                    arguments=shown,
+                    seconds=time.monotonic() - started,
+                    call_id=run.call_id,
+                ),
+            )
+            return _Outcome(STOPPED_NOTE, False)
         except Exception as e:  # noqa: BLE001 - the model hears about any failure
             if not isinstance(e, MaxError):
                 logger.warning("Agent action %s failed", run.action_id, exc_info=True)
@@ -1172,6 +1272,8 @@ class Agent:
             return _Outcome(f"Error: {e}", False)
         problem = _check_outputs(result) if result.ok else ""
         ok = result.ok and not problem
+        if result.ok:
+            self._record(run.call.action, result)
         message = f"{result.message} But {problem}" if problem else result.message
         self._report(
             reply,

@@ -4,6 +4,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
+from textual.notifications import SeverityLevel
 from textual.widget import Widget
 from textual.widgets import Footer
 
@@ -38,6 +39,12 @@ REFRESHABLE_PANEL_IDS = (
 AUTO_COMPACT_COLUMNS = 100
 BACK_HISTORY_LIMIT = 20
 BADGE_REFRESH_SECONDS = 2.0
+# A queued job that ended: the notice's title and severity, by task status.
+ENDED_JOB_NOTICES: dict[str, tuple[str, SeverityLevel]] = {
+    "completed": ("Job finished", "information"),
+    "failed": ("Job failed", "error"),
+}
+JOB_ERROR_SHOWN = 120  # characters of a failed job's error in its notice
 REMOVED_SETTINGS_NOTICE_SECONDS = 12
 PREF_LAST_PAGE = "last_page"
 PREF_THEME = "theme"
@@ -228,6 +235,9 @@ class MaxDashboardApp(App):
             self, lambda theme: save_pref(PREF_THEME, theme.name)
         )
         self._back: list[str] = []
+        # Queued jobs running or waiting at the last check, by id: one that
+        # leaves the list has ended, and gets a notice (_announce_ended_jobs).
+        self._watched_jobs: set[str] = set()
         self._current = ""
         # The sidebar starts open, then stays as you last left it.
         self._user_compact = not prefs.get(PREF_SIDEBAR_OPEN, True)
@@ -343,12 +353,38 @@ class MaxDashboardApp(App):
         if not sidebars:
             return  # shutting down
         sidebar = sidebars.first()
+        self._announce_ended_jobs()
         # One badge for Activity: new failures matter more than a queue.
         failures = 0 if self._current == "activity" else self._new_failures()
         if failures:
             sidebar.set_badge("activity", Badge("failed", failures))
         else:
             sidebar.set_badge("activity", Badge("waiting", self._waiting_tasks()))
+
+    def _announce_ended_jobs(self) -> None:
+        """A notice for each queued job that finished or failed since the
+        last check, so work queued from the AI page or the CLI doesn't end
+        unseen."""
+        from max_cli.core.engines.task_manager import get_task_manager
+
+        manager = get_task_manager()
+        manager.try_refresh()
+        active = {task.id for task in manager.get_all() if task.is_active}
+        for task_id in self._watched_jobs - active:
+            task = manager.get(task_id)
+            status = getattr(getattr(task, "status", None), "value", "")
+            if task is None or status not in ENDED_JOB_NOTICES:
+                continue
+            title, severity = ENDED_JOB_NOTICES[status]
+            detail = task.error[:JOB_ERROR_SHOWN] if status == "failed" else ""
+            # Plain text: a title like "Song [live]" is not markup.
+            self.notify(
+                f"{task.title}{f': {detail}' if detail else ''}",
+                title=title,
+                severity=severity,
+                markup=False,
+            )
+        self._watched_jobs = active
 
     @staticmethod
     def _waiting_tasks() -> int:
