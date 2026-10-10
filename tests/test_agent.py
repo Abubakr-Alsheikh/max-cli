@@ -23,8 +23,8 @@ from max_cli.core.operations.result import ActionResult
 # 6,000 until phase 1 added job_status, remember, forget and select; 8,000
 # until phase 2 added plan and ask_user (PLANS/completed/agent-phase1-...md,
 # PLANS/completed/agent-phase2-plan-ask-context.md); 9,000 until phase 3 added
-# system_info, processes, look_at_image and open.
-FIRST_PROMPT_CHAR_BUDGET = 10_500
+# system_info, processes, look_at_image and open; 10,500 until undo_request.
+FIRST_PROMPT_CHAR_BUDGET = 11_000
 
 
 def _call(name: str, arguments: Any, call_id: str = "call-1") -> SimpleNamespace:
@@ -113,6 +113,7 @@ def test_the_tools_look_load_and_run():
         "look_at_image",
         "open",
         "stop_process",
+        "undo_request",
         "remember",
         "plan",
         "ask_user",

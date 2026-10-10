@@ -32,6 +32,7 @@ OPEN = "open"
 LOOK_AT_IMAGE = "look_at_image"
 STOP_PROCESS = "stop_process"
 RUN_COMMAND = "run_command"
+UNDO_REQUEST = "undo_request"
 LOOK_TOOLS = (
     LIST_FOLDER,
     INSPECT,
@@ -52,6 +53,7 @@ TOOL_NAMES = (
     OPEN,
     STOP_PROCESS,
     RUN_COMMAND,
+    UNDO_REQUEST,
     LOAD_GROUP,
     RUN_ACTION,
 )
@@ -218,6 +220,14 @@ def _look_definitions(can_shell: bool = False) -> list[dict[str, Any]]:
             [],
         ),
         *([_command_definition()] if can_shell else []),
+        _tool(
+            UNDO_REQUEST,
+            "Put back Max's last request: the files it made go to Max's backups "
+            "and the moves, renames and deletes it recorded are reversed. Max "
+            "asks the user first.",
+            {},
+            [],
+        ),
         _tool(
             REMEMBER,
             "Save one lasting fact or preference the user gave, for later "

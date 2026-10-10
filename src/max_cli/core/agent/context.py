@@ -16,6 +16,9 @@ from max_cli.common.file_kinds import kind_of
 
 MAX_SCANNED_ENTRIES = 5_000  # a folder bigger than this is counted as "5,000+"
 MAX_KINDS_NAMED = 5
+MAX_FINISHED_NAMED = 3
+RECENT_ENTRIES = 50  # activity entries searched for the previous request
+FINISHED_WORDS = {"completed": "done", "failed": "failed", "cancelled": "cancelled"}
 CONTEXT_INTRO = "Context from Max (not from the user)"
 
 
@@ -91,6 +94,49 @@ def last_action_line() -> str:
     return f"Last: {entry.category} {entry.action}, {entry.status}, {when}."
 
 
+def finished_line() -> str:
+    """`Finished since your last request: Compress a.mp4 (done), b (failed).`
+
+    Queued jobs end while nobody watches; this tells the agent, so it can
+    mention them. Empty without an earlier request or a job finished since.
+    """
+    from max_cli.common.activity_log import ActivityLog
+    from max_cli.core.engines.task_manager import get_task_manager
+
+    previous = next(
+        (
+            entry
+            for entry in ActivityLog().get_entries(
+                limit=RECENT_ENTRIES, category_filter="ai"
+            )
+            if entry.action == "agent"
+        ),
+        None,
+    )
+    if previous is None:
+        return ""
+    manager = get_task_manager()
+    manager.try_refresh()
+    finished = [
+        task
+        for task in manager.get_history(limit=20)
+        # >=: Windows' clock can give the request and a job one timestamp.
+        if (task.completed_at or "") >= previous.timestamp
+    ]
+    if not finished:
+        return ""
+    named = ", ".join(
+        f"{task.title} ({FINISHED_WORDS.get(getattr(task.status, 'value', ''), 'ended')})"
+        for task in finished[:MAX_FINISHED_NAMED]
+    )
+    more = len(finished) - MAX_FINISHED_NAMED
+    return (
+        f"Finished since your last request: {named}"
+        + (f" and {more} more" if more > 0 else "")
+        + "."
+    )
+
+
 def _ago(minutes: int) -> str:
     if minutes < 60:
         return f"{minutes} min ago"
@@ -103,7 +149,8 @@ def _ago(minutes: int) -> str:
 def request_context(folder: Path) -> str:
     """The context lines for one request, or "" when there is nothing to say."""
     lines = []
-    for part in (lambda: folder_line(folder), queue_line, last_action_line):
+    parts = (lambda: folder_line(folder), queue_line, finished_line, last_action_line)
+    for part in parts:
         try:
             line = part()
         except (OSError, ValueError, KeyError, MaxError):

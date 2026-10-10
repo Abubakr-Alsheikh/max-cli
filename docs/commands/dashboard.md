@@ -173,6 +173,9 @@ The AI page (`8`) runs the same agent as `max ai ask`. Type what you want done, 
 - Before an action moves, overwrites or deletes files, a dialog shows the exact action and asks you.
 - **Open folder** opens where the results went, and **Undo...** opens Activity's Undo tab when files changed.
 - **Dry run** shows the steps and changes nothing. **New chat** starts over. The line beside them shows the model and the tokens the chat used.
+- **Stop** takes the place of Send while a request runs. It stops the agent after its current step (a download stops at once); the answer says how many actions finished.
+- **Notes** shows what the agent remembers between chats. Add a note in the box and press `Enter`, or delete one; the next request uses the change.
+- When a job you queued (from this page, another page or the CLI) finishes or fails, a notice says so, wherever you are in the dashboard.
 - When neither the main AI nor the fallback is set up (each needs a model, and an API key unless it's Ollama), the page says so and links to Settings.
 
 Each request and each action the agent runs shows on Activity's History tab.

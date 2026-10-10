@@ -37,6 +37,7 @@ VISIBLE_COMMANDS = [
     "search",
     "extract",
     "memory",
+    "undo",
 ]
 HIDDEN_ALIASES = ["a", "ana", "c", "ch", "s"]
 
@@ -656,3 +657,40 @@ class TestAnswersInTheTerminal:
         )
 
         assert cli_ai._answer(question) == answer
+
+
+class TestStopAndUndo:
+    def test_the_first_ctrl_c_stops_the_agent_and_a_second_quits(self):
+        import signal
+
+        stopped = []
+        agent = SimpleNamespace(stop=lambda: stopped.append(True))
+
+        with cli_ai._stop_on_ctrl_c(agent):
+            handler = signal.getsignal(signal.SIGINT)
+            handler(signal.SIGINT, None)
+            with pytest.raises(KeyboardInterrupt):
+                handler(signal.SIGINT, None)
+
+        assert stopped == [True]
+        assert signal.getsignal(signal.SIGINT) is not handler
+
+    def test_undo_puts_back_the_last_request(self, tmp_path):
+        from max_cli.core.agent import changes
+
+        made = tmp_path / "a.mp3"
+        made.write_bytes(b"ID3")
+        changes.save(
+            changes.RequestChanges("convert", made=[changes.MadeFile.of(made)])
+        )
+
+        result = runner.invoke(ai_app, ["undo", "--force"])
+
+        assert result.exit_code == 0, result.output
+        assert "Moved 1 file it made" in _plain(result)
+        assert not made.exists()
+
+    def test_undo_with_nothing_recorded(self):
+        result = runner.invoke(ai_app, ["undo"])
+
+        assert "Nothing to undo" in _plain(result)

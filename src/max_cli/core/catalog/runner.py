@@ -113,6 +113,12 @@ def _operation(action: Action) -> Callable[..., "ActionResult"]:
     return operation
 
 
+def takes(action: Action, keyword: str) -> bool:
+    """True when the action's operation takes `keyword` (should_cancel,
+    progress_hook)."""
+    return keyword in inspect.signature(_operation(action)).parameters
+
+
 def run_action(
     action: Action, raw_args: Mapping[str, Any], **operation_kwargs: Any
 ) -> "ActionResult":

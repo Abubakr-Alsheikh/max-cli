@@ -460,3 +460,106 @@ async def test_a_long_job_is_queued_and_shown_as_queued(ai_on, dummy_video):
     assert [task.payload["action"] for task in manager.get_pending()] == [
         "video.compress"
     ]
+
+
+# --- stop, notes, ended jobs -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stop_ends_a_running_request(ai_on, monkeypatch):
+    import threading
+
+    from max_cli.core.catalog import runner
+
+    (ai_on / "note.txt").write_text("x", encoding="utf-8")
+    started = threading.Event()
+
+    def slow_run(action, given, **extra):
+        started.set()
+        panel_agent = app.query_one(AIPanel)._agent
+        # Runs until Stop is pressed (or 10 s, so a broken test can't hang).
+        for _ in range(200):
+            if panel_agent._stop_requested.is_set():
+                break
+            threading.Event().wait(0.05)
+        return ActionResult(True, "Read it", [])
+
+    from max_cli.core.operations.result import ActionResult
+
+    monkeypatch.setattr(runner, "run_action", slow_run)
+    model = ScriptedModel(
+        *_run("files.preview", {"target": "note.txt"}),
+        _answer(
+            calls=(
+                _call(
+                    "run_action",
+                    {
+                        "action": "files.preview",
+                        "arguments": {"target": "note.txt", "lines": 5},
+                    },
+                    "c3",
+                ),
+            )
+        ),
+        _answer("Read both."),
+    )
+    app = MaxDashboardApp()
+    with patch(CLIENT_PATH, return_value=model):
+        async with app.run_test(size=SIZE) as pilot:
+            await _send(app, pilot, "read the note twice")
+            stop = app.query_one("#ai-stop", Button)
+            assert await wait_until(pilot, lambda: started.is_set() and stop.display)
+            send_hidden = not app.query_one("#ai-send", Button).display
+            stop.press()
+            await _replied(app, pilot)
+            replies = _replies(app)
+            stop_hidden_after = not stop.display
+
+    assert send_hidden and stop_hidden_after
+    assert "Stopped, as you asked" in replies[-1]
+
+
+@pytest.mark.asyncio
+async def test_notes_dialog_adds_and_deletes_notes(ai_on):
+    from max_cli.core.agent.memory import AgentMemory
+    from max_cli.interface.tui.widgets.notes_dialog import NotesDialog
+
+    AgentMemory().remember("Music lives in D:/Music")
+    app = MaxDashboardApp()
+    async with app.run_test(size=SIZE) as pilot:
+        app.navigate("ai")
+        await pilot.pause()
+        app.query_one("#ai-notes", Button).press()
+        assert await wait_until(
+            pilot,
+            lambda: isinstance(app.screen, NotesDialog)
+            and bool(app.screen.query(".note-delete")),
+        )
+        box = app.screen.query_one("#notes-new", Input)
+        box.value = "Use 192 kbps for MP3s"
+        await pilot.press("enter")
+        await wait_until(pilot, lambda: len(app.screen.query(".note-delete")) == 2)
+        app.screen.query(".note-delete").first(Button).press()
+        await wait_until(pilot, lambda: len(app.screen.query(".note-delete")) == 1)
+
+    assert [note.text for note in AgentMemory().notes()] == ["Use 192 kbps for MP3s"]
+
+
+@pytest.mark.asyncio
+async def test_a_queued_job_that_ends_gets_a_notice(ai_on):
+    from max_cli.core.engines.task_manager import get_task_manager
+    from max_cli.core.engines.task_queue import TaskItem, TaskStatus, TaskType
+
+    manager = get_task_manager()
+    task = manager.add(TaskItem(type=TaskType.ACTION, title="Compress holiday.mp4"))
+    app = MaxDashboardApp()
+    async with app.run_test(size=SIZE) as pilot:
+        app._announce_ended_jobs()  # sees it waiting
+        manager.remove(task.id)
+        task.status = TaskStatus.COMPLETED
+        manager.record(task)
+        app._announce_ended_jobs()
+        await pilot.pause()
+        notices = [(note.title, note.message) for note in app._notifications]
+
+    assert ("Job finished", "Compress holiday.mp4") in notices
