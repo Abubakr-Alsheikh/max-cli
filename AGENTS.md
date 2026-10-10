@@ -158,7 +158,7 @@ def compress_images(...):
 `.claude/settings.json` wires hooks that enforce this file mechanically:
 
 - **PostToolUse `check_rules.py`**: after every Python edit it runs `ruff check --fix`. It also runs `ruff format`, but only on files that were already formatted at HEAD. Then it runs AST checks for this file's rules: lazy heavy imports, no UI or print in core, layering, `os.path`, `shell=True`, utf-8 encoding, `/tmp`, hardcoded ffmpeg, silent broad excepts, `extractall` filter, direct `write_text` (use `max_cli.common.atomic`), reason-less `# type: ignore`, and Python 3.9 syntax. It blocks only violations the edit *introduced* compared with HEAD. Run `python .claude/hooks/check_rules.py --audit src/max_cli` for a full debt report.
-- **PreToolUse `guard.py`**: denies `--no-verify`, force-push, `.env` edits, and `gh pr create` for a branch that changes `src/` or `pyproject.toml` until `scripts/ci_local.py` (any mode) has passed for HEAD or for an earlier commit with only other files after it. It asks before `pip install <pkg>`, `git reset --hard` and `pyproject.toml` edits.
+- **PreToolUse `guard.py`**: denies `--no-verify`, force-push, `.env` edits, and `gh pr create` for a branch that changes `src/` or `pyproject.toml` until `scripts/ci_local.py` (any mode) has passed for HEAD or for an earlier commit with only other files after it. It asks before `git reset --hard` and `git clean -f`; installing packages and editing `pyproject.toml` don't ask (see "Decide Yourself, Then Say What You Did").
 - **Stop `stop_gate.py`**: when Python changed during the session, it runs `ruff check` plus `pytest -x` on the tests related to the edited files (the edited test files, test files named after an edited module, and test files that import one; `related_tests`) before the agent may finish. The whole suite takes 6-10 minutes, past the hook's limit; `ci_local.py` and GitHub CI run it. It blocks once, then warns.
 
 Project skills in `.claude/skills/`: `max-add-command` (end-to-end command checklist), `max-testing` (fixtures and mocks), `max-review` (pre-commit review and known bug classes), `max-plans` (PLANS lifecycle), `max-release` (which version comes next, and shipping it) and `max-tui-design` (the dashboard's design system: read it before building or redesigning any dashboard page). Add a rule to `check_rules.py` when a new rule in this file can be checked mechanically.
@@ -177,11 +177,13 @@ The same folder holds vetted third-party skills: `systematic-debugging`, `test-d
 - Use the task queue system (`TaskManager` from `max_cli.core.engines.task_manager`, `TaskItem`/`TaskType` from `max_cli.core.engines.task_queue`) for long-running operations — add `--queue` flag to heavy commands.
 - Add type hints to all function signatures.
 
-### ⚠️ Ask First Before
+### ⚖️ Decide Yourself, Then Say What You Did
 
-- Adding new heavy third-party dependencies (e.g., ML libraries, large binaries).
-- Making breaking changes to existing CLI command signatures.
-- Modifying `pyproject.toml` dependencies or entry points.
+The maintainer trusts the agent to install packages and to change `pyproject.toml` (dependencies, entry points, the version) without asking, so a session never waits on a question. Check first, keep working, and name each change and its reason in the commit and the PR:
+
+- **A package:** well known and maintained (PyPI, its repository), the exact name (no typosquat), a licence that fits MIT, and no huge download or native build the users can't get. Prefer the standard library or a package Max already has. A heavy one (ML libraries, large binaries) goes in an optional extra, not the base install.
+- **`pyproject.toml`:** a change GitHub CI can test; never drop a supported Python version or an entry point without a major release (`docs/contributing.md`).
+- Stop and ask only when a change is risky and can't be undone: deleting the user's data, rewriting published history, a breaking change to an existing CLI command's signature.
 
 ### 🚫 Never Do
 

@@ -7,11 +7,13 @@ Bash/PowerShell:
         (the default check of what changed takes 1-3 minutes; --quick and
         --full count too). Docs, tests, scripts and skills don't need it:
         GitHub CI tests every PR.
-- ask:  installing packages (AGENTS.md: ask before adding dependencies),
-        git reset --hard / git clean -f (destroys uncommitted work)
+- ask:  git reset --hard / git clean -f (destroys uncommitted work)
 Write/Edit:
 - deny: .env files (secrets)
-- ask:  pyproject.toml (dependencies and entry points are "ask first" in AGENTS.md)
+
+Installing packages and editing pyproject.toml don't ask: the maintainer
+trusts the agent to check a package or a dependency change itself (AGENTS.md,
+"Decide yourself, then say what you did").
 """
 
 from __future__ import annotations
@@ -31,10 +33,6 @@ DENY_COMMAND_PATTERNS = [
     (r"\bgit\s+add\b.*\.env\b", "Never commit .env files."),
 ]
 ASK_COMMAND_PATTERNS = [
-    (
-        r"\b(pip|pip3|uv\s+pip|poetry)\s+(install|add)\b(?!.*\s-e\s+\.)(?!.*\s-r\s)",
-        "AGENTS.md: ask before adding third-party dependencies.",
-    ),
     (r"\bgit\s+reset\s+--hard\b", "git reset --hard discards uncommitted work."),
     (r"\bgit\s+clean\s+-\w*f", "git clean -f deletes untracked files."),
 ]
@@ -49,9 +47,6 @@ CI_LOCAL_REASON = (
 PACKAGE_PATHS = ("src/", "pyproject.toml")
 BASE_BRANCH = "origin/main"
 PASSING_MODES = ("changed", "quick", "full")  # scripts/ci_local.py's checks
-ASK_EDIT_FILES = {
-    "pyproject.toml": "AGENTS.md: ask before changing dependencies or entry points.",
-}
 
 
 def decision(kind: str, reason: str) -> None:
@@ -137,9 +132,6 @@ def check_edit(file_path: str) -> None:
     name = PurePath(file_path.replace("\\", "/")).name
     if name == ".env" or (name.startswith(".env.") and name != ".env.example"):
         decision("deny", "Never edit .env files; they hold secrets. Use .env.example.")
-        return
-    if name in ASK_EDIT_FILES:
-        decision("ask", ASK_EDIT_FILES[name])
 
 
 def main() -> int:
