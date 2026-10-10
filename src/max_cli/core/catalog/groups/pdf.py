@@ -66,6 +66,11 @@ GROUP = Group(
         Action(
             group="pdf",
             name="merge",
+            guide=(
+                "Use for: joining several PDFs into one, in the order given. Not "
+                "for: when the result must also be small (pdf.bundle). How: inputs "
+                "lists the files in order; output names the result."
+            ),
             summary="Combine PDFs into one file.",
             operation=f"{OPS}:merge",
             params=(
@@ -82,6 +87,13 @@ GROUP = Group(
         Action(
             group="pdf",
             name="compress",
+            guide=(
+                "Use for: shrinking scanned PDFs (photos of pages). Pages become "
+                "images, so their text can't be selected afterwards. Not for: PDFs "
+                "made from text, such as exports and reports (pdf.optimize). How: "
+                "dpi 150 reads well on screen, 200 or more for printing; quality "
+                "1-100."
+            ),
             summary="Shrink a PDF, or every PDF in a folder, by rasterizing pages."
             " Best for scans.",
             operation=f"{OPS}:compress",
@@ -90,6 +102,11 @@ GROUP = Group(
         Action(
             group="pdf",
             name="bundle",
+            guide=(
+                "Use for: joining PDFs and making the result small in one step, "
+                "such as for an email attachment. Not for: joining only "
+                "(pdf.merge)."
+            ),
             summary="Merge PDFs and compress the result in one step.",
             operation=f"{OPS}:bundle",
             params=(
@@ -115,6 +132,12 @@ GROUP = Group(
         Action(
             group="pdf",
             name="split",
+            guide=(
+                "Use for: taking pages out of a PDF: keep a range (start to end), "
+                "remove a range (remove), or split into files of N pages (chunks). "
+                "How: pages count from 1; end -1 is the last page; list_pages shows "
+                "the page count first."
+            ),
             summary="Keep or remove a page range, or split into chunks of N pages.",
             operation=f"{OPS}:split",
             params=(
@@ -162,6 +185,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="stamp",
+            guide=(
+                "Use for: writing a word such as DRAFT or CONFIDENTIAL across every "
+                "page. How: text is the word."
+            ),
             summary="Write a watermark such as CONFIDENTIAL across every page.",
             operation=f"{OPS}:stamp",
             params=(
@@ -191,6 +218,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="rip",
+            guide=(
+                "Use for: saving every image inside a PDF (photos, logos, figures) "
+                "as its own file."
+            ),
             summary="Extract every image inside a PDF.",
             operation=f"{OPS}:rip",
             params=(
@@ -208,6 +239,11 @@ GROUP = Group(
         Action(
             group="pdf",
             name="ocr",
+            guide=(
+                "Use for: getting the text out of a scanned PDF, which has no text "
+                "to copy; writes a .txt file and needs Tesseract. How: lang is the "
+                "language code: eng, deu, fra, or several joined with + (eng+deu)."
+            ),
             summary="Read the text of a scanned PDF into a .txt file."
             " Needs Tesseract (pip install max-cli[ocr]).",
             operation=f"{OPS}:ocr",
@@ -228,6 +264,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="form-data",
+            guide=(
+                "Use for: seeing a PDF form's field names and values, such as "
+                "before filling it (pdf.form-fill). Changes nothing."
+            ),
             summary="Show the values in a PDF form's fields.",
             operation=f"{OPS}:form_data",
             params=(_pdf("PDF form."),),
@@ -236,6 +276,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="form-fill",
+            guide=(
+                "Use for: filling in a PDF form. How: field takes name=value pairs; "
+                "read the field names first with pdf.form-data."
+            ),
             summary="Fill a PDF form's fields.",
             operation=f"{OPS}:form_fill",
             params=(
@@ -253,6 +297,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="form-flatten",
+            guide=(
+                "Use for: locking a filled form: its values become plain page "
+                "content that can't be edited."
+            ),
             summary="Turn a form's fields into plain page content.",
             operation=f"{OPS}:form_flatten",
             params=(_each_pdf((file_kinds.PDF,), "PDF form to flatten."), _output()),
@@ -261,6 +309,11 @@ GROUP = Group(
         Action(
             group="pdf",
             name="optimize",
+            guide=(
+                "Use for: making PDFs made from text (reports, exports, ebooks) "
+                "smaller and quicker to open online; the text stays selectable. Not "
+                "for: scans (pdf.compress)."
+            ),
             summary="Remove unused objects, compress images and prepare for the web.",
             operation=f"{OPS}:optimize",
             params=(
@@ -288,6 +341,10 @@ GROUP = Group(
         Action(
             group="pdf",
             name="compare",
+            guide=(
+                "Use for: finding which pages differ between two versions of a PDF. "
+                "Changes nothing."
+            ),
             summary="Compare two PDFs page by page.",
             operation=f"{OPS}:compare",
             params=(

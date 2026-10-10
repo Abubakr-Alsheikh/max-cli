@@ -76,7 +76,9 @@ Ask "how would you organize this folder?" and it answers from what's there. Ever
 - A batch of more than 20 files of a long job (video and audio work, OCR, downloads) goes to the background queue instead of holding the conversation, when the agent can queue.
 - After every action, Max checks the files it reports: each must exist and not be empty. A missing or empty result counts as a failure, and the agent tells you about it instead of saying it all worked.
 - From the terminal, it can queue long jobs instead of waiting for them: most video work (compress, convert, cut, denoise and the rest that take `--queue`), `audio compress` and `audio denoise`, `pdf ocr` and downloads. After the answer, Max starts the background worker and tells you how many jobs it queued. Your terminal is free at once, `max queue status` shows the jobs, and closing the terminal doesn't stop them. See [Queue](queue.md).
-- One request stops after 12 rounds with the model, 40 actions or 60,000 tokens. Ask it to go on if there's more.
+- One request stops after 12 rounds with the model, 40 actions or 100,000 tokens. Ask it to go on if there's more.
+- Once you say no to an action, it doesn't ask about that action again in the same request. Answer a question in words ("why not use audio batch?") and it takes that as your instruction.
+- Every action it can run carries a guide in three parts: **Use for** (the jobs it fits), **Not for** (the similar action to use instead), and **How** (the arguments that matter, with usual values). For example, `files order` says it renames files and points to `audio batch` for the track numbers music players show. So it picks the right one of similar actions, whatever the request.
 - It remembers lasting facts and preferences you give it, between sessions: "remember that my music lives in D:/Music", "I like 192 kbps MP3s". Every new session starts with these notes, and it deletes a note you correct. See [memory](#memory).
 - File changes go into the undo log, so `max files undo` puts them back.
 

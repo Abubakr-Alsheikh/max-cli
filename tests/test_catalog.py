@@ -178,3 +178,26 @@ class TestQueue:
         assert engine.compress_video.call_args.args[:2] == (dummy_video, output_path)
         assert engine.compress_video.call_args.kwargs["crf"] == 23
         assert result["output_files"] == [str(output_path)]
+
+
+def test_every_agent_action_has_a_guide_that_names_real_actions():
+    """The agent picks among similar actions by their guides: "Use for: ...
+    Not for: ... (another.action). How: ...". A guide must name only actions
+    that exist, or it sends the agent nowhere."""
+    import re
+
+    from max_cli.core.catalog import group_names
+
+    actions = [action for name in group_names() for action in load_group(name).actions]
+    ids = {action.id for action in actions}
+    groups = {action.group for action in actions}
+    mention = re.compile(r"(" + "|".join(sorted(groups)) + r")\.([a-z][a-z-]*[a-z])")
+
+    for name in group_names():
+        for action in actions_for(name, Surface.AGENT):
+            assert action.guide.startswith("Use for: "), f"{action.id} has no guide"
+            for group, named in mention.findall(action.guide):
+                assert f"{group}.{named}" in ids, (
+                    f"{action.id}'s guide names {group}.{named}"
+                )
+            assert action.guide in action_schema(action)["description"]

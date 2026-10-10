@@ -28,7 +28,10 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FILE_BYTES = b"\0" * 64  # small placeholder files: a dry run never reads them
+FILE_BYTES = b"\0" * 64  # small placeholder files: a dry run never runs on them
+# A silent MPEG frame: an .mp3 the agent can read tags from (audio.get).
+MP3_FRAME = b"\xff\xfb\x90\x64" + b"\0" * 413
+MP3_FRAMES = 5
 
 
 @dataclass
@@ -69,6 +72,14 @@ def called(tool: str) -> Check:
     return check
 
 
+def never(action: str) -> Check:
+    def check(run: Run) -> str | None:
+        calls = run.actions(action)
+        return f"called {action}, which is the wrong tool here" if calls else None
+
+    return check
+
+
 def ran_nothing(run: Run) -> str | None:
     actions = run.named("run_action")
     return (
@@ -95,6 +106,12 @@ SCENARIOS = (
         "Convert every m4a file under the music folder, subfolders too, to mp3.",
         ("music/a.m4a", "music/b.m4a", "music/live/c.m4a", "music/a.mp3"),
         (one_batch("video.audio-convert"),),
+    ),
+    Scenario(
+        "track-numbers",
+        "Fix the track numbers of the songs in this folder; they're all wrong.",
+        ("01 Intro.mp3", "02 Night Drive.mp3", "03 Afterglow.mp3", "04 Outro.mp3"),
+        (one_batch("audio.batch"), never("files.order")),
     ),
     Scenario(
         "plan",
@@ -147,7 +164,9 @@ def run_scenario(scenario: Scenario, client: Any, model: str, folder: Path) -> R
     for name in scenario.files:
         path = folder / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(FILE_BYTES)
+        path.write_bytes(
+            MP3_FRAME * MP3_FRAMES if path.suffix == ".mp3" else FILE_BYTES
+        )
     run = Run()
     agent = Agent(
         RecordingClient(client, run),

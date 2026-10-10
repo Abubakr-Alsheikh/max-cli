@@ -115,6 +115,10 @@ class Action:
     # any argument ({format}), e.g. "{stem}_compressed.mp4". A batch skips
     # inputs whose output exists. Empty: no single output file per input.
     output_name: str = ""
+    # When to use this action rather than a similar one, by action id
+    # ("Not for track numbers: audio.batch"). The agent reads it in
+    # load_group; tests/test_catalog.py checks the ids it names exist.
+    guide: str = ""
 
     def each_param(self) -> Optional[Param]:
         """The param a batch fills with one file per run, if any."""

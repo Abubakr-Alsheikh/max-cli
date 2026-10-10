@@ -63,6 +63,12 @@ GROUP = Group(
         Action(
             group="audio",
             name="compress",
+            guide=(
+                "Use for: making audio files smaller, such as for a phone or an "
+                "upload; the result is an MP3. Not for: changing the format without "
+                "shrinking (video.audio-convert). How: quality s, m, h or x (64 to "
+                "192 kbps); mono halves the size, fine for speech."
+            ),
             summary="Shrink an audio file by re-encoding it as a smaller MP3.",
             operation=f"{OPS}:compress",
             params=(
@@ -96,6 +102,11 @@ GROUP = Group(
         Action(
             group="audio",
             name="denoise",
+            guide=(
+                "Use for: hiss, hum or room noise in audio files and recordings. "
+                "Not for: video files (video.denoise). How: mode auto, hiss, hum or "
+                "speech; strength mild, medium or aggressive."
+            ),
             summary="Remove background noise: hiss, hum, fans, room sound.",
             operation=f"{VIDEO_OPS}:denoise",
             params=(
@@ -130,6 +141,11 @@ GROUP = Group(
         Action(
             group="audio",
             name="get",
+            guide=(
+                "Use for: reading a song's tags (title, artist, album, track "
+                "number) and its length, such as before changing them. Changes "
+                "nothing."
+            ),
             summary="Show a file's tags (title, artist, album ...) and its length and bitrate.",
             operation=f"{OPS}:get",
             params=(_target("Audio file to read."),),
@@ -138,6 +154,11 @@ GROUP = Group(
         Action(
             group="audio",
             name="set",
+            guide=(
+                "Use for: changing tags on one file: its title, artist, album or "
+                "track number. Empty fields stay as they are. Not for: many files "
+                "at once (audio.batch)."
+            ),
             summary="Write tags into an audio file. Tags you leave empty stay as they are.",
             operation=f"{OPS}:set_tags",
             params=(
@@ -154,6 +175,10 @@ GROUP = Group(
         Action(
             group="audio",
             name="clear",
+            guide=(
+                "Use for: removing every tag from a file, such as before sharing. "
+                "Not for: fixing one tag (audio.set)."
+            ),
             summary="Remove every tag from an audio file. The sound stays the same.",
             operation=f"{OPS}:clear",
             params=(
@@ -165,6 +190,14 @@ GROUP = Group(
         Action(
             group="audio",
             name="batch",
+            guide=(
+                "Use for: the same tags on many files at once (an album, artist, "
+                "genre or year), and numbering tracks in order. Not for: renaming "
+                "files (files.order) or moving them into folders (audio.organize). "
+                "How: start=1 numbers the files 1, 2, 3 in file-name order and "
+                "keeps their names (if the names aren't in the right order, say so "
+                "first); tracknumber writes one number into every file."
+            ),
             summary="Write the same tags into many files, e.g. one album. Can number the tracks.",
             operation=f"{OPS}:batch",
             params=(
@@ -192,6 +225,12 @@ GROUP = Group(
         Action(
             group="audio",
             name="organize",
+            guide=(
+                "Use for: moving music into folders by its tags (Artist, Album, "
+                "Genre, Artist/Album). Not for: changing tags (audio.batch, "
+                "audio.set). How: pattern artist, album, genre, artist-album or "
+                "contributing-artists; dry_run shows the moves first."
+            ),
             summary="Move audio files into folders by their tags (Artist/Album/Title.mp3).",
             operation=f"{OPS}:organize",
             params=(
