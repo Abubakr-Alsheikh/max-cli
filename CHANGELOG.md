@@ -1,38 +1,44 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 (2026-10-10)
+
+A smarter AI agent that works on whole folders, plans and checks its work, remembers what you tell it and can be stopped and undone; and downloads that come out tagged and sorted.
 
 ### New
 
-- **The AI agent works on whole folders.** One request covers a folder and its subfolders, narrowed by name, size or age ("convert every m4a under Music to mp3"). You get one question with the file count, size and skipped files; big batches of long jobs go to the background queue; the dashboard shows one card per batch with its progress. A dry run lists the files it would run on.
-- **The agent checks its work.** A missing or empty result counts as a failure and the agent says so.
-- **The agent remembers.** Tell it a lasting fact or preference and later sessions start with it. `max ai memory` lists the notes, `--forget ID` deletes one and `--clear` deletes them all.
-- The agent can check the queued jobs ("is my download done?") and undo Max's last file change.
-- **The agent shows its plan.** Before multi-step work it lists the steps and waits: go ahead, stop, or say what to change. When a request is unclear it asks you one question with choices instead of guessing. On the dashboard both open a dialog.
-- **The agent knows where you are.** Each request carries what the folder holds, the running jobs and Max's last action.
-- **The agent sees the computer.** It reports free disk space, memory, CPU and battery, lists the programs using the most memory, opens a file, folder or link you ask to see (never programs), and asks the vision model about an image.
-- **The agent can stop a program** you name, after asking; never the system's own.
-- **Commands, if you allow them.** Turn on Settings > AI agent > Let the agent run commands and the agent can run a program with its arguments when no Max action fits, after showing you the command and getting your yes. Off by default.
-- **A cheaper model for summaries** (`AI_FAST_MODEL`).
-- `scripts/agent_eval.py` scores the agent's choices with your real model.
-- **Stop the agent:** Ctrl+C once (or Stop on the AI page) ends the request after its current step; a second Ctrl+C quits.
-- **Undo a whole request:** "undo what you just did" or `max ai undo` moves the files the last request made into Max's backups and reverses the changes it recorded.
-- **Job notices:** the dashboard shows a notice when a queued job finishes or fails, and the agent hears about jobs that ended since your last request.
-- **Notes on the dashboard:** the AI page's Notes button shows, adds and deletes what the agent remembers.
-- **The agent picks the right one of similar actions.** Every action it can run has a guide: what it's for, which similar action to use instead, and the arguments that matter ("not for music track numbers: audio batch"), so "fix the numbering of my songs" sets the track numbers instead of renaming the files. After you say no to an action it doesn't ask about it again in the same request, and an answer in words counts as your instruction. A request may use up to 100,000 tokens.
-- Long chats stay within the token limit: Max summarises the oldest turns. `ai chat` saves after every request, so Ctrl+C no longer loses the session.
-- **Tags and folders for downloads.** `max grab download` and the Download page's new Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders. The Tags card shows for audio, and for video when you tick Tags.
+**The AI agent**
+
+- **Whole folders in one step.** One request covers a folder and its subfolders, narrowed by name, size or age ("convert every m4a under Music to mp3"). You get one question with the file count, the size and the files it skips as done; big batches of long jobs go to the background queue; the dashboard shows one card per batch with its progress. A dry run lists the files it would work on.
+- **Plans and questions.** Before multi-step work it shows its plan and waits: go ahead, stop, or say what to change. When a request is unclear it asks one question with choices instead of guessing, and an answer in words counts as your instruction.
+- **It picks the right action.** Every action it can run has a guide: what it's for, which similar action to use instead, and the settings that matter. "Fix the numbering of my songs" sets the track numbers instead of renaming the files.
+- **It checks its work.** A result that is missing or empty counts as a failure, and it tells you.
+- **It remembers.** Tell it a lasting fact or preference ("my music lives in D:/Music") and later sessions start with it. `max ai memory` lists, `--forget`s and `--clear`s the notes; the AI page's **Notes** button shows, adds and deletes them.
+- **It knows where you are.** Each request carries what the folder holds, the jobs running and the jobs that finished since your last request, and Max's last action.
+- **Stop and undo.** Press Ctrl+C once (or **Stop** on the AI page) to end a request after its current step. Say "undo what you just did" or run `max ai undo`: the files the last request made move to Max's backups and the moves, renames and deletes it recorded are reversed.
+- **It sees the computer.** Free disk space, memory, CPU and battery; the programs using the most memory; it stops a program you name after asking (never the system's own); it opens a file, folder or link you ask to see (never programs); and it asks the vision model about an image.
+- **Commands, if you allow them.** Turn on Settings > AI agent > Let the agent run commands, and it can run a program with its arguments when no Max action fits, after showing you the command and getting your yes. Off by default.
+- **Long chats** stay within the token limit (Max summarises the oldest turns), a request may use up to 100,000 tokens, and `AI_FAST_MODEL` can name a cheaper model for those summaries. `ai chat` saves after every request.
+- **Job notices.** The dashboard tells you when a queued job finishes or fails.
+
+**Downloads**
+
+- **Tags and folders.** `max grab download` and the Download page's Tags card set the artist, album, genre and year written into the files. A playlist gives the album its name and numbers the tracks by their place in it (`3/43`); titles like `Artist - Song` give the artist. `--sort-into album` or `artist/album` saves into `Album/` or `Artist/Album/` folders.
 
 ### Changed
 
-- The Download page has one **Whole playlist** box instead of "No playlist" and "Strip playlist". Off, a link to a video inside a playlist checks and downloads only that video; on, it lists the playlist's items to tick. The new Items box ticks the first N (`10`) or ranges (`5-20`, `1-3,7`), and a line counts the ticked items and their length.
+- The Download page has one **Whole playlist** box instead of "No playlist" and "Strip playlist". Off, a link to a video inside a playlist downloads only that video; on, it lists the playlist's items to tick. The Items box ticks the first N (`10`) or ranges (`5-20`, `1-3,7`), and a line counts the ticked items and their length. The Tags card shows for audio, and for video when you tick Tags.
 
 ### Fixed
 
-- The agent's relative paths and patterns (`music/*.m4a`) now start in the agent's folder. They started in the folder Max was launched from, so a batch could find no files and the model retried call after call.
-- The agent no longer runs an identical action twice in one request, and dry runs tell the model nothing ran on purpose.
-- Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and some readers, Max's own among them (mutagen before 1.48), took its last character, `?`, for track 63. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
-- The Browse window's **Max downloads** place opens the folder the Download page saves into, not the empty folder of the Save to setting. Folder pickers list the page's files too, dimmed, so a folder of songs no longer looks empty.
+- Downloaded MP3s no longer show track 63. ffmpeg put the link into the old ID3v1 tag, and some readers took its last character, `?`, for the track number. Max rewrites that tag after each download, and `max audio` ignores the false number in older files.
+- The Browse window's **Max downloads** place opens the folder the Download page saves into. Folder pickers list the page's files too, dimmed, so a folder of songs no longer looks empty.
+- The agent's relative paths and patterns (`music/*.m4a`) start in its own folder, so a batch no longer finds nothing and retries; it no longer runs an identical action twice in one request, or asks again about an action you declined.
+- Undo history keeps its order when two changes happen within one tick of the clock, and so does Activity > History.
+- PyPI shows Max's license and supported Python versions.
+
+### For contributors
+
+- `python scripts/ci_local.py` checks only what changed (1-3 minutes); `--quick` and `--full` run everything. `scripts/agent_eval.py` scores the agent's choices with a real model, and `scripts/release_plan.py` suggests the next version.
 
 ## 1.0.0 (2026-10-06)
 
