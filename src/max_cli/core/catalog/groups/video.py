@@ -19,6 +19,9 @@ from max_cli.core.presets import (
     DEFAULT_VIDEO_TO_AUDIO_QUALITY,
     DENOISE_MODES,
     DENOISE_STRENGTHS,
+    SILENCE_MIN_SECONDS,
+    SILENCE_PADDING_SECONDS,
+    SILENCE_THRESHOLD_DB,
     VIDEO_CRF_BY_LEVEL,
     VIDEO_TO_AUDIO_BITRATES,
 )
@@ -224,6 +227,52 @@ GROUP = Group(
                 ),
                 _output(),
             ),
+            queueable=True,
+        ),
+        Action(
+            group="video",
+            name="cut-silence",
+            guide=(
+                "Use for: removing the pauses from a talk, lecture, tutorial, "
+                "podcast or voice note (jump cuts), so it gets to the point. Not "
+                "for: removing one part by time (video.cut) or background noise "
+                "(video.denoise). How: threshold in dB says what counts as silence "
+                "(-30; -40 for a quiet room, -25 when there is hum); min_silence is "
+                "the shortest pause to cut in seconds (0.6; 1.0 keeps natural "
+                "breaths); padding keeps a little of each pause (0.15 s) so words "
+                "aren't clipped."
+            ),
+            summary="Cut the pauses out of a recording: jump cuts for talks.",
+            operation=f"{OPS}:cut_silence",
+            params=(
+                _each_target(
+                    (file_kinds.VIDEO, file_kinds.AUDIO), "Video or audio file."
+                ),
+                Param(
+                    "threshold",
+                    ParamKind.FLOAT,
+                    "Quieter than this many dB counts as silence, e.g. -30 or -40.",
+                    default=SILENCE_THRESHOLD_DB,
+                    cli=("--threshold", "-t"),
+                ),
+                Param(
+                    "min_silence",
+                    ParamKind.FLOAT,
+                    "Shortest pause to cut, in seconds.",
+                    default=SILENCE_MIN_SECONDS,
+                    cli=("--min-silence", "-m"),
+                ),
+                Param(
+                    "padding",
+                    ParamKind.FLOAT,
+                    "Seconds of each pause to keep at both ends.",
+                    default=SILENCE_PADDING_SECONDS,
+                    cli=("--padding", "-p"),
+                    advanced=True,
+                ),
+                _output(),
+            ),
+            output_name="{stem}_nosilence{suffix}",
             queueable=True,
         ),
         Action(

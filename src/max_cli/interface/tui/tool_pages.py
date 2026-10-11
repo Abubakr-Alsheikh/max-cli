@@ -80,7 +80,7 @@ VIDEO = ToolPageSpec(
     file_prompt="Pick a video or audio file, or paste its path",
     sections=(
         ToolSection("SHRINK & CONVERT", ("compress", "convert", "gif")),
-        ToolSection("CUT & JOIN", ("cut", "concat", "snap")),
+        ToolSection("CUT & JOIN", ("cut", "cut-silence", "concat", "snap")),
         ToolSection(
             "SOUND",
             ("to-audio", "audio-convert", "louder", "mute", "normalize", "denoise"),

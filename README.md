@@ -35,7 +35,7 @@ max                                           # or open the dashboard
 
 ## What Max does
 
-- **Video and audio:** compress, cut, convert, make GIFs, fix volume and noise, edit music tags, sort songs into folders. Max downloads FFmpeg for you the first time you need it.
+- **Video and audio:** compress, cut, cut out the pauses, convert, make GIFs, fix volume and noise, edit music tags, sort songs into folders. Max downloads FFmpeg for you the first time you need it.
 - **PDF:** merge, split, compress, OCR, watermark, lock, fill and flatten forms, compare.
 - **Images:** compress, resize, convert (SVG, AVIF, ICO and more), strip GPS and camera data.
 - **Downloads:** video or audio from YouTube and most other sites, with quality presets and a queue.
@@ -240,6 +240,7 @@ max video to-audio lecture.mp4               # MP3, 192k
 max video to-audio lecture.mp4 --format wav
 max video cut movie.mp4 --start 0:30 --end 1:00
 max video cut movie.mp4 --start 0 --duration 30
+max video cut-silence lecture.mp4             # jump cuts: drop the pauses
 max video gif clip.mp4
 max video snap video.mp4 --time 1:30         # screenshot
 max video louder quiet.mp4 --db 10

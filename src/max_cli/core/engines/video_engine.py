@@ -1,6 +1,7 @@
 """Video work through FFmpeg: compress, convert, trim, effects, recording."""
 
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
@@ -35,6 +36,31 @@ def resolve_concat_inputs(target: Path) -> list[Path]:
     raise ValueError(
         "Provide either a .txt file with file paths or a glob pattern (e.g., *.mp4)"
     )
+
+
+SILENCE_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
+SILENCE_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
+
+
+def parse_silences(log: str) -> list[tuple[float, Optional[float]]]:
+    """The (start, end) pairs ffmpeg's silencedetect logs, in order.
+
+    A start with no end is silence that lasts to the end of the file.
+    """
+    silences: list[tuple[float, Optional[float]]] = []
+    start: Optional[float] = None
+    for line in log.splitlines():
+        started = SILENCE_START.search(line)
+        if started:
+            start = max(0.0, float(started.group(1)))
+            continue
+        ended = SILENCE_END.search(line)
+        if ended and start is not None:
+            silences.append((start, float(ended.group(1))))
+            start = None
+    if start is not None:
+        silences.append((start, None))
+    return silences
 
 
 class VideoEngine(FFmpegEngine):
@@ -116,6 +142,70 @@ class VideoEngine(FFmpegEngine):
                 [ffmpeg, "-y", "-i", str(input_path), *video, "-pass", "2"]
                 + ["-c:a", "aac", "-b:a", f"{audio_kbps}k"]
                 + ["-movflags", "+faststart", "-loglevel", "error", str(output_path)]
+            )
+
+    def find_silences(
+        self, input_path: Path, threshold_db: float, min_seconds: float
+    ) -> list[tuple[float, Optional[float]]]:
+        """Stretches quieter than `threshold_db` for at least `min_seconds`,
+        as (start, end) seconds; the end is None for silence that runs to the
+        end of the file.
+        """
+        cmd = [
+            str(self.ffmpeg_path),
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(input_path),
+            "-af",
+            f"silencedetect=noise={threshold_db}dB:d={min_seconds}",
+            "-vn",
+            "-f",
+            "null",
+            "-",
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"FFmpeg Error: {(e.stderr or '').strip()}") from e
+        return parse_silences(result.stderr)
+
+    def keep_segments(
+        self,
+        input_path: Path,
+        output_path: Path,
+        segments: list[tuple[float, float]],
+        has_video: bool,
+    ) -> None:
+        """Write only the (start, end) stretches of `input_path`, joined.
+
+        The filter goes through a file: a long recording has hundreds of
+        stretches, past the length of a Windows command line.
+        """
+        import tempfile
+
+        between = "+".join(
+            f"between(t,{start:.3f},{end:.3f})" for start, end in segments
+        )
+        graph = f"[0:a]aselect='{between}',asetpts=N/SR/TB[a]"
+        maps = ["-map", "[a]"]
+        if has_video:
+            graph = f"[0:v]select='{between}',setpts=N/FRAME_RATE/TB[v];{graph}"
+            maps = ["-map", "[v]", *maps]
+        with tempfile.TemporaryDirectory(prefix="max-silence-") as folder:
+            script = Path(folder) / "filter.txt"
+            script.write_bytes(graph.encode("utf-8"))
+            self._run(
+                [str(self.ffmpeg_path), "-y", "-i", str(input_path)]
+                + [self._script_option("filter_complex"), str(script), *maps]
+                + ["-loglevel", "error", str(output_path)]
             )
 
     def convert_format(self, input_path: Path, output_path: Path) -> dict[str, Any]:

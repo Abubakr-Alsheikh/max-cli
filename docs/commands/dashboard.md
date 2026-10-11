@@ -77,7 +77,7 @@ Paste a link and press `Enter`, or wait a moment: the page checks the link. Whil
 
 The Video page (`3`) shows one file in its FILE card. Paste a path or press Browse: the card shows the file's length, picture size, frame rate, codecs, size and bitrate (it needs FFmpeg; without it you see only the size).
 
-Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Every action but concat also takes several files, a folder or a pattern such as `*.mp4`: see [Many files at once](#many-files-at-once). Press Run, or **Add to queue** to run it later (every action but snap and concat).
+Pick an action from its group: **Shrink & convert** (compress, convert, gif), **Cut & join** (cut, cut-silence, concat, snap), **Sound** (to-audio, audio-convert, louder, mute, normalize, denoise) or **Picture** (brightness, color, stabilize). Its form opens with your file filled in and the same options as the `max video` command. Every action but concat also takes several files, a folder or a pattern such as `*.mp4`: see [Many files at once](#many-files-at-once). Press Run, or **Add to queue** to run it later (every action but snap and concat).
 
 ## Many files at once
 
