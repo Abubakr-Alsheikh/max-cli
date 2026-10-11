@@ -64,11 +64,15 @@ def compress(
     target: Path,
     output: Optional[Path] = None,
     level: str = DEFAULT_VIDEO_LEVEL,
+    size: Optional[str] = None,
     *,
     engine: Optional["MediaEngine"] = None,
 ) -> ActionResult:
+    """Compress at a quality level, or to fit `size` ("25MB") when given."""
     _require_file(target)
     output = output or sibling_path(target, "_compressed", "mp4")
+    if size:
+        return _compress_to_size(target, output, _size_limit(size), _engine(engine))
     _engine(engine).compress_video(
         target, output, crf=crf_for_level(level), preset=DEFAULT_VIDEO_PRESET
     )
@@ -77,6 +81,131 @@ def compress(
         message=f"Video saved: {output}",
         output_files=[output],
         details={"input_size": _file_size(target), "output_size": _file_size(output)},
+    )
+
+
+# --- compressing to a size ---------------------------------------------------
+
+# The mp4 container and bitrate swings take a few percent: aim below the limit.
+SIZE_HEADROOM = 0.95
+# Below this the picture is a smear; Max says the size is too small instead.
+MIN_VIDEO_KBPS = 50
+# The sound's share of a budget: (whole budget in kbps at least, audio kbps).
+AUDIO_KBPS_BY_BUDGET = ((1000, 128), (400, 96), (150, 64), (0, 32))
+# Fewer pixels look better at a low bitrate: (video kbps below, height).
+HEIGHT_BY_VIDEO_KBPS = ((600, 480), (1500, 720))
+# A second try at a lower bitrate when the first comes out over the limit.
+SIZE_RETRY_MARGIN = 0.97
+
+
+@dataclass
+class Bitrates:
+    """How to spend a size budget on one video."""
+
+    video_kbps: int
+    audio_kbps: int
+    height: Optional[int]  # scale down to this; None keeps the picture size
+
+
+def _size_limit(size: str) -> int:
+    from max_cli.common.utils import parse_size
+
+    try:
+        return parse_size(size)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from None
+
+
+def plan_bitrates(
+    limit_bytes: int, duration: float, has_audio: bool, height: Optional[int]
+) -> Bitrates:
+    """Bitrates whose total fills `limit_bytes` over `duration` seconds.
+
+    Raises ValidationError when the size can't hold a watchable video.
+    """
+    from max_cli.common.utils import format_decimal_size
+
+    budget_kbps = limit_bytes * 8 * SIZE_HEADROOM / duration / 1000
+    audio_kbps = 0
+    if has_audio:
+        audio_kbps = next(
+            kbps for floor, kbps in AUDIO_KBPS_BY_BUDGET if budget_kbps >= floor
+        )
+    video_kbps = int(budget_kbps - audio_kbps)
+    if video_kbps < MIN_VIDEO_KBPS:
+        smallest_audio = AUDIO_KBPS_BY_BUDGET[-1][1] if has_audio else 0
+        smallest = (MIN_VIDEO_KBPS + smallest_audio) * 1000 * duration / 8
+        raise ValidationError(
+            f"{format_decimal_size(limit_bytes)} is too small for {duration:.0f} "
+            f"seconds of video. Give at least "
+            f"{format_decimal_size(smallest / SIZE_HEADROOM)}, "
+            "or cut the video first."
+        )
+    height_cap = next(
+        (cap for below, cap in HEIGHT_BY_VIDEO_KBPS if video_kbps < below), None
+    )
+    return Bitrates(
+        video_kbps,
+        audio_kbps,
+        height_cap if height_cap and height and height > height_cap else None,
+    )
+
+
+def _compress_to_size(
+    target: Path, output: Path, limit_bytes: int, media: "MediaEngine"
+) -> ActionResult:
+    from max_cli.common.utils import format_decimal_size
+
+    input_size = target.stat().st_size
+    limit_text = format_decimal_size(limit_bytes)
+    if input_size <= limit_bytes:
+        return ActionResult(
+            True,
+            f"{target.name} is {format_decimal_size(input_size)}, already under "
+            f"{limit_text}: nothing to do.",
+            details={"input_size": input_size, "output_size": None},
+        )
+    try:
+        facts = facts_from_probe(target, input_size, media.probe_media(target))
+    except RuntimeError as exc:
+        raise ValidationError(f"Max couldn't read {target.name}: {exc}") from None
+    if not facts.duration:
+        raise ValidationError(f"Max couldn't tell how long {target.name} is.")
+    plan = plan_bitrates(
+        limit_bytes, facts.duration, bool(facts.audio_codec), facts.height
+    )
+    media.compress_to_bitrate(
+        target, output, plan.video_kbps, plan.audio_kbps, plan.height
+    )
+    output_size = output.stat().st_size
+    if output_size > limit_bytes:
+        # Two-pass lands close, but a hard scene can push it over: shrink by
+        # the miss and encode once more.
+        plan.video_kbps = max(
+            MIN_VIDEO_KBPS,
+            int(plan.video_kbps * limit_bytes / output_size * SIZE_RETRY_MARGIN),
+        )
+        media.compress_to_bitrate(
+            target, output, plan.video_kbps, plan.audio_kbps, plan.height
+        )
+        output_size = output.stat().st_size
+    fits = output_size <= limit_bytes
+    message = f"Video saved: {output}"
+    if not fits:
+        message += f" ({format_decimal_size(output_size)}, over {limit_text})"
+    return ActionResult(
+        ok=True,
+        message=message,
+        output_files=[output],
+        details={
+            "input_size": input_size,
+            "output_size": output_size,
+            "limit": limit_bytes,
+            "fits": fits,
+            "video_kbps": plan.video_kbps,
+            "audio_kbps": plan.audio_kbps,
+            "height": plan.height,
+        },
     )
 
 

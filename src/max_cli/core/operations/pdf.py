@@ -38,6 +38,8 @@ COMPRESS_FOLDER = "compressed"
 LAST_PAGE = -1
 FIELD_SEPARATOR = "="
 QUALITY_RANGE = range(1, 101)
+# Fitting a size: (dpi, JPEG quality) for pages as images, best first.
+PDF_SIZE_STEPS = ((150, 80), (120, 70), (100, 60), (85, 50), (72, 40), (60, 30))
 
 
 def _engine(engine: Optional["PDFEngine"]) -> "PDFEngine":
@@ -117,21 +119,59 @@ def merge(
     )
 
 
+def _fit(
+    pdf_engine: "PDFEngine", pdf: Path, output: Path, max_bytes: int
+) -> tuple[bool, str]:
+    """Make `output` the best copy of `pdf` that fits `max_bytes`.
+
+    A lossless rewrite first (text stays text), then pages as images at each
+    of PDF_SIZE_STEPS until one fits; the smallest try stays when none does.
+    Returns whether it fits and how it was made.
+    """
+    pdf_engine.optimize_pdf(pdf, output)
+    if output.stat().st_size <= max_bytes:
+        return True, "optimized"
+    smallest = output.stat().st_size
+    trial = output.with_name(f".{output.stem}.trial{PDF_SUFFIX}")
+    how = "optimized"
+    try:
+        for dpi, quality in PDF_SIZE_STEPS:
+            pdf_engine.compress_pdf(pdf, trial, dpi, quality)
+            trial_size = trial.stat().st_size
+            if trial_size < smallest:
+                smallest, how = trial_size, f"pages as images, {dpi} dpi"
+                trial.replace(output)
+            if trial_size <= max_bytes:
+                return True, how
+    finally:
+        trial.unlink(missing_ok=True)
+    return False, how
+
+
 def compress(
     target: Path,
     dpi: int = PDF_COMPRESS_DPI,
     quality: int = PDF_COMPRESS_QUALITY,
+    size: Optional[str] = None,
     *,
     engine: Optional["PDFEngine"] = None,
     emitter: Optional["EventEmitter"] = None,
 ) -> ActionResult:
-    """Rasterize pages to JPEG: good for scans, often larger for text PDFs."""
+    """Rasterize pages to JPEG: good for scans, often larger for text PDFs.
+
+    `size` ("5MB") replaces dpi and quality: each PDF gets the best copy
+    that fits, trying a lossless rewrite first (`_fit`).
+    """
     from max_cli.common.concurrent import process_batch_sequential
-    from max_cli.common.utils import natural_sort_key
+    from max_cli.common.utils import natural_sort_key, parse_size
 
     if not target.exists():
         raise ResourceNotFoundError(f"Target not found: {target}")
     _check_quality(quality)
+    try:
+        max_bytes = parse_size(size) if size else None
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from None
     batch = target.is_dir()
     if batch:
         pdfs = sorted(
@@ -148,12 +188,18 @@ def compress(
 
     def compress_one(pdf: Path) -> dict[str, Any]:
         output = output_dir / pdf.name if batch else _sibling(pdf, "_compressed")
-        pdf_engine.compress_pdf(pdf, output, dpi, quality)
+        fits, how = None, f"pages as images, {dpi} dpi"
+        if max_bytes:
+            fits, how = _fit(pdf_engine, pdf, output, max_bytes)
+        else:
+            pdf_engine.compress_pdf(pdf, output, dpi, quality)
         return {
             "file": pdf.name,
             "output": str(output),
             "original_size": pdf.stat().st_size,
             "new_size": output.stat().st_size,
+            "fits": fits,
+            "how": how,
         }
 
     results = process_batch_sequential(
@@ -166,11 +212,20 @@ def compress(
         if "error" in result
     ]
     saved = sum(result["original_size"] - result["new_size"] for result in done)
+    over_size = [result["file"] for result in done if result["fits"] is False]
+    message = f"Finished! Processed {len(done)}/{len(pdfs)} files."
+    if over_size:
+        message += f" {len(over_size)} still over {size}: the smallest copy is kept."
     return ActionResult(
         ok=bool(done),
-        message=f"Finished! Processed {len(done)}/{len(pdfs)} files.",
+        message=message,
         output_files=[Path(result["output"]) for result in done],
-        details={"files": done, "failed": failed, "saved_bytes": saved},
+        details={
+            "files": done,
+            "failed": failed,
+            "saved_bytes": saved,
+            "over_size": over_size,
+        },
     )
 
 

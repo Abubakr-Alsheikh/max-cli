@@ -104,6 +104,12 @@ def compress_images(
     workers: int = typer.Option(
         settings.MAX_WORKERS, "-j", help="Number of parallel workers."
     ),
+    size: Optional[str] = typer.Option(
+        None,
+        "--size",
+        help="Make each image fit this size, e.g. 2MB or 500KB. PNGs become JPEG,"
+        " or WebP when transparent.",
+    ),
 ):
     """
     All-in-one optimizer. Compress, resize, and convert formats in one go.
@@ -119,6 +125,7 @@ def compress_images(
         quantize=quantize,
         strip=strip,
         workers=workers,
+        size=size,
     )
 
 

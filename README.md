@@ -234,6 +234,7 @@ Click a group to open its examples. Each group's docs page lists every option.
 max video compress video.mp4                 # balanced (CRF 28)
 max video compress video.mp4 --level high    # better quality, bigger file (CRF 23)
 max video compress video.mp4 --level max     # smallest file (CRF 35)
+max video compress video.mp4 --size 25MB     # fits a 25 MB upload limit
 max video convert video.mkv --format mp4
 max video to-audio lecture.mp4               # MP3, 192k
 max video to-audio lecture.mp4 --format wav

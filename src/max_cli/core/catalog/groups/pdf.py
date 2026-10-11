@@ -88,16 +88,29 @@ GROUP = Group(
             group="pdf",
             name="compress",
             guide=(
-                "Use for: shrinking scanned PDFs (photos of pages). Pages become "
+                "Use for: shrinking scanned PDFs (photos of pages), and any PDF "
+                "that must fit a size ('under 5 MB for the portal'). Pages become "
                 "images, so their text can't be selected afterwards. Not for: PDFs "
-                "made from text, such as exports and reports (pdf.optimize). How: "
-                "dpi 150 reads well on screen, 200 or more for printing; quality "
-                "1-100."
+                "made from text, such as exports and reports, with no size to hit "
+                "(pdf.optimize). How: dpi 150 reads well on screen, 200 or more for "
+                "printing; quality 1-100; size (5MB, 900KB) replaces both: it tries "
+                "a lossless rewrite first, then lower dpi until the file fits."
             ),
             summary="Shrink a PDF, or every PDF in a folder, by rasterizing pages."
             " Best for scans.",
             operation=f"{OPS}:compress",
-            params=(_pdf("A PDF, or a folder of PDFs."), _dpi(), _quality()),
+            params=(
+                _pdf("A PDF, or a folder of PDFs."),
+                _dpi(),
+                _quality(),
+                Param(
+                    "size",
+                    ParamKind.TEXT,
+                    "Make each PDF fit this size, e.g. 5MB. Replaces dpi and quality.",
+                    default=None,
+                    cli=("--size",),
+                ),
+            ),
         ),
         Action(
             group="pdf",

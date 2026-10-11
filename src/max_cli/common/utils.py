@@ -32,6 +32,44 @@ def format_size(size_in_bytes: float) -> str:
     return f"{prefix}{size:.2f} {final_unit}"
 
 
+# Decimal units, as upload limits count them ("25 MB" on a mail or chat
+# service is 25,000,000 bytes), so a file sized for "25MB" fits either way.
+SIZE_UNITS = {
+    "": 1,
+    "b": 1,
+    "k": 1000,
+    "kb": 1000,
+    "m": 1000**2,
+    "mb": 1000**2,
+    "g": 1000**3,
+    "gb": 1000**3,
+}
+SIZE_PATTERN = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([a-z]*)\s*$", re.IGNORECASE)
+
+
+def parse_size(text: str) -> int:
+    """Bytes in a size such as "25MB", "800 kb", "1.5G" or "500000".
+
+    Raises ValueError for text that isn't a positive size.
+    """
+    match = SIZE_PATTERN.match(text or "")
+    unit = match.group(2).lower() if match else ""
+    if not match or unit not in SIZE_UNITS:
+        raise ValueError(f"'{text}' isn't a size. Write it like 25MB, 800KB or 1.5GB.")
+    size_bytes = int(float(match.group(1)) * SIZE_UNITS[unit])
+    if size_bytes <= 0:
+        raise ValueError(f"'{text}' is no size at all. Give more than 0.")
+    return size_bytes
+
+
+def format_decimal_size(size_bytes: float) -> str:
+    """A size in the decimal units parse_size reads: 25000000 is "25 MB"."""
+    for unit, factor in (("GB", 1000**3), ("MB", 1000**2), ("KB", 1000)):
+        if size_bytes >= factor:
+            return f"{size_bytes / factor:.3g} {unit}"
+    return f"{size_bytes:.0f} B"
+
+
 def encode_image_to_base64(image_path: Path) -> str:
     """
     Reads a file and returns a base64 string for AI consumption.

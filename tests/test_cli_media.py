@@ -108,6 +108,26 @@ class TestCompress:
         assert "Video saved:" in result.output
         assert "test_compressed.mp4" in result.output
 
+    def test_size_encodes_at_a_bitrate_in_two_passes(self, mock_engine, tmp_path):
+        video = tmp_path / "talk.mp4"
+        video.write_bytes(b"v" * 4_000_000)
+        mock_engine.probe_media.return_value = {
+            "format": {"duration": "60"},
+            "streams": [
+                {"codec_type": "video", "height": 1080},
+                {"codec_type": "audio", "codec_name": "aac"},
+            ],
+        }
+        mock_engine.compress_to_bitrate.side_effect = _write_output
+
+        result = runner.invoke(media_app, ["compress", str(video), "--size", "1MB"])
+
+        assert result.exit_code == 0, result.output
+        mock_engine.compress_video.assert_not_called()
+        args = mock_engine.compress_to_bitrate.call_args.args
+        assert args[:2] == (video, tmp_path / "talk_compressed.mp4")
+        assert "Size: 1MB, two passes" in result.output
+
     def test_queue_adds_task_without_encoding(
         self, mock_engine, dummy_video, no_background_worker
     ):
@@ -123,7 +143,12 @@ class TestCompress:
         assert task.type == TaskType.ACTION
         assert task.payload == {
             "action": "video.compress",
-            "args": {"target": str(dummy_video), "output": None, "level": "max"},
+            "args": {
+                "target": str(dummy_video),
+                "output": None,
+                "level": "max",
+                "size": None,
+            },
         }
 
     def test_engine_error_is_reported(self, mock_engine, dummy_video):

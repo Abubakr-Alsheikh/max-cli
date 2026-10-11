@@ -57,11 +57,13 @@ GROUP = Group(
             group="video",
             name="compress",
             guide=(
-                "Use for: making videos smaller to share, upload or save space. Not "
+                "Use for: making videos smaller to share, upload or save space, "
+                "including 'make it fit in 25 MB' for a mail or chat limit. Not "
                 "for: changing only the container (video.convert) or audio files "
                 "(audio.compress). How: level high keeps the most quality, balanced "
-                "is the usual pick, max makes the smallest file; it writes a new "
-                "file beside the original."
+                "is the usual pick, max makes the smallest file; size (25MB, 800KB) "
+                "aims for that size instead of a level; it writes a new file beside "
+                "the original."
             ),
             summary="Compress a video to H.264 MP4.",
             operation=f"{OPS}:compress",
@@ -81,6 +83,13 @@ GROUP = Group(
                     default=DEFAULT_VIDEO_LEVEL,
                     choices=tuple(VIDEO_CRF_BY_LEVEL),
                     cli=("--level",),
+                ),
+                Param(
+                    "size",
+                    ParamKind.TEXT,
+                    "Aim for this file size, e.g. 25MB or 800KB. Replaces the level.",
+                    default=None,
+                    cli=("--size",),
                 ),
             ),
             queueable=True,

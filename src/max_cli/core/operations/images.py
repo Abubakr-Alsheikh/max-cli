@@ -85,10 +85,20 @@ def _run_batch(
     out_dir.mkdir(exist_ok=True)
     image_engine = _engine(engine)
 
+    # photo.png and photo.jpg both become photo.jpg when the format changes:
+    # images sharing a name keep their old type in it (photo_png.jpg).
+    stems = Counter(image.stem.lower() for image in images)
+
     def process(image: Path) -> dict[str, Any]:
-        name = f"{image.stem}{SINGLE_FILE_SUFFIX}{image.suffix}"
-        output = out_dir / (name if single_file else image.name)
-        return image_engine.process_single_image(image, output, **engine_options)
+        if single_file:
+            name = f"{image.stem}{SINGLE_FILE_SUFFIX}{image.suffix}"
+        elif stems[image.stem.lower()] > 1:
+            name = f"{image.stem}_{image.suffix.lstrip('.').lower()}{image.suffix}"
+        else:
+            name = image.name
+        return image_engine.process_single_image(
+            image, out_dir / name, **engine_options
+        )
 
     results = process_batch_parallel(
         images, process, max_workers=_workers(workers), emitter=emitter, action=label
@@ -106,6 +116,9 @@ def _run_batch(
             }
             for result in done
         ],
+        "over_size": [
+            result["file_name"] for result in done if result.get("fits") is False
+        ],
         "failed": [
             {"file": Path(result["item"]).name, "error": result["error"]}
             for result in failed
@@ -116,6 +129,8 @@ def _run_batch(
     message = f"Output saved to: {out_dir}"
     if failed:
         message += f" ({len(failed)} of {len(images)} images failed)"
+    if details["over_size"]:
+        message += f" ({len(details['over_size'])} still over the size)"
     return ActionResult(
         ok=True,
         message=message,
@@ -133,16 +148,26 @@ def compress(
     quantize: bool = False,
     strip: bool = STRIP_IMAGE_METADATA,
     workers: Optional[int] = None,
+    size: Optional[str] = None,
     *,
     engine: Optional["ImageEngine"] = None,
     emitter: Optional["EventEmitter"] = None,
 ) -> ActionResult:
-    """Compress, resize and convert in one pass. quality None uses DEFAULT_QUALITY."""
+    """Compress, resize and convert in one pass. quality None uses DEFAULT_QUALITY.
+
+    `size` ("2MB") makes each image fit that size; quality is then the most
+    it may use.
+    """
     from max_cli.config import settings
+    from max_cli.common.utils import parse_size
 
     quality = quality if quality is not None else settings.DEFAULT_QUALITY
     if quality not in QUALITY_RANGE:
         raise ValidationError("Quality must be between 1 and 100.")
+    try:
+        max_bytes = parse_size(size) if size else None
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from None
     return _run_batch(
         target,
         "Optimizing",
@@ -155,6 +180,7 @@ def compress(
         force_format="jpg" if force_jpeg else None,
         quantize_png=quantize,
         strip_exif=strip,
+        max_bytes=max_bytes,
     )
 
 

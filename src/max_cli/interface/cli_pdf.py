@@ -100,6 +100,11 @@ def compress_pdf(
         "--quality",
         help="JPEG Quality 1-100 (Lower = smaller file).",
     ),
+    size: Optional[str] = typer.Option(
+        None,
+        "--size",
+        help="Make each PDF fit this size, e.g. 5MB. Replaces --dpi and --quality.",
+    ),
 ):
     """
     Shrink PDFs. Accepts a single file OR a folder (batch mode).
@@ -118,6 +123,7 @@ def compress_pdf(
                 target=target,
                 dpi=dpi,
                 quality=quality,
+                size=size,
                 emitter=emitter,
             )
     finally:
@@ -135,6 +141,12 @@ def compress_pdf(
         return
     log_success(escape(result.message))
     saved = result.details["saved_bytes"]
+    if size:
+        for row in result.details["files"]:
+            console.print(
+                f"[dim]{escape(row['file'])}: {format_size(row['new_size'])}"
+                f" ({escape(row['how'])})[/dim]"
+            )
     if saved > 0:
         console.print(
             f"[green]Total Space Saved:[/green] [bold]{format_size(saved)}[/bold]"
