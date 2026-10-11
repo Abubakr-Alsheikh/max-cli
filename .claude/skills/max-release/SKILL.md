@@ -47,7 +47,7 @@ Then stop and wait for their answer.
 On the level they chose:
 
 1. Branch `release/X.Y.Z` from an up-to-date `main`.
-2. `pyproject.toml`: `version = "X.Y.Z"` (asks first: the guard watches that file).
+2. `pyproject.toml`: `version = "X.Y.Z"`.
 3. `CHANGELOG.md`: a `## X.Y.Z (YYYY-MM-DD)` section at the top with **New**, **Fixed** and **Changed** lists. Write each line for a user (what they can do now, what no longer goes wrong), not the commit subject. A breaking change says what to do instead. The Release workflow publishes this section as the GitHub release notes, so it has to stand alone.
 4. Commit `release: X.Y.Z`. No Claude attribution in commits or PR text.
 
