@@ -34,7 +34,10 @@ GROUP = Group(
                 "quality ss to x (360p to best); playlist_items such as 1-5,8 picks "
                 "items; artist, album, genre and year go into the files' tags; "
                 "track_numbers numbers a playlist's files by their place in it; "
-                "sort_into album or artist/album saves into folders."
+                "sort_into album or artist/album saves into folders; start and end "
+                "(1:00, 5:00) download only that part of the video, faster than "
+                "the whole and then video.cut; exact_cuts starts it on the second "
+                "but is slower."
             ),
             summary="Download a video, its audio, or a playlist.",
             operation=f"{OPS}:download",
@@ -171,6 +174,29 @@ GROUP = Group(
                     default=DOWNLOAD_SORT_NONE,
                     choices=DOWNLOAD_SORT_CHOICES,
                     cli=("--sort-into",),
+                ),
+                Param(
+                    "start",
+                    ParamKind.TEXT,
+                    "Download from this time on, e.g. 1:00. Empty: the beginning.",
+                    default=None,
+                    cli=("--start",),
+                ),
+                Param(
+                    "end",
+                    ParamKind.TEXT,
+                    "Download up to this time, e.g. 5:00. Empty: the end.",
+                    default=None,
+                    cli=("--end",),
+                ),
+                Param(
+                    "exact_cuts",
+                    ParamKind.BOOL,
+                    "Start the part on the second (re-encodes, slower). Off: at "
+                    "the keyframe before, a second or two early.",
+                    default=False,
+                    cli=("--exact-cuts",),
+                    advanced=True,
                 ),
             ),
             queueable=True,

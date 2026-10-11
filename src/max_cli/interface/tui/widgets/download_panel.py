@@ -69,11 +69,15 @@ GRAB_ACTION_ID = "grab.download"
 # The OPTIONS card shows these catalog options. The Format and Quality buttons
 # already cover media type, quality and (for odd heights) resolution.
 ADVANCED_FIELDS = (
+    "start",
+    "end",
     "resolution",
     "subtitles",
     "include_metadata",
     "player_client",
+    "exact_cuts",
 )
+PART_NOTE = "FFmpeg shows no progress for a part"
 # The TAGS card: what goes into the files, and the folders they go in.
 TAG_FIELDS = (
     "artist",
@@ -214,6 +218,17 @@ def audio_choices_for(media: Any) -> list[QualityChoice]:
         )
         for choice in AUDIO_CHOICES
     ]
+
+
+def section_label(values: dict[str, Any]) -> str:
+    """ "1:00-5:00" when a download's values ask for part of the video, else ""."""
+    from max_cli.core.engines.download_section import DownloadSection
+
+    try:
+        section = DownloadSection.parse(values.get("start"), values.get("end"))
+    except ValueError:
+        return ""
+    return section.label() if section else ""
 
 
 def playlist_items(selected: list[int], total: int) -> Optional[str]:
@@ -443,7 +458,10 @@ class DownloadRow(Vertical):
         self.query_one(".row-title", Static).update(Content(title))
 
     def set_started(self) -> None:
-        self._info("Starting...")
+        part = section_label(self.job.values)
+        self._info(
+            f"Downloading {part} only{SEPARATOR}{PART_NOTE}" if part else "Starting..."
+        )
 
     def set_progress(self, percent: float, speed: float, eta: int) -> None:
         parts = [f"{percent:.0f}%"]
@@ -1294,6 +1312,7 @@ class DownloadPanel(Vertical):
     def _validated(self) -> Optional[list[dict[str, Any]]]:
         from max_cli.common.exceptions import MaxError
         from max_cli.core.catalog.runner import coerce_args
+        from max_cli.core.engines.download_section import DownloadSection
 
         links = self._links()
         if not links:
@@ -1312,7 +1331,8 @@ class DownloadPanel(Vertical):
         try:
             for values in all_values:
                 coerce_args(self._action, values)
-        except MaxError as e:
+                DownloadSection.parse(values.get("start"), values.get("end"))
+        except (MaxError, ValueError) as e:
             self._set_status(markup("[$error]$error[/$error]", error=e))
             return None
         return all_values

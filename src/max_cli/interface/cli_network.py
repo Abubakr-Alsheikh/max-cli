@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
 from rich import box
@@ -24,6 +24,7 @@ from max_cli.core.presets import (
 from max_cli.interface.event_subscriber import EventSubscriber
 
 if TYPE_CHECKING:
+    from max_cli.core.engines.download_section import DownloadSection
     from max_cli.core.engines.download_tags import DownloadTags
 
 app = typer.Typer(help="Download media from various platforms.")
@@ -211,6 +212,17 @@ def download_media(
         help="Save into Album/ or Artist/Album/ folders.",
         case_sensitive=False,
     ),
+    start: Optional[str] = typer.Option(
+        None, "--start", help="Download from this time on, e.g. 1:00."
+    ),
+    end: Optional[str] = typer.Option(
+        None, "--end", help="Download up to this time, e.g. 5:00."
+    ),
+    exact_cuts: bool = typer.Option(
+        False,
+        "--exact-cuts",
+        help="Start the part on the second (re-encodes, slower).",
+    ),
 ):
     """
     Download media using saved preferences or overrides.
@@ -221,8 +233,16 @@ def download_media(
         max grab download -v https://...                    # Force video
         max grab download -a https://...                    # Audio only
         max grab download -a --sort-into artist/album <playlist link>
+        max grab download --start 1:00 --end 5:00 https://...  # only that part
     """
+    from max_cli.core.engines.download_section import DownloadSection
     from max_cli.core.engines.download_tags import DownloadTags
+
+    try:
+        section = DownloadSection.parse(start, end, exact_cuts)
+    except ValueError as exc:
+        log_error(str(exc))
+        raise typer.Exit(1) from None
 
     final_quality = quality if quality else settings.GRAB_QUALITY
     include_metadata = False if no_meta else settings.GRAB_INCLUDE_METADATA
@@ -304,6 +324,7 @@ def download_media(
                     custom_height=resolution,
                     player_client=player_client_name,
                     tags=tags,
+                    section=section,
                 )
                 if task_id:
                     queued_ids.append(task_id)
@@ -348,6 +369,7 @@ def download_media(
             progress,
             player_client_name,
             tags=tags,
+            section=section,
         )
         if queue and no_process:
             console.print("[dim]Queued. Run 'max queue process' to start it.[/dim]")
@@ -379,6 +401,7 @@ def _add_to_queue_or_download(
     show_progress: bool = True,
     player_client: Optional[str] = None,
     tags: Optional["DownloadTags"] = None,
+    section: Optional["DownloadSection"] = None,
 ) -> None:
     """Add to queue or download immediately based on settings."""
     if queue_enabled:
@@ -394,6 +417,7 @@ def _add_to_queue_or_download(
             custom_height=custom_height,
             player_client=player_client,
             tags=tags,
+            section=section,
         )
     else:
         eng = _get_engine()
@@ -412,7 +436,20 @@ def _add_to_queue_or_download(
             show_progress=show_progress,
             player_client=player_client,
             tags=tags,
+            section=section,
         )
+
+
+def _section_args(section: Optional["DownloadSection"]) -> dict[str, Any]:
+    """grab.download's start, end and exact_cuts for `section`."""
+    if section is None:
+        return {}
+    # Plain seconds keep fractions ("90.5"); grab.download reads them back.
+    return {
+        "start": f"{section.start:g}",
+        "end": f"{section.end:g}" if section.end is not None else None,
+        "exact_cuts": section.exact,
+    }
 
 
 def _download_immediate(
@@ -429,6 +466,7 @@ def _download_immediate(
     show_progress: bool = True,
     player_client: Optional[str] = None,
     tags: Optional["DownloadTags"] = None,
+    section: Optional["DownloadSection"] = None,
 ) -> None:
     """Download a single item immediately."""
     should_check_playlist = ("list=" in url) and (not no_playlist) and (not index)
@@ -472,6 +510,11 @@ def _download_immediate(
             "[dim]YouTube downloads may be limited or fail. "
             "Install Deno: winget install DenoLand.Deno[/dim]"
         )
+    if section:
+        console.print(
+            f"[dim]Only {section.label()}. FFmpeg fetches just that part, and "
+            "shows no progress until it's done.[/dim]"
+        )
     if subtitles:
         console.print("[dim]Subtitles: Enabled[/dim]")
     if not include_metadata:
@@ -498,6 +541,7 @@ def _download_immediate(
             player_client=player_client or "auto",
             engine=_get_engine(),
             **(dataclasses.asdict(tags) if tags else {}),
+            **_section_args(section),
         )
         for saved in result.output_files:
             # Plain Text: titles like "Song [red]" are not markup. No wrapping,
@@ -586,9 +630,7 @@ def pot_setup(
     console.print(
         "[cyan]This will install the bgutil POT provider to fix YouTube 403/SABR errors:[/cyan]"
     )
-    console.print(
-        f"  1. pip install -U {POT_PROVIDER_PACKAGE} (yt-dlp plugin)"
-    )
+    console.print(f"  1. pip install -U {POT_PROVIDER_PACKAGE} (yt-dlp plugin)")
     console.print(
         "  2. git clone bgutil-ytdlp-pot-provider (to ~/bgutil-ytdlp-pot-provider)"
     )
@@ -612,10 +654,14 @@ def pot_setup(
         if not Confirm.ask(
             "Download and set up the bgutil token server (requires git + Deno)?"
         ):
-            console.print("[yellow]Skipping server setup. Plugin alone is not enough.[/yellow]")
+            console.print(
+                "[yellow]Skipping server setup. Plugin alone is not enough.[/yellow]"
+            )
             raise typer.Exit(code=1)
 
-    with console.status("[bold]Setting up token server (git clone + deno install)...[/bold]"):
+    with console.status(
+        "[bold]Setting up token server (git clone + deno install)...[/bold]"
+    ):
         result = eng.setup_pot_server()
     if not result["ok"]:
         log_error(f"Server setup failed:\n{result['output'][-800:]}")

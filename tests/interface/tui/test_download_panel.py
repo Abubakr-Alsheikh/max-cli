@@ -755,9 +755,51 @@ async def test_options_are_compact_and_reach_the_download():
             app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
 
-    # Two fields and four checkboxes. It was 30 rows: one field per 5 rows.
-    assert height <= 12
+    # Four fields (start, end, resolution, player) and four checkboxes, two
+    # to a row. It was 30 rows: one field per 5 rows.
+    assert height <= 15
     assert download.call_args.kwargs["subtitles"] is True
+
+
+@pytest.mark.asyncio
+async def test_start_and_end_download_part_of_the_video():
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK) as download:
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _settle(app, pilot)
+            app.query_one("#dl-advanced #field-start", Input).value = "1:00"
+            app.query_one("#dl-advanced #field-end", Input).value = "5:00"
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+
+    assert download.call_args.kwargs["start"] == "1:00"
+    assert download.call_args.kwargs["end"] == "5:00"
+
+
+@pytest.mark.asyncio
+async def test_a_bad_time_stops_before_downloading():
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK) as download:
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _settle(app, pilot)
+            app.query_one("#dl-advanced #field-start", Input).value = "5:00"
+            app.query_one("#dl-advanced #field-end", Input).value = "1:00"
+            app.query_one("#dl-url", Input).value = URL
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+            status = str(app.query_one("#dl-status").render())
+
+    download.assert_not_called()
+    assert "end must come after" in status
+
+
+def test_section_label_reads_a_rows_values():
+    from max_cli.interface.tui.widgets.download_panel import section_label
+
+    assert section_label({"start": "1:00", "end": "5:00"}) == "1:00-5:00"
+    assert section_label({"url": URL}) == ""
+    assert section_label({"start": "soon"}) == ""
 
 
 @pytest.mark.asyncio
