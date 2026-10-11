@@ -62,6 +62,17 @@ class AudioEngine(FFmpegEngine):
             "message": f"Extracted audio: {output_path.name}",
         }
 
+    def speech_audio(self, input_path: Path, output_path: Path) -> None:
+        """The sound of an audio or video file as a small MP3 for speech
+        recognition: one channel at 16 kHz, 48 kbps (about 21 MB an hour).
+        Gemini hears audio at 16 kbps anyway, so more only costs upload time.
+        """
+        self._run(
+            [str(self.ffmpeg_path), "-y", "-i", str(input_path), "-vn"]
+            + ["-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "48k"]
+            + ["-loglevel", "error", str(output_path)]
+        )
+
     def adjust_volume(self, input_path: Path, output_path: Path, db: float) -> None:
         """
         Changes audio volume.

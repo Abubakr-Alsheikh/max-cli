@@ -95,7 +95,7 @@ Which actions take many files:
 | Page | Actions |
 |------|---------|
 | Video | every action but concat |
-| Audio | compress, denoise, clear |
+| Audio | compress, denoise, transcribe, clear |
 | PDF | split, lock, rip, ocr, form-flatten, optimize |
 | Files | backup |
 
@@ -105,7 +105,7 @@ The Images page's actions take a folder on their own; see [Images page](#images-
 
 The Audio page (`4`) works on one song or a folder of music. Pick a song: the FILE OR FOLDER card shows its length, bitrate, sample rate, size and whether it has cover art, then its title, artist, album, year, track and genre. Pick a folder: it counts the tracks, adds up their length and size, lists their formats, and warns you how many have no title or artist.
 
-The actions sit in three groups: **Tags** (set, get, batch, clear), **Sort** (organize) and **Sound** (compress, denoise). **set** opens with the song's current tags filled in, so you change only what's wrong; a field you've already typed in keeps your text. **organize** starts with folders by artist and album, and its **Dry run** box shows the moves before anything happens. Moves can be undone from the Files page (**undo**). compress, denoise and clear also take several songs, a folder or a pattern (see [Many files at once](#many-files-at-once)), and compress and denoise can go to the queue.
+The actions sit in three groups: **Tags** (set, get, batch, clear), **Sort** (organize) and **Sound** (compress, denoise, transcribe). **set** opens with the song's current tags filled in, so you change only what's wrong; a field you've already typed in keeps your text. **organize** starts with folders by artist and album, and its **Dry run** box shows the moves before anything happens. Moves can be undone from the Files page (**undo**). compress, denoise, transcribe and clear also take several songs, a folder or a pattern (see [Many files at once](#many-files-at-once)), and compress, denoise and transcribe can go to the queue.
 
 ## Images page
 

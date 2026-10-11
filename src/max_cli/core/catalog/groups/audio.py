@@ -7,8 +7,10 @@ from max_cli.core.presets import (
     AUDIO_ORGANIZE_PATTERNS,
     DEFAULT_AUDIO_COMPRESS_QUALITY,
     DEFAULT_AUDIO_ORGANIZE_PATTERN,
+    DEFAULT_TRANSCRIPT_FORMAT,
     DENOISE_MODES,
     DENOISE_STRENGTHS,
+    TRANSCRIPT_FORMATS,
 )
 
 OPS = "max_cli.core.operations.audio"
@@ -97,6 +99,60 @@ GROUP = Group(
                 ),
             ),
             output_name="{stem}_compressed.mp3",
+            queueable=True,
+        ),
+        Action(
+            group="audio",
+            name="transcribe",
+            guide=(
+                "Use for: turning speech in an audio or video file into text: a "
+                "transcript of a meeting, lecture, podcast or voice note, subtitles "
+                "for a video, or a translation or summary of what is said. It sends "
+                "the sound to Google Gemini and needs GEMINI_API_KEY. Not for: "
+                "questions about a picture (look_at_image). How: format txt for a "
+                "transcript, srt for subtitles a player loads next to the video; "
+                "prompt adds instructions in the user's words, such as 'translate "
+                "to Arabic', 'summarise in 5 points' or how to spell names; model "
+                "overrides GEMINI_MODEL."
+            ),
+            summary="Write a transcript or subtitles of speech with Google Gemini.",
+            operation=f"{OPS}:transcribe",
+            params=(
+                _each_target(
+                    (file_kinds.AUDIO, file_kinds.VIDEO), "Audio or video file."
+                ),
+                Param(
+                    "format",
+                    ParamKind.CHOICE,
+                    "txt for a transcript, srt for subtitles.",
+                    default=DEFAULT_TRANSCRIPT_FORMAT,
+                    choices=TRANSCRIPT_FORMATS,
+                    cli=("--format", "-f"),
+                ),
+                Param(
+                    "prompt",
+                    ParamKind.TEXT,
+                    "Extra instructions, e.g. 'translate to Arabic' or 'summarise it'.",
+                    default=None,
+                    cli=("--prompt", "-p"),
+                ),
+                Param(
+                    "model",
+                    ParamKind.TEXT,
+                    "Gemini model. Default: GEMINI_MODEL, else gemini-flash-latest.",
+                    default=None,
+                    cli=("--model",),
+                    advanced=True,
+                ),
+                Param(
+                    "output",
+                    ParamKind.OUTPUT,
+                    "Output file. Default: the input's name with .txt or .srt.",
+                    default=None,
+                    cli=("-o", "--output"),
+                ),
+            ),
+            output_name="{stem}.{format}",
             queueable=True,
         ),
         Action(

@@ -1,12 +1,12 @@
 # Audio Commands
 
-Manage audio files: read/write metadata, compress large recordings, and organize your music library using the `max audio` command group.
+Manage audio files: read/write metadata, compress large recordings, write transcripts and subtitles, and organize your music library using the `max audio` command group.
 
 Tags use the same names in every format (title, artist, album ...). `batch` and `organize` take files, a folder (its audio files, not those in subfolders) or a pattern such as `"*.mp3"`. The dashboard's Audio page runs every command here.
 
 ## Several files at once
 
-`compress`, `denoise` and `clear` take several files, a folder or a pattern as well as one file:
+`compress`, `denoise`, `transcribe` and `clear` take several files, a folder or a pattern as well as one file:
 
 ```bash
 max audio compress a.wav b.wav                # these two files
@@ -50,6 +50,38 @@ max audio compress recording.wav -o recording_compressed.mp3 -q m
 
 # Every audio file in a folder, in the background
 max audio compress ~/Recordings --queue
+```
+
+## transcribe
+
+Write a transcript (`.txt`) or subtitles (`.srt`) of the speech in an audio or video file, with Google Gemini.
+
+```bash
+max audio transcribe TARGET... [-f txt|srt] [-p PROMPT] [--model MODEL] [-o OUTPUT] [--queue]
+```
+
+Max turns the sound into a small speech MP3 (one channel, 16 kHz, about 21 MB an hour; a video's picture never leaves your computer), uploads it to Gemini's Files API, asks for the transcript, writes the answer next to the input and deletes the upload. It needs `GEMINI_API_KEY` (get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and add it on the dashboard's Settings page or with `max config setup`), whichever AI the agent uses.
+
+- **txt** (default): the words as spoken, in the language spoken, with a new paragraph when the speaker or topic changes and `Speaker 1:` labels when several people talk.
+- **srt**: subtitles a video player loads next to the video (`talk.mp4` gives `talk.srt`). Gemini returns timed cues, and Max writes the SRT itself: in time order, inside the recording, no overlaps, two lines at most.
+
+**Options:**
+
+- `--format`, `-f` - `txt` or `srt` (default: `txt`)
+- `--prompt`, `-p` - Extra instructions, added to Max's own and winning where they differ: `"Translate to Arabic"`, `"Summarise it in 5 bullet points"`, `"The speakers are Sara and Omar"`, `"Spell the product MaxCLI"`
+- `--model` - The Gemini model (default: `GEMINI_MODEL`, else `gemini-flash-latest`)
+- `-o`, `--output` - Output file (default: the input's name with `.txt` or `.srt`)
+- `--queue` - Add one job per file to the background queue
+
+A very long recording can hit the model's output limit: Max keeps a cut-off transcript and says so, but saves no cut-off subtitles. Cut the recording into parts (`max video cut`) and transcribe each.
+
+**Examples:**
+
+```bash
+max audio transcribe meeting.m4a
+max audio transcribe lecture.mp4 -f srt
+max audio transcribe interview.mp3 -p "Translate to Arabic"
+max audio transcribe ~/VoiceNotes --queue
 ```
 
 ## denoise
