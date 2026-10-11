@@ -699,10 +699,10 @@ class DownloadPanel(Vertical):
     #dl-main {
         height: auto;
         grid-size: 2;
-        grid-columns: 3fr 2fr;
+        grid-columns: 5fr 4fr;
         grid-gutter: 0 2;
     }
-    #dl-left {
+    #dl-left, #dl-right {
         height: auto;
     }
     #dl-preview-title {
@@ -963,6 +963,22 @@ class DownloadPanel(Vertical):
                             "or two early.",
                         )
                     yield Static(PART_WHOLE_HINT, id="dl-part-summary")
+                with Vertical(id="dl-tags", classes="card"):
+                    yield Static(TAGS_HINT, id="dl-tags-hint")
+                    yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
+
+            with Vertical(id="dl-right"):
+                with Vertical(id="dl-output-card", classes="card"):
+                    yield Label("FORMAT", classes="field-caption")
+                    with Horizontal(id="dl-format-row", classes="segmented"):
+                        yield Button("Video", id="fmt-video")
+                        yield Button("Audio (MP3)", id="fmt-audio")
+                    yield Label("QUALITY", classes="field-caption")
+                    yield Grid(id="dl-quality")
+                    with Horizontal(id="dl-actions"):
+                        yield Button("⬇ Download", id="btn-download", variant="success")
+                        yield Button("Queue for later", id="btn-queue")
+                    yield Static("", id="dl-status")
                 with Vertical(id="dl-advanced", classes="card"):
                     yield ActionForm(
                         self._action, include=ADVANCED_FIELDS, compact=True
@@ -982,21 +998,6 @@ class DownloadPanel(Vertical):
                             tooltip="Set the artist, album and folders for "
                             "videos too. Audio always shows them.",
                         )
-                with Vertical(id="dl-tags", classes="card"):
-                    yield Static(TAGS_HINT, id="dl-tags-hint")
-                    yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
-
-            with Vertical(id="dl-output-card", classes="card"):
-                yield Label("FORMAT", classes="field-caption")
-                with Horizontal(id="dl-format-row", classes="segmented"):
-                    yield Button("Video", id="fmt-video")
-                    yield Button("Audio (MP3)", id="fmt-audio")
-                yield Label("QUALITY", classes="field-caption")
-                yield Grid(id="dl-quality")
-                with Horizontal(id="dl-actions"):
-                    yield Button("⬇ Download", id="btn-download", variant="success")
-                    yield Button("Queue for later", id="btn-queue")
-                yield Static("", id="dl-status")
 
         with Vertical(id="dl-transfers", classes="card"):
             with TabbedContent(id="dl-tabs"):
@@ -1511,7 +1512,11 @@ class DownloadPanel(Vertical):
                     else None
                 )
         size = short_size(size_bytes) if size_bytes else ""
-        label = f"⬇ Download {what}{part}" + (f" · {size}" if size else "")
+        # A part names itself instead of the quality, which its chip shows:
+        # the button has room for one short line.
+        label = (f"⬇ {part.lstrip(' ·')}" if part else f"⬇ Download {what}") + (
+            f" · {size}" if size else ""
+        )
         selected = self._selected_items()
         if selected is not None:
             total = len(self._media.entries)
