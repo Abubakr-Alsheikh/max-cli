@@ -18,6 +18,7 @@ from max_cli.core.presets import (
     AUDIO_COMPRESS_BITRATES,
     DEFAULT_AUDIO_COMPRESS_QUALITY,
     DEFAULT_AUDIO_ORGANIZE_PATTERN,
+    DEFAULT_TRANSCRIPT_FORMAT,
     bitrate_for_quality,
 )
 from max_cli.interface.batch_cli import (
@@ -153,6 +154,68 @@ def compress_audio(
             f"Size: {format_size(before)} -> [bold green]{format_size(after)}[/bold green]"
             f" (-{reduction:.1f}%)"
         )
+
+
+@app.command("transcribe")
+def transcribe_cmd(
+    target: list[Path] = typer.Argument(
+        ..., help="Audio or video file. Or several files, a folder, or a pattern."
+    ),
+    format: str = typer.Option(
+        DEFAULT_TRANSCRIPT_FORMAT,
+        "--format",
+        "-f",
+        help="txt for a transcript, srt for subtitles.",
+    ),
+    prompt: Optional[str] = typer.Option(
+        None,
+        "--prompt",
+        "-p",
+        help="Extra instructions, e.g. 'translate to Arabic' or 'summarise it'.",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Gemini model. Default: GEMINI_MODEL, else gemini-flash-latest.",
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "-o", "--output", help="Output file. Default: the input's name."
+    ),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
+):
+    """
+    Write a transcript or subtitles of the speech in an audio or video file.
+
+    Max sends the sound (not the picture) to Google Gemini, which needs
+    GEMINI_API_KEY, and deletes the upload afterwards.
+    """
+    arguments = {
+        "target": target,
+        "format": format,
+        "prompt": prompt,
+        "model": model,
+        "output": output,
+    }
+    if run_batch(
+        "audio.transcribe",
+        arguments,
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+    ):
+        return
+    engine = _get_media_engine()
+    with console.status("[bold green]Gemini is listening...[/bold green]"):
+        result = _run(
+            _ops().transcribe,
+            "Transcription failed",
+            **{**arguments, "target": target[0]},
+            engine=engine,
+        )
+    if result is not None:
+        log_success(escape(result.message))
 
 
 @app.command("denoise")

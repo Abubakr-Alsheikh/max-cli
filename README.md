@@ -99,7 +99,7 @@ max ai chat
 | Group | What it does | Example | Docs |
 |-------|--------------|---------|------|
 | `max video` | Compress, convert, cut, GIF, volume, noise, color, stabilize, record, stream | `max video compress movie.mp4` | [Video](docs/commands/media.md) |
-| `max audio` | Tags, compress, denoise, sort songs into folders | `max audio organize "*.mp3" --pattern artist` | [Audio](docs/commands/audio.md) |
+| `max audio` | Tags, compress, denoise, transcripts and subtitles, sort songs into folders | `max audio organize "*.mp3" --pattern artist` | [Audio](docs/commands/audio.md) |
 | `max images` | Compress, resize, convert, strip metadata | `max images compress ./photos` | [Images](docs/commands/images.md) |
 | `max pdf` | Merge, split, compress, OCR, stamp, lock, forms, compare | `max pdf bundle contracts/` | [PDF](docs/commands/pdf.md) |
 | `max grab` | Download video or audio from YouTube and other sites | `max grab download URL -q h` | [Download](docs/commands/grab.md) |
@@ -127,7 +127,7 @@ max pdf ocr scans/ --redo                     # redo files that already have a r
 - Two files whose results would share a name (`clip.mov` and `clip.mp4` both make `clip_compressed.mp4`) don't both run: Max runs the first and names the others.
 - If one file fails, the others still run, and the command exits with code 1.
 
-These commands take batches: every `max video` command except `concat`, `record`, `stream` and `preview`; `max audio compress`, `denoise` and `clear`; `max pdf split`, `lock`, `rip`, `ocr`, `form-flatten` and `optimize`; `max files backup`. `max images` commands took folders already. `max files shred` and `max pdf stamp` take one file on purpose.
+These commands take batches: every `max video` command except `concat`, `record`, `stream` and `preview`; `max audio compress`, `denoise`, `transcribe` and `clear`; `max pdf split`, `lock`, `rip`, `ocr`, `form-flatten` and `optimize`; `max files backup`. `max images` commands took folders already. `max files shred` and `max pdf stamp` take one file on purpose.
 
 ## Background jobs
 
@@ -141,7 +141,7 @@ max queue cancel <task-id>
 max queue retry <task-id>
 ```
 
-`--queue` works on the video batch commands except `snap`, on `max audio compress` and `denoise`, `max pdf ocr` and `max grab download`. The dashboard, the CLI and the worker share one queue, so a job you add in one shows up in the others. If the worker crashes, the next one puts its unfinished jobs back in line. `max queue process` runs the queue in your terminal instead. See [Queue](docs/commands/queue.md).
+`--queue` works on the video batch commands except `snap`, on `max audio compress`, `denoise` and `transcribe`, `max pdf ocr` and `max grab download`. The dashboard, the CLI and the worker share one queue, so a job you add in one shows up in the others. If the worker crashes, the next one puts its unfinished jobs back in line. `max queue process` runs the queue in your terminal instead. See [Queue](docs/commands/queue.md).
 
 ## The AI agent
 
@@ -262,6 +262,8 @@ max audio set song.mp3 --artist "Artist" --album "Album"
 max audio batch "folder/*.mp3" --album "My Album" --artist "Band"
 max audio organize "*.mp3" --pattern artist
 max audio compress recording.wav
+max audio transcribe meeting.m4a             # transcript with Google Gemini
+max audio transcribe talk.mp4 -f srt -p "Translate to Arabic"
 max audio denoise podcast.mp3
 max audio clear song.mp3                     # remove every tag
 ```

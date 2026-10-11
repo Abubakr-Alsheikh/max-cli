@@ -240,7 +240,7 @@ AUDIO = ToolPageSpec(
     sections=(
         ToolSection("TAGS", ("set", "get", "batch", "clear")),
         ToolSection("SORT", ("organize",)),
-        ToolSection("SOUND", ("compress", "denoise")),
+        ToolSection("SOUND", ("compress", "denoise", "transcribe")),
     ),
     describe=describe_audio,
     file_title="FILE OR FOLDER",

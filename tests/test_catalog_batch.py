@@ -25,8 +25,17 @@ TEMPLATED = [
 
 
 @pytest.mark.parametrize("action", TEMPLATED, ids=[a.id for a in TEMPLATED])
-def test_each_name_template_matches_what_the_operation_writes(action, tmp_path):
+def test_each_name_template_matches_what_the_operation_writes(
+    action, tmp_path, monkeypatch
+):
     """A wrong template would redo finished files, or skip unfinished ones."""
+    from max_cli.core.engines.gemini_files import Answer
+    from max_cli.core.operations import audio
+
+    # transcribe asks Google Gemini.
+    gemini = MagicMock()
+    gemini.ask.return_value = Answer("Hello.", cut_off=False)
+    monkeypatch.setattr(audio, "_gemini_client", lambda: gemini)
     source = tmp_path / SAMPLE_INPUT[action.each_param().kinds[0]]
     source.write_bytes(b"\0")
     args = {"target": str(source), **REQUIRED.get(action.id, {})}

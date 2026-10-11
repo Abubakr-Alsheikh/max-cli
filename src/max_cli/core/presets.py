@@ -36,6 +36,12 @@ COLOR_PRESETS = ("vivid", "vintage", "noir", "warm", "cool", "fade")
 DENOISE_MODES = ("auto", "hiss", "hum", "speech")
 DENOISE_STRENGTHS = ("mild", "medium", "aggressive")
 
+# --- audio transcribe: what Gemini writes, and with which model --------------
+TRANSCRIPT_FORMATS = ("txt", "srt")
+DEFAULT_TRANSCRIPT_FORMAT = "txt"
+# Used when GEMINI_MODEL is empty; the -latest alias follows Google's newest Flash.
+DEFAULT_TRANSCRIBE_MODEL = "gemini-flash-latest"
+
 # --- video cut-silence: what counts as a pause, and what of it stays ---------
 SILENCE_THRESHOLD_DB = -30.0  # quieter than this is silence
 SILENCE_MIN_SECONDS = 0.6  # pauses shorter than this stay

@@ -8,6 +8,8 @@
 
 - **Cut the pauses.** `max video cut-silence lecture.mp4` removes the dead air from talks, lectures, podcasts and voice notes (jump cuts), keeping a little of each pause so words aren't clipped. `--threshold`, `--min-silence` and `--padding` tune it; it works on video and audio files, on folders and in the queue, and on the dashboard's Video page.
 
+- **Transcripts and subtitles.** `max audio transcribe meeting.m4a` writes what was said, and `-f srt` writes subtitles for a video. Max sends only the sound to Google Gemini (it needs `GEMINI_API_KEY`) and deletes the upload afterwards. `--prompt` adds your own instructions: translate, summarise, name the speakers. It runs on folders and in the queue, on the dashboard's Audio page, and the AI agent can use it.
+
 ### Fixed
 
 - `max images compress` and `convert` on a folder no longer overwrite one image with another when two share a name (`cat.png` and `cat.jpg` both becoming `cat.jpg`): they come out as `cat_png.jpg` and `cat_jpg.jpg`.
