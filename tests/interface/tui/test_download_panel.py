@@ -34,6 +34,8 @@ from max_cli.interface.tui.widgets.download_panel import (
     short_size,
 )
 
+from .waiting import wait_until
+
 URL = "https://www.youtube.com/watch?v=abc"
 DOWNLOAD = "max_cli.core.operations.grab.download"
 PROBE = "max_cli.core.operations.grab.probe"
@@ -755,50 +757,166 @@ async def test_options_are_compact_and_reach_the_download():
             app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
 
-    # Four fields (start, end, resolution, player) and four checkboxes, two
-    # to a row. It was 30 rows: one field per 5 rows.
-    assert height <= 15
+    # Two fields and four checkboxes. It was 30 rows: one field per 5 rows.
+    assert height <= 12
     assert download.call_args.kwargs["subtitles"] is True
 
 
+PART_MEDIA_URL = "https://www.youtube.com/watch?v=abc&t=1m30s"
+
+
+def _part_media():
+    return MediaInfo(
+        url=PART_MEDIA_URL,
+        title="Tour",
+        duration=754,
+        qualities=[QualityOption(1080, 412_000_000)],
+    )
+
+
+async def _checked(app, pilot, url: str = PART_MEDIA_URL) -> None:
+    with patch(PROBE, return_value=_part_media()):
+        await _settle(app, pilot)
+        app.query_one("#dl-url", Input).value = url
+        app.query_one("#btn-check", Button).press()
+        await wait_until(pilot, lambda: app.query_one(DownloadPanel)._media is not None)
+
+
 @pytest.mark.asyncio
-async def test_start_and_end_download_part_of_the_video():
+async def test_the_whole_video_is_the_default_and_sends_no_times():
     app = PanelApp()
     with patch(DOWNLOAD, return_value=OK) as download:
         async with app.run_test(size=(140, 60)) as pilot:
             await _settle(app, pilot)
-            app.query_one("#dl-advanced #field-start", Input).value = "1:00"
-            app.query_one("#dl-advanced #field-end", Input).value = "5:00"
+            times_shown = app.query_one("#dl-part-times").display
             app.query_one("#dl-url", Input).value = URL
             app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
 
-    assert download.call_args.kwargs["start"] == "1:00"
-    assert download.call_args.kwargs["end"] == "5:00"
+    assert times_shown is False
+    assert download.call_args.kwargs["start"] is None
+    assert download.call_args.kwargs["end"] is None
 
 
 @pytest.mark.asyncio
-async def test_a_bad_time_stops_before_downloading():
+async def test_only_part_sends_the_times_and_names_the_part():
     app = PanelApp()
     with patch(DOWNLOAD, return_value=OK) as download:
         async with app.run_test(size=(140, 60)) as pilot:
+            await _checked(app, pilot)
+            # The link's t=1m30s fills From; To shows the video's length.
+            start = app.query_one("#dl-part-start", Input).value
+            end_hint = app.query_one("#dl-part-end", Input).placeholder
+            app.query_one("#part-only", Button).press()
+            await pilot.pause()
+            app.query_one("#dl-part-end", Input).value = "5:00"
+            app.query_one("#dl-part-exact").value = True
+            await pilot.pause()
+            summary = str(app.query_one("#dl-part-summary").render())
+            label = str(app.query_one("#btn-download", Button).label)
+            subtitle = app.query_one("#dl-part").border_subtitle
+            app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
-            app.query_one("#dl-advanced #field-start", Input).value = "5:00"
-            app.query_one("#dl-advanced #field-end", Input).value = "1:00"
-            app.query_one("#dl-url", Input).value = URL
+
+    assert (start, end_hint) == ("1:30", "12:34")
+    assert "1:30 to 5:00" in summary
+    assert "3:30 of 12:34" in summary
+    assert "about 109 MB" in summary  # 393 MB x 210 / 754 seconds
+    assert "exact cuts, slower" in summary
+    assert "1:30-5:00" in label and "109 MB" in label
+    assert subtitle == "1:30-5:00"
+    kwargs = download.call_args.kwargs
+    assert (kwargs["start"], kwargs["end"], kwargs["exact_cuts"]) == (
+        "1:30",
+        "5:00",
+        True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_bad_part_times_stop_before_downloading():
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK) as download:
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _checked(app, pilot)
+            app.query_one("#part-only", Button).press()
+            await pilot.pause()
+            app.query_one("#dl-part-start", Input).value = "5:00"
+            app.query_one("#dl-part-end", Input).value = "1:00"
+            await pilot.pause()
+            summary = str(app.query_one("#dl-part-summary").render())
             app.query_one("#btn-download", Button).press()
             await _settle(app, pilot)
             status = str(app.query_one("#dl-status").render())
 
     download.assert_not_called()
+    assert "end must come after" in summary
     assert "end must come after" in status
 
 
-def test_section_label_reads_a_rows_values():
-    from max_cli.interface.tui.widgets.download_panel import section_label
+@pytest.mark.asyncio
+async def test_a_new_link_starts_from_the_whole_video_again():
+    app = PanelApp()
+    with patch(DOWNLOAD, return_value=OK):
+        async with app.run_test(size=(140, 60)) as pilot:
+            await _checked(app, pilot)
+            app.query_one("#part-only", Button).press()
+            app.query_one("#dl-part-end", Input).value = "5:00"
+            await pilot.pause()
+            app.query_one("#btn-download", Button).press()
+            await _settle(app, pilot)
+            panel = app.query_one(DownloadPanel)
+            part, end = panel._part, app.query_one("#dl-part-end", Input).value
 
+    assert (part, end) == (False, "")
+
+
+@pytest.mark.asyncio
+async def test_a_part_row_shows_its_part_and_a_clock():
+    from max_cli.interface.tui.widgets.download_panel import (
+        DownloadJob,
+        DownloadRow,
+    )
+
+    job = DownloadJob(1, URL, {"url": URL, "start": "1:00", "end": "5:00"}, "Tour")
+
+    class RowApp(App):
+        def compose(self):
+            yield DownloadRow(job)
+
+    app = RowApp()
+    async with app.run_test() as pilot:
+        row = app.query_one(DownloadRow)
+        row.set_started()
+        await pilot.pause()
+        info = str(row.query_one(".row-info").render())
+        tag = str(row.query_one(".row-part").render())
+        running = row._part_timer is not None
+        row.set_done("Downloaded: Tour (1:00-5:00)", 0)
+        stopped = row._part_timer is None
+
+    assert tag == "PART 1:00-5:00"
+    assert "Downloading 1:00-5:00 only" in info
+    assert running and stopped
+
+
+def test_check_part_and_link_times():
+    from max_cli.interface.tui.widgets.download_panel import (
+        check_part,
+        section_label,
+        start_from_link,
+    )
+
+    assert start_from_link("https://youtu.be/x?t=90") == "1:30"
+    assert start_from_link("https://youtube.com/watch?v=x&t=1h2m3s") == "1:02:03"
+    assert start_from_link("https://youtube.com/watch?v=x") == ""
+    assert not check_part("", "", 754, None).ok
+    assert not check_part("13:00", "", 754, None).ok  # past the end
+    past = check_part("1:00", "20:00", 754, None)
+    assert past.ok and "stops there" in str(past.message)
+    playlist = check_part("1:00", "2:00", None, None)
+    assert playlist.ok and "of every video" in str(playlist.message)
     assert section_label({"start": "1:00", "end": "5:00"}) == "1:00-5:00"
-    assert section_label({"url": URL}) == ""
     assert section_label({"start": "soon"}) == ""
 
 
