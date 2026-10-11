@@ -35,6 +35,11 @@ OUTPUT_FORMATS: dict[str, tuple[str, str, bool]] = {
 }
 FALLBACK_FORMAT = "png"  # for sources Max reads but doesn't write (SVG, PSD ...)
 LOSSY_FORMATS = frozenset({"JPEG", "WEBP", "AVIF"})
+# Fitting a size: the lowest quality tried before the picture shrinks, how
+# much each shrink keeps of the width and height, and how many shrinks.
+FIT_MIN_QUALITY = 20
+FIT_SHRINK_STEP = 0.8
+FIT_SHRINK_TRIES = 8
 WHITE = (255, 255, 255)
 
 
@@ -115,12 +120,18 @@ def _enable_heif() -> None:
     pillow_heif.register_heif_opener()
 
 
+def _has_alpha(img: "Image.Image") -> bool:
+    return img.mode in ("RGBA", "LA") or (
+        img.mode == "P" and "transparency" in img.info
+    )
+
+
 def _on_white(img: "Image.Image") -> "Image.Image":
     """`img` as RGB, with transparent parts white (not black) for formats
     that can't keep transparency."""
     from PIL import Image
 
-    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+    if _has_alpha(img):
         rgba = img.convert("RGBA")
         flat = Image.new("RGB", rgba.size, WHITE)
         flat.paste(rgba, mask=rgba.getchannel("A"))
@@ -140,6 +151,49 @@ def _output_format(
         if wanted.lower() in OUTPUT_FORMATS:
             return OUTPUT_FORMATS[wanted.lower()]
     return OUTPUT_FORMATS[FALLBACK_FORMAT]
+
+
+def _encode(img: "Image.Image", image_format: str, **save_args: Any) -> bytes:
+    buffer = io.BytesIO()
+    img.save(buffer, image_format, **save_args)
+    return buffer.getvalue()
+
+
+def fit_in_bytes(
+    img: "Image.Image", image_format: str, max_bytes: int, quality: int
+) -> tuple[bytes, bool]:
+    """`img` encoded in a lossy format at the best quality that fits
+    `max_bytes`, never above `quality`.
+
+    When even FIT_MIN_QUALITY is too big, the picture shrinks by
+    FIT_SHRINK_STEP and the search runs again, up to FIT_SHRINK_TRIES times.
+    Returns the bytes and whether they fit (the smallest try when none did).
+    """
+    from PIL import Image
+
+    smallest = b""
+    for _ in range(FIT_SHRINK_TRIES + 1):
+        low, high, best = FIT_MIN_QUALITY, max(quality, FIT_MIN_QUALITY), b""
+        while low <= high:
+            middle = (low + high) // 2
+            data = _encode(img, image_format, quality=middle, optimize=True)
+            if not smallest or len(data) < len(smallest):
+                smallest = data
+            if len(data) <= max_bytes:
+                best, low = data, middle + 1
+            else:
+                high = middle - 1
+        if best:
+            return best, True
+        width, height = img.size
+        img = img.resize(
+            (
+                max(1, int(width * FIT_SHRINK_STEP)),
+                max(1, int(height * FIT_SHRINK_STEP)),
+            ),
+            resample=Image.Resampling.LANCZOS,
+        )
+    return smallest, False
 
 
 def _pixels_only(img: "Image.Image") -> "Image.Image":
@@ -244,9 +298,14 @@ class ImageEngine:
         force_format: Optional[str] = None,
         quantize_png: bool = False,
         strip_exif: bool = False,
+        max_bytes: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Versatile processor for compression, resizing, and conversion.
+
+        `max_bytes` makes the file fit that size: the best quality that fits,
+        then a smaller picture if needed. A format without a quality setting
+        (PNG, GIF ...) becomes WebP when it has transparency, else JPEG.
         """
         from PIL import Image, ImageOps, features
 
@@ -294,6 +353,10 @@ class ImageEngine:
             target_format, target_ext, keeps_alpha = _output_format(
                 force_format, output_path, input_path
             )
+            if max_bytes and target_format not in LOSSY_FORMATS:
+                target_format, target_ext, keeps_alpha = OUTPUT_FORMATS[
+                    "webp" if _has_alpha(img) else "jpg"
+                ]
             if target_format == "AVIF" and not features.check("avif"):
                 raise ProcessingError(
                     "This Pillow can't write AVIF. Update it: pip install -U pillow"
@@ -322,13 +385,20 @@ class ImageEngine:
             if strip_exif:
                 # Rebuild image to drop all hidden metadata blocks
                 img = _pixels_only(img)
-            try:
-                img.save(output_path, target_format, **save_args)
-            except OSError:
-                # A mode the format can't hold (CMYK as PNG, 16-bit as GIF).
-                img.convert("RGBA").save(output_path, target_format, **save_args)
+            fits = None
+            if max_bytes:
+                data, fits = fit_in_bytes(img, target_format, max_bytes, quality)
+                with open(output_path, "wb") as output_file:
+                    output_file.write(data)
+            else:
+                try:
+                    img.save(output_path, target_format, **save_args)
+                except OSError:
+                    # A mode the format can't hold (CMYK as PNG, 16-bit as GIF).
+                    img.convert("RGBA").save(output_path, target_format, **save_args)
 
         return {
+            "fits": fits,
             "file_name": input_path.name,
             "original_size": self.get_size_str(original_size),
             "final_size": self.get_size_str(output_path.stat().st_size),

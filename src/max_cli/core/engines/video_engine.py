@@ -78,6 +78,46 @@ class VideoEngine(FFmpegEngine):
             "message": f"Compressed: {input_path.name}",
         }
 
+    def compress_to_bitrate(
+        self,
+        input_path: Path,
+        output_path: Path,
+        video_kbps: int,
+        audio_kbps: int,
+        height: Optional[int] = None,
+        preset: str = "medium",
+    ) -> None:
+        """H.264 at an average bitrate in two passes, so the size comes out
+        close to bitrate x length. `height` scales the picture down first
+        (the width follows); low bitrates look better on fewer pixels.
+        """
+        import tempfile
+
+        picture = ["-vf", f"scale=-2:{height}"] if height else []
+        with tempfile.TemporaryDirectory(prefix="max-two-pass-") as folder:
+            video = [
+                *picture,
+                "-c:v",
+                "libx264",
+                "-b:v",
+                f"{video_kbps}k",
+                "-preset",
+                preset,
+                "-passlogfile",
+                str(Path(folder) / "pass"),
+            ]
+            ffmpeg = str(self.ffmpeg_path)
+            # The first pass only measures: no sound, and nothing written.
+            self._run(
+                [ffmpeg, "-y", "-i", str(input_path), *video, "-pass", "1", "-an"]
+                + ["-loglevel", "error", "-f", "null", "-"]
+            )
+            self._run(
+                [ffmpeg, "-y", "-i", str(input_path), *video, "-pass", "2"]
+                + ["-c:a", "aac", "-b:a", f"{audio_kbps}k"]
+                + ["-movflags", "+faststart", "-loglevel", "error", str(output_path)]
+            )
+
     def convert_format(self, input_path: Path, output_path: Path) -> dict[str, Any]:
         """
         Smart convert (e.g., MKV -> MP4).

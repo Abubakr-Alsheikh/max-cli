@@ -87,16 +87,21 @@ def compress_video(
     level: str = typer.Option(
         DEFAULT_VIDEO_LEVEL, help="Quality: high, balanced, max (smaller size)."
     ),
+    size: Optional[str] = typer.Option(
+        None,
+        "--size",
+        help="Aim for this file size, e.g. 25MB or 800KB. Replaces the level.",
+    ),
     queue: bool = typer.Option(False, "--queue", "-q", help="Add to background queue"),
     recursive: bool = RECURSIVE_OPTION,
     redo: bool = REDO_OPTION,
 ):
     """
-    Compress video files to H.264 MP4.
+    Compress video files to H.264 MP4, at a quality level or to fit a size.
     """
     if run_batch(
         "video.compress",
-        {"target": target, "output": output, "level": level},
+        {"target": target, "output": output, "level": level, "size": size},
         queue=queue,
         recursive=recursive,
         redo=redo,
@@ -106,9 +111,8 @@ def compress_video(
     source = target[0]
     _get_engine()
 
-    console.print(
-        f"[cyan]Compressing video (Level: {level})... This may take time.[/cyan]"
-    )
+    aim = f"Size: {size}, two passes" if size else f"Level: {level}"
+    console.print(f"[cyan]Compressing video ({aim})... This may take time.[/cyan]")
     result = _run(
         video_ops.compress,
         "Compression failed",
@@ -116,6 +120,7 @@ def compress_video(
         target=source,
         output=output,
         level=level,
+        size=size,
     )
     if not result:
         return

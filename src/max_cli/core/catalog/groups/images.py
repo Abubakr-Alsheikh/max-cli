@@ -37,12 +37,14 @@ GROUP = Group(
             group="images",
             name="compress",
             guide=(
-                "Use for: making images smaller for email, the web or storage; it "
-                "can also resize and convert in the same pass. Not for: changing "
-                "only the dimensions (images.resize) or only the format "
-                "(images.convert). How: quality 1-100 (80 to 85 looks the same and "
-                "is much smaller); max_dim caps the longest side; strip removes "
-                "camera data."
+                "Use for: making images smaller for email, the web or storage, "
+                "including 'each under 2 MB' for an upload form; it can also resize "
+                "and convert in the same pass. Not for: changing only the "
+                "dimensions (images.resize) or only the format (images.convert). "
+                "How: quality 1-100 (80 to 85 looks the same and is much smaller); "
+                "size (2MB, 500KB) makes each image fit, lowering quality and then "
+                "the dimensions, and turns PNGs into JPEG or WebP; max_dim caps the "
+                "longest side; strip removes camera data."
             ),
             summary="Make images smaller: compress, resize and convert in one pass.",
             operation=f"{OPS}:compress",
@@ -94,6 +96,14 @@ GROUP = Group(
                     advanced=True,
                 ),
                 _workers(),
+                Param(
+                    "size",
+                    ParamKind.TEXT,
+                    "Make each image fit this size, e.g. 2MB or 500KB. PNGs become"
+                    " JPEG, or WebP when transparent.",
+                    default=None,
+                    cli=("--size",),
+                ),
             ),
         ),
         Action(

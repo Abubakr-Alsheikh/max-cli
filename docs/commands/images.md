@@ -18,7 +18,7 @@ All commands process files in parallel. Use `-j` to set the number of workers (d
 Compress, resize and convert images in one pass.
 
 ```bash
-max images compress [TARGET] [-q QUALITY] [-s SCALE] [-m MAX_PX] [--jpeg] [--quantize] [--strip | --keep] [-j WORKERS]
+max images compress [TARGET] [-q QUALITY] [-s SCALE] [-m MAX_PX] [--size SIZE] [--jpeg] [--quantize] [--strip | --keep] [-j WORKERS]
 ```
 
 **Options:**
@@ -26,6 +26,7 @@ max images compress [TARGET] [-q QUALITY] [-s SCALE] [-m MAX_PX] [--jpeg] [--qua
 - `-q` - Quality, 1-100 (default: `DEFAULT_QUALITY` from your config, 85 unless you change it)
 - `-s` - Scale as a percentage
 - `-m` - Maximum width or height in pixels
+- `--size` - Make each image fit a size, such as `2MB` or `500KB`. Max picks the best quality that fits (never above `-q`), and shrinks the picture only when the lowest quality is still too big. PNG, GIF and other formats without a quality setting become JPEG, or WebP when they have transparency
 - `--jpeg` - Force JPEG output
 - `--quantize` - Lossy PNG compression (256 colors)
 - `--strip` / `--keep` - Remove or keep EXIF metadata (default: `--strip`)
@@ -37,6 +38,7 @@ max images compress [TARGET] [-q QUALITY] [-s SCALE] [-m MAX_PX] [--jpeg] [--qua
 max images compress ./photos
 max images compress photo.jpg -q 70
 max images compress ./photos -m 1080 --jpeg
+max images compress ./photos --size 2MB      # each photo under 2 MB
 ```
 
 ## resize

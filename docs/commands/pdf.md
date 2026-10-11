@@ -74,13 +74,18 @@ max pdf bundle -d 72 -q 50
 Shrink a PDF, or every PDF in a folder.
 
 ```bash
-max pdf compress TARGET [--dpi DPI] [--quality Q]
+max pdf compress TARGET [--dpi DPI] [--quality Q] [--size SIZE]
 ```
 
 **Options:**
 
 - `--dpi`, `-d` - Image resolution. Lower means a smaller file (default: 150)
 - `--quality`, `-q` - JPEG quality, 1-100. Lower means a smaller file (default: 80)
+- `--size` - Make each PDF fit a size, such as `5MB`. It replaces `--dpi` and `--quality`: Max first tries a lossless rewrite, which keeps text selectable, then turns pages into images at lower resolutions (150 down to 60 dpi) until the file fits. When nothing fits, Max keeps the smallest copy and says so
+
+```bash
+max pdf compress application.pdf --size 5MB
+```
 
 For a single file, Max writes `<name>_compressed.pdf`. For a folder, Max compresses the PDFs in it (not those in subfolders) and writes the results, under their own names, into a `compressed/` subfolder.
 

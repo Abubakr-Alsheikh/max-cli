@@ -36,16 +36,17 @@ max video audio-convert "*.m4a" --queue   # every M4A here, as background jobs
 
 ## compress
 
-Compress a video to H.264 MP4.
+Compress a video to H.264 MP4, at a quality level or to fit a size.
 
 ```bash
-max video compress TARGET... [-o OUTPUT] [--level LEVEL] [--queue]
+max video compress TARGET... [-o OUTPUT] [--level LEVEL] [--size SIZE] [--queue]
 ```
 
 **Options:**
 
 - `-o` - Output path (default: `{stem}_compressed.mp4`)
 - `--level` - `high` (CRF 23), `balanced` (CRF 28) or `max` (CRF 35, smallest file). Default: `balanced`
+- `--size` - Aim for a file size instead of a level, such as `25MB` or `800KB`. Max reads the video's length, works out the bitrate and encodes in two passes, so the result lands just under the size. A tight size gets less sound bitrate and a smaller picture (720p or 480p). If the first try comes out over, Max encodes once more at a lower bitrate. A video already under the size is left alone, and a size too small for the video's length is refused with the smallest size that works
 - `--queue`, `-q` - Add the job to the background queue instead of running it now. See [Queue](queue.md).
 - `--recursive`, `--redo` - See [Several files at once](#several-files-at-once)
 
@@ -55,6 +56,7 @@ max video compress TARGET... [-o OUTPUT] [--level LEVEL] [--queue]
 max video compress movie.mp4
 max video compress movie.mp4 --level high
 max video compress movie.mp4 --level max -o small.mp4
+max video compress clip.mp4 --size 25MB     # fits a 25 MB upload limit
 max video compress movie.mp4 --queue
 max video compress ~/Videos --level max
 ```

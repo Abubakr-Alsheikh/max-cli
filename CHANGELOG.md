@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **Compress to a size.** `max video compress clip.mp4 --size 25MB` works out the bitrate from the video's length and encodes in two passes, so the file lands just under the size: handy for mail and chat upload limits. `max images compress --size 2MB` and `max pdf compress --size 5MB` do the same for images and PDFs. The dashboard's forms and the AI agent take the size too ("make this video fit in 25 MB").
+
+### Fixed
+
+- `max images compress` and `convert` on a folder no longer overwrite one image with another when two share a name (`cat.png` and `cat.jpg` both becoming `cat.jpg`): they come out as `cat_png.jpg` and `cat_jpg.jpg`.
+
 ## 1.1.0 (2026-10-10)
 
 A smarter AI agent that works on whole folders, plans and checks its work, remembers what you tell it and can be stopped and undone; and downloads that come out tagged and sorted.
