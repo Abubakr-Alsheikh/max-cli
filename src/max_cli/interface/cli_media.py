@@ -20,6 +20,9 @@ from max_cli.core.presets import (
     DEFAULT_CONCAT_METHOD,
     DEFAULT_VIDEO_LEVEL,
     DEFAULT_VIDEO_TO_AUDIO_QUALITY,
+    SILENCE_MIN_SECONDS,
+    SILENCE_PADDING_SECONDS,
+    SILENCE_THRESHOLD_DB,
 )
 from max_cli.interface.batch_cli import (
     QUEUE_OPTION,
@@ -554,6 +557,64 @@ def stabilize_cmd(
             "[bold green]Stabilizing (this may take a while)...[/bold green]",
             target=source,
             output=output,
+        )
+    )
+
+
+@app.command("cut-silence")
+def cut_silence_cmd(
+    target: list[Path] = typer.Argument(
+        ..., help="Video or audio file. Or several files, a folder, or a pattern."
+    ),
+    threshold: float = typer.Option(
+        SILENCE_THRESHOLD_DB,
+        "--threshold",
+        "-t",
+        help="Quieter than this many dB counts as silence, e.g. -30 or -40.",
+    ),
+    min_silence: float = typer.Option(
+        SILENCE_MIN_SECONDS,
+        "--min-silence",
+        "-m",
+        help="Shortest pause to cut, in seconds.",
+    ),
+    padding: float = typer.Option(
+        SILENCE_PADDING_SECONDS,
+        "--padding",
+        "-p",
+        help="Seconds of each pause to keep at both ends.",
+    ),
+    output: Optional[Path] = typer.Option(None, "-o", help="Output file."),
+    recursive: bool = RECURSIVE_OPTION,
+    redo: bool = REDO_OPTION,
+    queue: bool = QUEUE_OPTION,
+):
+    """
+    Cut the pauses out of a recording: jump cuts for talks and lectures.
+    """
+    arguments = {
+        "target": target,
+        "threshold": threshold,
+        "min_silence": min_silence,
+        "padding": padding,
+        "output": output,
+    }
+    if run_batch(
+        "video.cut-silence",
+        arguments,
+        queue=queue,
+        recursive=recursive,
+        redo=redo,
+        prepare=_get_engine,
+    ):
+        return
+    console.print(f"[cyan]Finding pauses quieter than {threshold} dB...[/cyan]")
+    _report(
+        _run(
+            video_ops.cut_silence,
+            "Cutting the pauses failed",
+            "[bold green]Cutting...[/bold green]",
+            **{**arguments, "target": target[0]},
         )
     )
 

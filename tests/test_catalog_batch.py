@@ -34,6 +34,12 @@ def test_each_name_template_matches_what_the_operation_writes(action, tmp_path):
     engine = MagicMock()
     # optimize reads the new file's size afterwards.
     engine.optimize_pdf.side_effect = lambda source, output, **kw: output.touch()
+    # cut-silence reads the length and the pauses before it writes.
+    engine.probe_media.return_value = {
+        "format": {"duration": "10"},
+        "streams": [{"codec_type": "audio", "codec_name": "aac"}],
+    }
+    engine.find_silences.return_value = [(2.0, 5.0)]
 
     result = run_action(action, args, engine=engine)
 

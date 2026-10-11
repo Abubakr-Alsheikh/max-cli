@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 FFPROBE_TIMEOUT_SECONDS = 15
+VERSION_PATTERN = re.compile(r"ffmpeg version n?(\d+)\.")
+# The first FFmpeg that reads an option's value from a file as -/option.
+FILE_OPTION_SINCE = 7
 
 
 class FFmpegEngine:
@@ -62,6 +66,32 @@ class FFmpegEngine:
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode().strip()
             raise RuntimeError(f"FFmpeg Error: {error_msg}") from e
+
+    def _major_version(self) -> Optional[int]:
+        """FFmpeg's major version ("ffmpeg version 7.0.2" is 7); None for a
+        build that names no number (git builds say "N-11234-g...")."""
+        try:
+            result = subprocess.run(
+                [str(self.ffmpeg_path), "-version"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=FFPROBE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.warning("Could not read the FFmpeg version: %s", exc)
+            return None
+        match = VERSION_PATTERN.match(result.stdout or "")
+        return int(match.group(1)) if match else None
+
+    def _script_option(self, option: str) -> str:
+        """The option that reads `option`'s value from a file: `-/option` on
+        FFmpeg 7 and later, `-option_script` before (newer builds drop it)."""
+        major = self._major_version()
+        if major is not None and major < FILE_OPTION_SINCE:
+            return f"-{option}_script"
+        return f"-/{option}"
 
     def _ffprobe_path(self) -> Path:
         """ffprobe next to ffmpeg, else the one on PATH."""

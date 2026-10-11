@@ -122,6 +122,35 @@ max video cut movie.mp4 --start 0:30 --end 1:00
 max video cut movie.mp4 --start 0 --duration 30
 ```
 
+## cut-silence
+
+Cut the pauses out of a recording: jump cuts for talks, lectures, tutorials, podcasts and voice notes.
+
+```bash
+max video cut-silence TARGET... [-t THRESHOLD] [-m MIN_SILENCE] [-p PADDING] [-o OUTPUT] [--queue]
+```
+
+Max finds the stretches quieter than the threshold that last at least `--min-silence` seconds (FFmpeg's `silencedetect`), then writes the file without them. Each cut keeps `--padding` seconds of the pause at both ends, so words don't start or stop abruptly; silence at the very start and end goes completely. Video and sound stay in sync. The result keeps the input's type: `talk.mp4` gives `talk_nosilence.mp4`, `note.m4a` gives `note_nosilence.m4a`.
+
+**Options:**
+
+- `--threshold`, `-t` - Quieter than this many dB counts as silence (default: -30). Use -40 for a recording made in a quiet room, -25 when there's a hum under the pauses
+- `--min-silence`, `-m` - The shortest pause to cut, in seconds (default: 0.6). 1.0 keeps natural breaths
+- `--padding`, `-p` - Seconds of each pause to keep at both ends (default: 0.15)
+- `-o` - Output file (default: `{stem}_nosilence` with the input's extension)
+- `--queue`, `-q` - Add the job to the background queue
+- `--recursive`, `--redo` - See [Several files at once](#several-files-at-once)
+
+A file with no pauses that long is left alone. A file that is all silence at the threshold is refused, with a lower threshold to try.
+
+**Examples:**
+
+```bash
+max video cut-silence lecture.mp4
+max video cut-silence podcast.mp3 -t -40 -m 1
+max video cut-silence ~/Recordings --queue
+```
+
 ## concat
 
 Join several videos into one.

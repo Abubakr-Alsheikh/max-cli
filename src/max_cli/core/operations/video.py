@@ -20,6 +20,9 @@ from max_cli.core.presets import (
     DEFAULT_VIDEO_LEVEL,
     DEFAULT_VIDEO_PRESET,
     DEFAULT_VIDEO_TO_AUDIO_QUALITY,
+    SILENCE_MIN_SECONDS,
+    SILENCE_PADDING_SECONDS,
+    SILENCE_THRESHOLD_DB,
     VIDEO_TO_AUDIO_BITRATES,
     bitrate_for_quality,
     crf_for_level,
@@ -31,6 +34,8 @@ if TYPE_CHECKING:
     from max_cli.core.engines.media_engine import MediaEngine
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
+# Under this much silence in all, cut-silence leaves the file alone.
+SILENCE_WORTH_CUTTING_SECONDS = 0.5
 
 
 def _engine(engine: Optional["MediaEngine"]) -> "MediaEngine":
@@ -410,6 +415,81 @@ def denoise(
         f"Denoised audio saved: {output.name}",
         [output],
         {"mode": mode, "strength": strength, "output_size": _file_size(output)},
+    )
+
+
+def segments_to_keep(
+    silences: list[tuple[float, Optional[float]]], duration: float, padding: float
+) -> list[tuple[float, float]]:
+    """The stretches of a `duration`-second file left after cutting the
+    silences, each silence keeping `padding` seconds at both ends so words
+    don't start or stop abruptly. Silence shorter than two paddings stays.
+    """
+    keep: list[tuple[float, float]] = []
+    position = 0.0
+    for start, end in silences:
+        cut_from = start + padding if start > 0 else 0.0
+        cut_to = duration if end is None or end >= duration else end - padding
+        if cut_to <= cut_from:
+            continue
+        if cut_from > position:
+            keep.append((position, cut_from))
+        position = cut_to
+    if position < duration:
+        keep.append((position, duration))
+    return keep
+
+
+def cut_silence(
+    target: Path,
+    threshold: float = SILENCE_THRESHOLD_DB,
+    min_silence: float = SILENCE_MIN_SECONDS,
+    padding: float = SILENCE_PADDING_SECONDS,
+    output: Optional[Path] = None,
+    *,
+    engine: Optional["MediaEngine"] = None,
+) -> ActionResult:
+    """Remove the pauses from a recording: jump cuts for talks and lectures."""
+    _require_file(target)
+    if min_silence <= 0 or padding < 0:
+        raise ValidationError("min_silence must be above 0, and padding 0 or more.")
+    media = _engine(engine)
+    try:
+        facts = facts_from_probe(
+            target, target.stat().st_size, media.probe_media(target)
+        )
+    except RuntimeError as exc:
+        raise ValidationError(f"Max couldn't read {target.name}: {exc}") from None
+    if not facts.duration or not facts.audio_codec:
+        raise ValidationError(f"{target.name} has no sound to find pauses in.")
+    silences = media.find_silences(target, threshold, min_silence)
+    keep = segments_to_keep(silences, facts.duration, padding)
+    kept_seconds = sum(end - start for start, end in keep)
+    removed_seconds = facts.duration - kept_seconds
+    details = {
+        "pauses": len(silences),
+        "original_seconds": round(facts.duration, 2),
+        "removed_seconds": round(removed_seconds, 2),
+    }
+    if not keep:
+        raise ValidationError(
+            f"{target.name} is all silence at {threshold} dB. Try a lower "
+            "threshold, such as -40."
+        )
+    if removed_seconds < SILENCE_WORTH_CUTTING_SECONDS:
+        return ActionResult(
+            True,
+            f"No pauses of {min_silence:g} s or more in {target.name}: nothing to cut.",
+            details=details,
+        )
+    output = output or sibling_path(target, "_nosilence")
+    media.keep_segments(target, output, keep, has_video=bool(facts.video_codec))
+    return ActionResult(
+        True,
+        f"Cut {len(silences)} pauses ({removed_seconds:.1f} s of "
+        f"{facts.duration:.1f} s): {output}",
+        [output],
+        details,
     )
 
 

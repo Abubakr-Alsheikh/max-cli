@@ -69,6 +69,7 @@ def _write_output(*args, **kwargs):
         "to-audio",
         "gif",
         "cut",
+        "cut-silence",
         "snap",
         "louder",
         "mute",

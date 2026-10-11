@@ -36,6 +36,11 @@ COLOR_PRESETS = ("vivid", "vintage", "noir", "warm", "cool", "fade")
 DENOISE_MODES = ("auto", "hiss", "hum", "speech")
 DENOISE_STRENGTHS = ("mild", "medium", "aggressive")
 
+# --- video cut-silence: what counts as a pause, and what of it stays ---------
+SILENCE_THRESHOLD_DB = -30.0  # quieter than this is silence
+SILENCE_MIN_SECONDS = 0.6  # pauses shorter than this stay
+SILENCE_PADDING_SECONDS = 0.15  # kept at both ends of a cut, so words aren't clipped
+
 # --- video concat: user-facing method -> MediaEngine.concatenate_videos -----
 CONCAT_METHODS: dict[str, str] = {"fast": "concat", "safe": "filter"}
 DEFAULT_CONCAT_METHOD = "fast"

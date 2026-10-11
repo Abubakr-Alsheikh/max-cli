@@ -6,6 +6,8 @@
 
 - **Compress to a size.** `max video compress clip.mp4 --size 25MB` works out the bitrate from the video's length and encodes in two passes, so the file lands just under the size: handy for mail and chat upload limits. `max images compress --size 2MB` and `max pdf compress --size 5MB` do the same for images and PDFs. The dashboard's forms and the AI agent take the size too ("make this video fit in 25 MB").
 
+- **Cut the pauses.** `max video cut-silence lecture.mp4` removes the dead air from talks, lectures, podcasts and voice notes (jump cuts), keeping a little of each pause so words aren't clipped. `--threshold`, `--min-silence` and `--padding` tune it; it works on video and audio files, on folders and in the queue, and on the dashboard's Video page.
+
 ### Fixed
 
 - `max images compress` and `convert` on a folder no longer overwrite one image with another when two share a name (`cat.png` and `cat.jpg` both becoming `cat.jpg`): they come out as `cat_png.jpg` and `cat_jpg.jpg`.
