@@ -158,8 +158,8 @@ def compress(
     `size` ("2MB") makes each image fit that size; quality is then the most
     it may use.
     """
-    from max_cli.config import settings
     from max_cli.common.utils import parse_size
+    from max_cli.config import settings
 
     quality = quality if quality is not None else settings.DEFAULT_QUALITY
     if quality not in QUALITY_RANGE:

@@ -187,7 +187,10 @@ def fit_in_bytes(
             return best, True
         width, height = img.size
         img = img.resize(
-            (max(1, int(width * FIT_SHRINK_STEP)), max(1, int(height * FIT_SHRINK_STEP))),
+            (
+                max(1, int(width * FIT_SHRINK_STEP)),
+                max(1, int(height * FIT_SHRINK_STEP)),
+            ),
             resample=Image.Resampling.LANCZOS,
         )
     return smallest, False
