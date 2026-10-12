@@ -46,11 +46,20 @@ max                                           # or open the dashboard
 
 ## Install
 
-You need Python 3.9 or newer.
+**New to the terminal?** Read [Start here](https://Abubakr-Alsheikh.github.io/max-cli/start-here/), a step-by-step guide with no programming needed.
+
+The easiest way is [uv](https://docs.astral.sh/uv/), which brings its own Python:
 
 ```bash
-pip install max-cli
+# 1. Install uv (once), then open a new terminal
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+curl -LsSf https://astral.sh/uv/install.sh | sh                                     # macOS and Linux
+
+# 2. Install Max
+uv tool install max-cli          # update later with: uv tool upgrade max-cli
 ```
+
+With Python 3.9 or newer already installed, `pipx install max-cli` or `pip install max-cli` works too.
 
 For the newest code, install from the repository:
 
@@ -393,7 +402,8 @@ max config setup-font                        # icons for the dashboard's pages
 - **"The AI isn't set up":** run `max config setup`, or open Settings in the dashboard.
 - **YouTube HTTP 403:** run `max grab pot-setup` once, or try `--player-client web`.
 - **A queued job doesn't start:** run `max queue status` to see the worker, then `max queue start`.
-- **Something else:** check `pip show max-cli` for your version and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues).
+- **"max" is not recognized:** open a new terminal after installing. With uv, run `uv tool update-shell` once.
+- **Something else:** run `max --version` for your version and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues).
 
 ## For developers
 
