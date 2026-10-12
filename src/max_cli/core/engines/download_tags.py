@@ -44,12 +44,17 @@ ID3V1_TRACK_FLAG = 125
 ID3V2_VERSIONS = (3, 4)
 
 
-def output_template(sort_into: str) -> str:
-    """yt-dlp's output template, relative to the download folder."""
+def output_template(sort_into: str, name_suffix: str = "") -> str:
+    """yt-dlp's output template, relative to the download folder.
+
+    `name_suffix` follows the title, such as " (1.00-5.00)" for part of a
+    video, so a part never replaces the whole video's file.
+    """
+    name = f"%(title)s{name_suffix}.%(ext)s"
     if sort_into == DOWNLOAD_SORT_NONE:
-        return "%(title)s.%(ext)s"
-    folders = "/".join(f"%({name}|.)s" for name in FOLDER_FIELDS)
-    return f"{folders}/%(title)s.%(ext)s"
+        return name
+    folders = "/".join(f"%({field}|.)s" for field in FOLDER_FIELDS)
+    return f"{folders}/{name}"
 
 
 @dataclass(frozen=True)

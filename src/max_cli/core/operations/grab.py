@@ -269,6 +269,9 @@ def download(
     track_numbers: bool = True,
     split_title: bool = True,
     sort_into: str = DOWNLOAD_SORT_NONE,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    exact_cuts: bool = False,
     *,
     engine: Optional["NetworkEngine"] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
@@ -283,9 +286,15 @@ def download(
     it, `split_title` reads the artist from titles like "Artist - Song", and
     `sort_into` saves into Album or Artist/Album folders.
 
+    `start` and `end` ("1:00", "5:00") download only that part of each video;
+    either alone runs from the beginning or to the end. `exact_cuts` starts
+    the part on the second, re-encoding it (slower); without it the part
+    starts at the keyframe before, a second or two early.
+
     Raises OperationCancelled when `should_cancel` returns True mid-download.
     """
     from max_cli.config import settings
+    from max_cli.core.engines.download_section import DownloadSection
     from max_cli.core.engines.download_tags import DownloadTags
     from max_cli.core.engines.network_engine import strip_playlist_params
 
@@ -309,6 +318,10 @@ def download(
         split_title=split_title,
         sort_into=sort_into,
     )
+    try:
+        section = DownloadSection.parse(start, end, exact_cuts)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from None
     if include_metadata is None:
         include_metadata = settings.GRAB_INCLUDE_METADATA
     if strip_playlist is None:
@@ -333,11 +346,15 @@ def download(
         progress_hook=progress_hook,
         should_cancel=should_cancel,
         tags=tags,
+        section=section,
         **options,
     )
     files = [Path(path) for path in result.get("files", [])]
     total_size = sum(path.stat().st_size for path in files if path.is_file())
     title = _cached_title(url) or (files[0].stem if files else url)
+    if section:
+        # The file name ends in the times; the message adds them once.
+        title = title.removesuffix(f" ({section.file_label()})")
 
     if record_history:
         from max_cli.core.engines.download_history import DownloadHistory
@@ -350,15 +367,22 @@ def download(
                 **options,
                 **dataclasses.asdict(tags),
                 "output_path": str(output),
+                "section": section.label() if section else None,
             },
             file_size=total_size,
         )
 
+    part = f" ({section.label()})" if section else ""
     return ActionResult(
         ok=True,
-        message=f"Downloaded: {title}",
+        message=f"Downloaded: {title}{part}",
         output_files=files,
-        details={"title": title, "url": url, "size_bytes": total_size},
+        details={
+            "title": title,
+            "url": url,
+            "size_bytes": total_size,
+            "section": section.label() if section else None,
+        },
     )
 
 

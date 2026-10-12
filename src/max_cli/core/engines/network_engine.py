@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 if TYPE_CHECKING:
+    from max_cli.core.engines.download_section import DownloadSection
     from max_cli.core.engines.download_tags import DownloadTags
 
 QUALITY_MAP: dict[str, dict[str, Union[str, int]]] = {
@@ -219,8 +220,14 @@ class NetworkEngine:
         player_client: Optional[str] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
         tags: Optional["DownloadTags"] = None,
+        section: Optional["DownloadSection"] = None,
     ) -> dict[str, Any]:
         """Download `url` into `output_path`.
+
+        `section` downloads only that stretch (`download_section`), through
+        FFmpeg, into a file whose name ends in the times: "Talk (1.00-5.00)".
+        yt-dlp reports no progress for a part, so `should_cancel` takes
+        effect only once the part is done.
 
         `tags` sets the artist, album, track numbers and Artist/Album folders
         (`download_tags.DownloadTags`); None numbers playlist tracks and keeps
@@ -303,8 +310,9 @@ class NetworkEngine:
             if d.get("status") == "finished" and info.get("filepath"):
                 final_paths[info.get("id") or info["filepath"]] = info["filepath"]
 
+        name_suffix = f" ({section.file_label()})" if section else ""
         ydl_opts: dict[str, Any] = {
-            "outtmpl": str(output_path / output_template(tags.sort_into)),
+            "outtmpl": str(output_path / output_template(tags.sort_into, name_suffix)),
             "quiet": True,
             "noprogress": True,
             "updatetime": False,
@@ -322,6 +330,12 @@ class NetworkEngine:
 
         if progress_hook:
             ydl_opts["progress_hooks"].append(progress_hook)
+
+        if section:
+            ydl_opts.update(section.ydl_options())
+            # A part goes through FFmpeg's own downloader: point yt-dlp at
+            # Max's copy when FFmpeg isn't on PATH, downloading it if needed.
+            ydl_opts["ffmpeg_location"] = str(_ffmpeg_for_parts())
 
         if subtitles:
             ydl_opts["writesubtitles"] = True
@@ -397,6 +411,13 @@ class NetworkEngine:
 PARTIAL_SUFFIXES = (".part", ".ytdl")
 
 
+def _ffmpeg_for_parts() -> Path:
+    """FFmpeg for yt-dlp's part downloads: PATH, Max's copy, else a download."""
+    from max_cli.common.ffmpeg_resolver import resolve_ffmpeg
+
+    return resolve_ffmpeg(auto_download=True)
+
+
 def _remove_partial_files(reported_paths: set[str]) -> None:
     """Delete yt-dlp's leftovers for a cancelled download: only .part and .ytdl files."""
     for reported in reported_paths:
@@ -439,6 +460,14 @@ def make_download_task(url: str, **options: Any) -> "TaskItem":
     tags = options.get("tags")
     if tags is not None:
         payload.update(dataclasses.asdict(tags))
+    section = options.get("section")
+    if section is not None:
+        payload.update(
+            {
+                SECTION_KEYS[field.name]: getattr(section, field.name)
+                for field in dataclasses.fields(section)
+            }
+        )
     return TaskItem(
         type=TaskType.DOWNLOAD,
         title=url,
@@ -481,6 +510,7 @@ def _download_executor(task: "TaskItem") -> dict[str, Any]:
         custom_height=payload.get("custom_height"),
         player_client=payload.get("player_client"),
         tags=_payload_tags(payload),
+        section=_payload_section(payload),
     )
     # Post-processing (merge, audio extraction) can rename or remove the
     # files yt-dlp reported, so keep only the ones still on disk.
@@ -500,6 +530,26 @@ def _payload_tags(payload: dict[str, Any]) -> "DownloadTags":
 
     return DownloadTags(
         **{key: payload[key] for key in TAG_OPTION_KEYS if key in payload}
+    )
+
+
+# A queued download's section, flat in its payload like the tags.
+SECTION_KEYS = {
+    "start": "section_start",
+    "end": "section_end",
+    "exact": "section_exact",
+}
+
+
+def _payload_section(payload: dict[str, Any]) -> Optional["DownloadSection"]:
+    from max_cli.core.engines.download_section import DownloadSection
+
+    if SECTION_KEYS["start"] not in payload:
+        return None
+    return DownloadSection(
+        start=float(payload[SECTION_KEYS["start"]]),
+        end=payload.get(SECTION_KEYS["end"]),
+        exact=bool(payload.get(SECTION_KEYS["exact"], False)),
     )
 
 

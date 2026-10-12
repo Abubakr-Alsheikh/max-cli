@@ -10,6 +10,8 @@
 
 - **Transcripts and subtitles.** `max audio transcribe meeting.m4a` writes what was said, and `-f srt` writes subtitles for a video. Max sends only the sound to Google Gemini (it needs `GEMINI_API_KEY`) and deletes the upload afterwards. `--prompt` adds your own instructions: translate, summarise, name the speakers. It runs on folders and in the queue, on the dashboard's Audio page, and the AI agent can use it.
 
+- **Download part of a video.** `max grab download URL --start 1:00 --end 5:00` fetches only that stretch, as video or MP3, without downloading the whole video. The file's name ends in the times (`Talk (1.00-5.00).mp4`). `--exact-cuts` starts it on the second. The Download page has Start and End fields in Options, and the AI agent can do it too ("download minutes 1 to 5 of this").
+
 ### Fixed
 
 - `max images compress` and `convert` on a folder no longer overwrite one image with another when two share a name (`cat.png` and `cat.jpg` both becoming `cat.jpg`): they come out as `cat_png.jpg` and `cat_jpg.jpg`.

@@ -22,6 +22,9 @@ max grab download "https://youtube.com/playlist?list=..." -a --sort-into artist/
 
 # Your own artist and album in every file
 max grab download "https://youtube.com/playlist?list=..." -a --artist "Emil Rottmayer" --album "Live 2024"
+
+# Only minutes 1 to 5 of a video
+max grab download "https://youtube.com/watch?v=..." --start 1:00 --end 5:00
 ```
 
 ## Options
@@ -48,6 +51,19 @@ max grab download "https://youtube.com/playlist?list=..." -a --artist "Emil Rott
 | `--track-numbers` / `--no-track-numbers` | | Number a playlist's files by their place in it, as `3/43` (default: on) |
 | `--split-title` / `--no-split-title` | | Read the artist from titles like `Artist - Song` when the site names none (default: on) |
 | `--sort-into` | | `none` (default), `album` (an `Album/` folder) or `artist/album` (`Artist/Album/`) inside the output folder |
+| `--start` | | Download from this time on: `90`, `1:30` or `1:02:03`. See [Part of a video](#part-of-a-video) |
+| `--end` | | Download up to this time |
+| `--exact-cuts` | | Start the part on the second. It re-encodes the part, so it's slower |
+
+### Part of a video
+
+`--start` and `--end` download only that stretch: `--start 1:00 --end 5:00` gets minutes 1 to 5, `--start 1:00` alone runs to the end, and `--end 0:30` alone gets the first 30 seconds. They work with video and audio (`-a`), with tags and with playlists (every item gets the same stretch).
+
+- Max fetches just that part through FFmpeg, not the whole video, so a long video downloads faster than the whole and then `max video cut`. FFmpeg is required; Max downloads it if you don't have it.
+- The file's name ends in the times, so it never replaces the whole video's file: `Talk (1.00-5.00).mp4` (Windows doesn't allow `:` in file names).
+- Without `--exact-cuts`, the part starts at the keyframe before your start time, usually a second or two early. `--exact-cuts` re-encodes it to start on the second.
+- FFmpeg reports no progress for a part: the progress bar and the Download page wait until it's done, and Cancel takes effect when the part finishes.
+- YouTube can serve parts of long videos slowly. If one crawls, download the whole video and cut it.
 
 ### Tags and folders
 

@@ -9,6 +9,10 @@
 - One "Whole playlist" box decides what a link to a video inside a playlist
   gets: the video, or the playlist with its items to tick. The items box
   ticks the first N or ranges such as 5-20.
+- The PART card downloads the whole video or only a stretch of it: From
+  and To times (a link's `t=` fills From), checked as you type against the
+  video's length, with the part's length and size; the Download button and
+  the download's row name the part.
 - The TAGS card sets the artist, album, genre and year written into the
   files, numbers a playlist's tracks by their place in it, and can save into
   Album or Artist/Album folders. It shows for audio; for video, tick Tags.
@@ -74,6 +78,15 @@ ADVANCED_FIELDS = (
     "include_metadata",
     "player_client",
 )
+# The PART card: a download's row while FFmpeg fetches a part, which sends
+# no progress, and how often its clock ticks.
+PART_NOTE = "FFmpeg sends no progress for a part"
+PART_TICK_SECONDS = 1.0
+PART_WHOLE_HINT = (
+    "The whole video. Pick Only part to download a stretch, such as 1:00 to 5:00."
+)
+# A YouTube link's start time: t=90, t=90s, t=1m30s, t=1h2m3s.
+LINK_TIME = re.compile(r"[?&#](?:t|start)=(\d+h)?(\d+m)?(\d+)?s?(?:&|$)")
 # The TAGS card: what goes into the files, and the folders they go in.
 TAG_FIELDS = (
     "artist",
@@ -214,6 +227,93 @@ def audio_choices_for(media: Any) -> list[QualityChoice]:
         )
         for choice in AUDIO_CHOICES
     ]
+
+
+def start_from_link(url: str) -> str:
+    """The start time a link carries (YouTube's t=1m30s), as "1:30"; "" for none."""
+    from max_cli.core.engines.download_section import clock
+
+    found = LINK_TIME.search(url)
+    if not found or not any(found.groups()):
+        return ""
+    hours, minutes, seconds = (
+        int((part or "0").rstrip("hm")) for part in found.groups()
+    )
+    total = hours * 3600 + minutes * 60 + seconds
+    return clock(total) if total else ""
+
+
+@dataclass
+class PartCheck:
+    """What the PART card says about the typed times."""
+
+    message: Content
+    ok: bool  # the times can be downloaded
+    label: str = ""  # "1:00-5:00", for the Download button
+    fraction: Optional[float] = None  # of the video's length, for sizes
+
+
+def check_part(
+    start: str, end: str, duration: Optional[float], size_bytes: Optional[int]
+) -> PartCheck:
+    """Check the PART card's times against the video's length (None when
+    unknown, as for a playlist) and describe the part: its length and size."""
+    from max_cli.core.engines.download_section import DownloadSection, clock
+
+    try:
+        section = DownloadSection.parse(start, end)
+    except ValueError as exc:
+        return PartCheck(Content.styled(str(exc), "$error"), False)
+    if section is None:
+        return PartCheck(
+            Content.styled(
+                "Type a From or a To time, such as 1:00 and 5:00.", "$warning"
+            ),
+            False,
+        )
+    if not duration:
+        return PartCheck(
+            Content.assemble(
+                (section.label().replace("-", " to "), "bold $primary"),
+                (f"{SEPARATOR}of every video", "$text-muted"),
+            ),
+            True,
+            section.label(),
+        )
+    if section.start >= duration:
+        return PartCheck(
+            Content.styled(
+                f"From is past the end of the video ({clock(duration)}).", "$error"
+            ),
+            False,
+        )
+    stop = min(section.end, duration) if section.end is not None else duration
+    fraction = (stop - section.start) / duration
+    parts: list[tuple[str, str]] = [
+        (f"{clock(section.start)} to {clock(stop)}", "bold $primary"),
+        (
+            f"{SEPARATOR}{clock(stop - section.start)} of {clock(duration)}",
+            "$text-muted",
+        ),
+    ]
+    if size_bytes:
+        parts.append(
+            (f"{SEPARATOR}about {short_size(size_bytes * fraction)}", "$text-muted")
+        )
+    if section.end is not None and section.end > duration:
+        parts.append((f"{SEPARATOR}To is past the end: it stops there", "$warning"))
+    return PartCheck(Content.assemble(*parts), True, section.label(), fraction)
+
+
+def section_label(values: dict[str, Any]) -> str:
+    """ "1:00-5:00" when a download's values ask for part of the video, else ""."""
+    from max_cli.core.engines.download_section import DownloadSection
+
+    try:
+        section = DownloadSection.parse(values.get("start"), values.get("end"))
+    except ValueError:
+        return ""
+    return section.label() if section else ""
 
 
 def playlist_items(selected: list[int], total: int) -> Optional[str]:
@@ -395,6 +495,13 @@ class DownloadRow(Vertical):
         height: auto;
         color: $text-muted;
     }
+    DownloadRow .row-part {
+        width: auto;
+        height: 1;
+        padding: 0 1;
+        color: $secondary;
+        text-style: bold;
+    }
     /* One-line buttons, so a row isn't three lines taller than its text. */
     DownloadRow Button.row-action,
     DownloadRow Button.row-action:hover,
@@ -423,10 +530,15 @@ class DownloadRow(Vertical):
     def __init__(self, job: DownloadJob) -> None:
         super().__init__(id=f"job-{job.job_id}")
         self.job = job
+        self._part = section_label(job.values)  # "1:00-5:00", "" for whole
+        self._part_started = 0.0
+        self._part_timer: Optional[Timer] = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="row-head"):
             yield Static(Content(self.job.title), classes="row-title")
+            if self._part:
+                yield Static(f"PART {self._part}", classes="row-part")
             yield Button(
                 "Cancel",
                 id=f"cancel-{self.job.job_id}",
@@ -443,7 +555,25 @@ class DownloadRow(Vertical):
         self.query_one(".row-title", Static).update(Content(title))
 
     def set_started(self) -> None:
-        self._info("Starting...")
+        if not self._part:
+            self._info("Starting...")
+            return
+        # No progress comes for a part: a clock shows it's still working.
+        self._part_started = time.monotonic()
+        self._show_part_clock()
+        self._part_timer = self.set_interval(PART_TICK_SECONDS, self._show_part_clock)
+
+    def _show_part_clock(self) -> None:
+        elapsed = _duration(int(time.monotonic() - self._part_started)) or "0s"
+        self._info(
+            f"Downloading {self._part} only{SEPARATOR}{elapsed}{SEPARATOR}{PART_NOTE}",
+            layout=False,
+        )
+
+    def _stop_part_clock(self) -> None:
+        if self._part_timer is not None:
+            self._part_timer.stop()
+            self._part_timer = None
 
     def set_progress(self, percent: float, speed: float, eta: int) -> None:
         parts = [f"{percent:.0f}%"]
@@ -463,6 +593,7 @@ class DownloadRow(Vertical):
         head.mount(Button(label, id=button_id, classes=f"row-action {kind}"))
 
     def set_done(self, message: str, size_bytes: int) -> None:
+        self._stop_part_clock()
         self.job.finished = True
         self.add_class("-done")
         self.query_one(Meter).set_value(100, "$success")
@@ -475,6 +606,7 @@ class DownloadRow(Vertical):
         self._swap_button("Open folder", f"open-{self.job.job_id}", "-open")
 
     def set_failed(self, error: str) -> None:
+        self._stop_part_clock()
         self.job.finished = True
         self.add_class("-failed")
         self.query_one(Meter).display = False
@@ -489,6 +621,7 @@ class DownloadRow(Vertical):
         self._swap_button("Retry", f"retry-{self.job.job_id}", "-retry")
 
     def set_cancelled(self) -> None:
+        self._stop_part_clock()
         self.job.finished = True
         self.add_class("-cancelled")
         self.query_one(Meter).display = False
@@ -566,10 +699,10 @@ class DownloadPanel(Vertical):
     #dl-main {
         height: auto;
         grid-size: 2;
-        grid-columns: 3fr 2fr;
+        grid-columns: 5fr 4fr;
         grid-gutter: 0 2;
     }
-    #dl-left {
+    #dl-left, #dl-right {
         height: auto;
     }
     #dl-preview-title {
@@ -641,6 +774,39 @@ class DownloadPanel(Vertical):
     }
     #dl-pl-items {
         width: 1fr;
+    }
+    #dl-part-mode {
+        width: 1fr;
+        margin-top: 1;
+    }
+    #dl-part-mode Button {
+        width: 1fr;
+    }
+    #dl-part-times {
+        height: auto;
+    }
+    .part-field {
+        width: 1fr;
+        height: auto;
+        margin-right: 1;
+    }
+    /* Caption (with its margin) and the input's top edge: level with the text. */
+    #dl-part-exact {
+        width: auto;
+        margin-top: 3;
+        border: none;
+        background: transparent;
+    }
+    #dl-part-exact > .toggle--button {
+        color: $border;
+        background: $boost;
+    }
+    #dl-part-exact.-on > .toggle--button {
+        color: $success;
+        background: $boost;
+    }
+    #dl-part-summary {
+        margin: 1 0;
     }
     #dl-playlist-summary {
         color: $text-muted;
@@ -715,6 +881,7 @@ class DownloadPanel(Vertical):
         self._spin_timer: Optional[Timer] = None
         self._spin_frame = 0
         self._checking_text: Optional[str] = None  # the link box text being checked
+        self._part = False  # Only part is picked in the PART card
         self._check_started = 0.0
         self._jobs: dict[int, DownloadJob] = {}
         self._last_running = 0
@@ -767,6 +934,51 @@ class DownloadPanel(Vertical):
                             tooltip=ITEMS_HELP,
                         )
                     yield Static("", id="dl-playlist-summary")
+                with Vertical(id="dl-part", classes="card"):
+                    with Horizontal(id="dl-part-mode", classes="segmented"):
+                        yield Button("Whole video", id="part-whole")
+                        yield Button("Only part", id="part-only")
+                    with Horizontal(id="dl-part-times"):
+                        with Vertical(classes="part-field"):
+                            yield Label("FROM", classes="field-caption")
+                            yield Input(
+                                placeholder="0:00",
+                                id="dl-part-start",
+                                restrict=r"[0-9:.]*",
+                                tooltip="Where the part starts: 90, 1:30 or 1:02:03.",
+                            )
+                        with Vertical(classes="part-field"):
+                            yield Label("TO", classes="field-caption")
+                            yield Input(
+                                placeholder="the end",
+                                id="dl-part-end",
+                                restrict=r"[0-9:.]*",
+                                tooltip="Where the part ends. Empty: the end.",
+                            )
+                        yield Checkbox(
+                            "Exact cuts",
+                            id="dl-part-exact",
+                            tooltip="Start on the second. Re-encodes the part, so "
+                            "it's slower. Off: from the keyframe before, a second "
+                            "or two early.",
+                        )
+                    yield Static(PART_WHOLE_HINT, id="dl-part-summary")
+                with Vertical(id="dl-tags", classes="card"):
+                    yield Static(TAGS_HINT, id="dl-tags-hint")
+                    yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
+
+            with Vertical(id="dl-right"):
+                with Vertical(id="dl-output-card", classes="card"):
+                    yield Label("FORMAT", classes="field-caption")
+                    with Horizontal(id="dl-format-row", classes="segmented"):
+                        yield Button("Video", id="fmt-video")
+                        yield Button("Audio (MP3)", id="fmt-audio")
+                    yield Label("QUALITY", classes="field-caption")
+                    yield Grid(id="dl-quality")
+                    with Horizontal(id="dl-actions"):
+                        yield Button("⬇ Download", id="btn-download", variant="success")
+                        yield Button("Queue for later", id="btn-queue")
+                    yield Static("", id="dl-status")
                 with Vertical(id="dl-advanced", classes="card"):
                     yield ActionForm(
                         self._action, include=ADVANCED_FIELDS, compact=True
@@ -786,21 +998,6 @@ class DownloadPanel(Vertical):
                             tooltip="Set the artist, album and folders for "
                             "videos too. Audio always shows them.",
                         )
-                with Vertical(id="dl-tags", classes="card"):
-                    yield Static(TAGS_HINT, id="dl-tags-hint")
-                    yield ActionForm(self._action, include=TAG_FIELDS, compact=True)
-
-            with Vertical(id="dl-output-card", classes="card"):
-                yield Label("FORMAT", classes="field-caption")
-                with Horizontal(id="dl-format-row", classes="segmented"):
-                    yield Button("Video", id="fmt-video")
-                    yield Button("Audio (MP3)", id="fmt-audio")
-                yield Label("QUALITY", classes="field-caption")
-                yield Grid(id="dl-quality")
-                with Horizontal(id="dl-actions"):
-                    yield Button("⬇ Download", id="btn-download", variant="success")
-                    yield Button("Queue for later", id="btn-queue")
-                yield Static("", id="dl-status")
 
         with Vertical(id="dl-transfers", classes="card"):
             with TabbedContent(id="dl-tabs"):
@@ -860,6 +1057,8 @@ class DownloadPanel(Vertical):
         self.query_one("#dl-preview").border_title = "PREVIEW"
         self.query_one("#dl-output-card").border_title = "OUTPUT"
         self.query_one("#dl-advanced").border_title = "OPTIONS"
+        self.query_one("#dl-part").border_title = "PART"
+        self._set_part(False)
         self.query_one("#dl-tags").border_title = "TAGS"
         self._restore_tag_choices()
         self._sync_tags_card()
@@ -929,7 +1128,7 @@ class DownloadPanel(Vertical):
             )
             for index, choice in enumerate(choices)
         )
-        self._sync_download_label()
+        self._sync_part()  # the part's size follows the quality
 
     @on(Button.Pressed, ".chip")
     def _on_chip(self, event: Button.Pressed) -> None:
@@ -937,7 +1136,7 @@ class DownloadPanel(Vertical):
         self._chosen[self._format] = self._choices()[index].values
         for chip in self.query(".chip"):
             chip.set_class(chip.id == event.button.id, "-selected")
-        self._sync_download_label()
+        self._sync_part()
 
     def _chosen_choice(self) -> QualityChoice:
         return self._choices()[self._chosen_index()]
@@ -1107,6 +1306,97 @@ class DownloadPanel(Vertical):
         self._set_choices_for(media)
         self._set_preview(Content(media.title), media_facts(media))
         self._show_tags_hint(media)
+        self._prepare_part(media, text)
+
+    # --- part of a video ------------------------------------------------
+
+    def _media_seconds(self) -> Optional[float]:
+        """The checked video's length; None for a playlist or no check."""
+        media = self._media
+        if media is None or media.is_playlist or not media.duration:
+            return None
+        return float(media.duration)
+
+    def _set_part(self, on: bool) -> None:
+        self._part = on
+        self.query_one("#part-whole").set_class(not on, "-selected")
+        self.query_one("#part-only").set_class(on, "-selected")
+        self.query_one("#dl-part-times").display = on
+        self._sync_part()
+
+    @on(Button.Pressed, "#part-whole, #part-only")
+    def _on_part_mode(self, event: Button.Pressed) -> None:
+        self._set_part(event.button.id == "part-only")
+        if self._part:
+            self.query_one("#dl-part-start", Input).focus()
+
+    @on(Input.Changed, "#dl-part-start, #dl-part-end")
+    @on(Checkbox.Changed, "#dl-part-exact")
+    def _on_part_changed(self) -> None:
+        self._sync_part()
+
+    @on(Input.Submitted, "#dl-part-start")
+    def _on_part_start_submitted(self) -> None:
+        self.query_one("#dl-part-end", Input).focus()
+
+    def _part_check(self) -> PartCheck:
+        return check_part(
+            self.query_one("#dl-part-start", Input).value,
+            self.query_one("#dl-part-end", Input).value,
+            self._media_seconds(),
+            self._chosen_choice().size_bytes,
+        )
+
+    def _sync_part(self) -> None:
+        """The PART card's summary line and title, and the Download button."""
+        card = self.query_one("#dl-part")
+        summary = self.query_one("#dl-part-summary", Static)
+        if not self._part:
+            link_start = self.query_one("#dl-part-start", Input).value
+            summary.update(
+                Content.assemble(
+                    ("The link starts at ", "$text-muted"),
+                    (link_start, "bold $primary"),
+                    (": pick Only part to download from there.", "$text-muted"),
+                )
+                if link_start
+                else Content.styled(PART_WHOLE_HINT, "$text-muted")
+            )
+            card.border_subtitle = ""
+        else:
+            check = self._part_check()
+            message = check.message
+            if check.ok and self.query_one("#dl-part-exact", Checkbox).value:
+                message = Content.assemble(
+                    message, (f"{SEPARATOR}exact cuts, slower", "$text-muted")
+                )
+            summary.update(message)
+            card.border_subtitle = check.label if check.ok else ""
+        self._sync_download_label()
+
+    def _prepare_part(self, media: Any, text: str) -> None:
+        """After a check: the video's length as To's hint, and From from the
+        link's own start time (t=1m30s) when From is empty."""
+        seconds = self._media_seconds()
+        if seconds:
+            from max_cli.core.engines.download_section import clock
+
+            self.query_one("#dl-part-end", Input).placeholder = clock(seconds)
+        start = self.query_one("#dl-part-start", Input)
+        link_start = start_from_link(text.strip())
+        if link_start and not start.value:
+            start.value = link_start
+        self._sync_part()
+
+    def _part_values(self) -> dict[str, Any]:
+        """grab.download's start, end and exact_cuts; none for the whole video."""
+        if not self._part:
+            return {}
+        return {
+            "start": self.query_one("#dl-part-start", Input).value.strip() or None,
+            "end": self.query_one("#dl-part-end", Input).value.strip() or None,
+            "exact_cuts": self.query_one("#dl-part-exact", Checkbox).value,
+        }
 
     # --- playlist ---------------------------------------------------------
 
@@ -1210,14 +1500,29 @@ class DownloadPanel(Vertical):
             what = f"MP3 {choice.kbps} kbps" if choice.kbps else "MP3"
         else:
             what = choice.name
-        size = short_size(choice.size_bytes) if choice.size_bytes else ""
-        label = f"⬇ Download {what}" + (f" · {size}" if size else "")
+        size_bytes = choice.size_bytes
+        part = ""
+        if self._part:
+            check = self._part_check()
+            if check.ok:
+                part = f" · {check.label}"
+                size_bytes = (
+                    int(size_bytes * check.fraction)
+                    if size_bytes and check.fraction is not None
+                    else None
+                )
+        size = short_size(size_bytes) if size_bytes else ""
+        # A part names itself instead of the quality, which its chip shows:
+        # the button has room for one short line.
+        label = (f"⬇ {part.lstrip(' ·')}" if part else f"⬇ Download {what}") + (
+            f" · {size}" if size else ""
+        )
         selected = self._selected_items()
         if selected is not None:
             total = len(self._media.entries)
-            label = f"⬇ Download {len(selected)} of {total} items · {what}"
+            label = f"⬇ Download {len(selected)} of {total} items · {what}{part}"
         elif len(self._links()) > 1:
-            label = f"⬇ Download {len(self._links())} links · {what}"
+            label = f"⬇ Download {len(self._links())} links · {what}{part}"
         self.query_one("#btn-download", Button).label = label
 
     def _values_for(self, url: str) -> dict[str, Any]:
@@ -1232,6 +1537,7 @@ class DownloadPanel(Vertical):
         if output:
             values["output"] = output
         values.update(self._chosen_choice().values)
+        values.update(self._part_values())
         selected = self._selected_items()
         if selected is not None:
             items = playlist_items(selected, len(self._media.entries))
@@ -1308,6 +1614,12 @@ class DownloadPanel(Vertical):
                 )
             )
             return None
+        if self._part:
+            check = self._part_check()
+            if not check.ok:
+                self._set_status(Content.assemble(("Part: ", "$error"), check.message))
+                self.query_one("#dl-part-start", Input).focus()
+                return None
         all_values = [self._values_for(url) for url in links]
         try:
             for values in all_values:
@@ -1370,6 +1682,10 @@ class DownloadPanel(Vertical):
         self._show_playlist(False)
         self._show_tags_hint(None)
         self._set_preview("Paste another link, or several.", "")
+        self.query_one("#dl-part-start", Input).value = ""
+        self.query_one("#dl-part-end", Input).value = ""
+        self.query_one("#dl-part-end", Input).placeholder = "the end"
+        self._set_part(False)
 
     def _title_for(self, url: str) -> str:
         from max_cli.core.operations import grab
