@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Ask before moving, overwriting or deleting files. Off works like
     # --force everywhere, except `files shred`, which can't be undone.
     CONFIRM_DESTRUCTIVE: bool = True
+    # Ask PyPI once a day whether a newer Max is out, and say so after a
+    # command and in the dashboard (core/engines/updates.py).
+    UPDATE_CHECK: bool = True
     # The AI agent may run commands (programs, not shell syntax), asking
     # before each one. Off unless you turn it on.
     AGENT_SHELL: bool = False

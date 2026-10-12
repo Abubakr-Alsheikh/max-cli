@@ -63,6 +63,10 @@ def isolated_home(tmp_path_factory, monkeypatch):
     # The dashboard's "auto" icons read Windows Terminal's settings when run
     # inside it; tests see no terminal font, whoever runs them.
     monkeypatch.delenv("WT_SESSION", raising=False)
+    # No test asks PyPI for a newer Max; tests/test_updates.py turns it on.
+    from max_cli.config import settings
+
+    monkeypatch.setattr(settings, "UPDATE_CHECK", False)
     from max_cli.common import terminal_font
 
     terminal_font.terminal_has_nerd_font.cache_clear()

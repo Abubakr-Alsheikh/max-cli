@@ -27,5 +27,12 @@ def dashboard(
         )
         raise typer.Exit(1) from None
 
+    from max_cli.interface.tui.app import UPDATE_RESULT
+
     max_app = MaxDashboardApp()
-    max_app.run()
+    if max_app.run() == UPDATE_RESULT:
+        # The dashboard closed for the update, so nothing holds Max's files
+        # but this process; on Windows the update waits for it to end.
+        from max_cli.interface.cli_update import update_max
+
+        update_max(assume_yes=True)

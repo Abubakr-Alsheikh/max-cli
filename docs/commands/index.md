@@ -13,6 +13,7 @@ Max CLI provides these command groups:
 - [Tools](tools.md) - QR codes and clipboard helpers (`max tools`)
 - [Config](config.md) - API keys and settings (`max config`)
 - [Dashboard](dashboard.md) - Interactive terminal dashboard (`max`, or `max dashboard`)
+- [Update and Doctor](update.md) - Update Max, and check its setup (`max update`, `max doctor`)
 
 Run `max <group> --help` to see every command in a group, and `max <group> <command> --help` for its options.
 

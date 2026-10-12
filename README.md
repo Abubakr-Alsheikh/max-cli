@@ -48,18 +48,19 @@ max                                           # or open the dashboard
 
 **New to the terminal?** Read [Start here](https://Abubakr-Alsheikh.github.io/max-cli/start-here/), a step-by-step guide with no programming needed.
 
-The easiest way is [uv](https://docs.astral.sh/uv/), which brings its own Python:
+One line installs everything: [uv](https://docs.astral.sh/uv/) (which brings its own Python) when you don't have it, then Max.
 
 ```bash
-# 1. Install uv (once), then open a new terminal
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-curl -LsSf https://astral.sh/uv/install.sh | sh                                     # macOS and Linux
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
 
-# 2. Install Max
-uv tool install max-cli          # update later with: uv tool upgrade max-cli
+# macOS and Linux
+curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
 ```
 
-With Python 3.9 or newer already installed, `pipx install max-cli` or `pip install max-cli` works too.
+Open a new terminal afterwards, then run `max doctor` to check your setup. With uv already installed, `uv tool install max-cli` does the same; with Python 3.9 or newer, `pipx install max-cli` or `pip install max-cli` works too.
+
+**Updating:** `max update`. Max tells you when a new version is out, after a command and in the dashboard.
 
 For the newest code, install from the repository:
 
@@ -402,7 +403,8 @@ max config setup-font                        # icons for the dashboard's pages
 - **"The AI isn't set up":** run `max config setup`, or open Settings in the dashboard.
 - **YouTube HTTP 403:** run `max grab pot-setup` once, or try `--player-client web`.
 - **A queued job doesn't start:** run `max queue status` to see the worker, then `max queue start`.
-- **"max" is not recognized:** open a new terminal after installing. With uv, run `uv tool update-shell` once.
+- **Not sure what's wrong?** Run `max doctor`: it checks FFmpeg, the AI, YouTube and your folders, and gives the fix for each.
+- **"max" is not recognized:** open a new terminal after installing. With uv, run `uv tool update-shell` once. `python -m max_cli` works meanwhile.
 - **Something else:** run `max --version` for your version and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues).
 
 ## For developers
