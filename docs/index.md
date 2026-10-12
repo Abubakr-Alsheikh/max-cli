@@ -23,6 +23,7 @@ max                                           # the dashboard
 
 ## Where to start
 
+- [Start here](start-here.md): new to the terminal? Install Max and finish your first job in ten minutes, step by step.
 - [Installation](installation.md): install Max, FFmpeg, OCR and an AI provider.
 - [Usage](usage.md): the three ways to use Max, batches, the queue and the agent.
 - [Commands](commands/index.md): every command group and option.

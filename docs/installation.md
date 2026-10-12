@@ -2,13 +2,23 @@
 
 ## Prerequisites
 
-- Python 3.9 or newer
+- Python 3.9 or newer (uv, below, installs it for you)
 - FFmpeg for video and audio commands (Max can download it for you)
 - Tesseract, only for `max pdf ocr`
 
+New to the terminal? Follow [Start here](start-here.md) instead: it walks through every step.
+
 ## Install
 
-From PyPI:
+The easiest way is [uv](https://docs.astral.sh/uv/), which brings its own Python and keeps Max apart from your other programs:
+
+```bash
+uv tool install max-cli     # update later with: uv tool upgrade max-cli
+```
+
+Install uv first with `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS and Linux), then open a new terminal.
+
+With Python already installed, `pipx install max-cli` works the same way. Plain pip works too, best inside a virtual environment:
 
 ```bash
 pip install max-cli

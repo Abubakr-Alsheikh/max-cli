@@ -39,11 +39,14 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - toc:
       permalink: true
 
 nav:
   - Home: index.md
+  - Start Here: start-here.md
   - Installation: installation.md
   - Usage: usage.md
   - Commands:
