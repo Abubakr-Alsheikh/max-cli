@@ -12,6 +12,11 @@
 
 - **Download part of a video.** `max grab download URL --start 1:00 --end 5:00` fetches only that stretch, as video or MP3, without downloading the whole video. The file's name ends in the times (`Talk (1.00-5.00).mp4`). `--exact-cuts` starts it on the second. The Download page has Start and End fields in Options, and the AI agent can do it too ("download minutes 1 to 5 of this").
 
+- **Updates.** Max tells you when a new version is out: one line after a command and a notice in the dashboard, checked at most once a day. `max update` installs it the way you installed Max (uv, pipx or pip), keeping extras. On Windows it updates from a small window that waits for Max to close, since updating a running Max broke the install. The dashboard's **Settings** > **Maintenance** shows the newest version and updates in one click. **Tell me when a new Max is out** (`UPDATE_CHECK`) turns the checks off.
+- **`max doctor`** checks FFmpeg, the AI, transcripts, the YouTube fix, your folders, old settings and OCR, and gives the fix for each problem.
+- **One-line installers.** `install.ps1` (Windows) and `install.sh` (macOS, Linux) install uv when it's missing, then Max, and check that it starts. The new [Start Here](https://Abubakr-Alsheikh.github.io/max-cli/start-here/) guide walks beginners through it.
+- `python -m max_cli` runs Max when the `max` command isn't on PATH.
+
 ### Fixed
 
 - `max images compress` and `convert` on a folder no longer overwrite one image with another when two share a name (`cat.png` and `cat.jpg` both becoming `cat.jpg`): they come out as `cat_png.jpg` and `cat_jpg.jpg`.

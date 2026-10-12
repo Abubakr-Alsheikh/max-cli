@@ -61,13 +61,17 @@ def tolerate_unencodable_output() -> None:
 
 def main():
     """Main entry point."""
+    from max_cli.interface import update_notice
+
     tolerate_unencodable_output()
     register(app)
+    notice = update_notice.start()
 
     try:
         init_plugins(app)
         app()
     except SystemExit as exit_signal:
+        update_notice.finish(notice)
         # Commands often report a failure with log_error and then return, so
         # click exits 0. Exit 1 instead, so scripts can detect the failure.
         from max_cli.common.exit_status import error_reported

@@ -50,6 +50,12 @@ _GROUPS = {
     "dashboard": LazyGroupSpec(
         "max_cli.interface.tui.dashboard", "Launch the interactive TUI dashboard."
     ),
+    "doctor": LazyGroupSpec(
+        "max_cli.interface.cli_doctor", "Check Max's setup and say how to fix it."
+    ),
+    "update": LazyGroupSpec(
+        "max_cli.interface.cli_update", "Update Max to the newest version."
+    ),
 }
 
 

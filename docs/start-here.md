@@ -34,46 +34,45 @@ You can paste into the terminal with **Ctrl+V** on Windows and Linux (some Linux
 
 A window opens with a blinking cursor. That's where you type.
 
-## Step 2: Install uv
-
-uv is a small, free installer for Python programs. It brings its own copy of Python, so you don't have to install Python yourself, and it keeps Max separate from anything else on your computer.
+## Step 2: Install Max
 
 Copy the line for your system, paste it into the terminal, and press **Enter**:
 
 === "Windows"
 
     ```powershell
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
     ```
 
 === "macOS and Linux"
 
     ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
     ```
 
-When it says it's done, **close the terminal and open a new one**. The new window knows where uv is; the old one doesn't.
+The installer gets **uv** first, a small, free installer for Python programs that brings its own copy of Python, so you don't install Python yourself. Then it installs Max and everything it needs, and checks that Max starts. It takes a minute or two. When it says **Max is ready**, you're done.
 
-!!! note "Prefer a package manager?"
-    `winget install --id=astral-sh.uv -e` on Windows or `brew install uv` on a Mac installs the same thing.
+## Step 3: Open a new terminal
 
-## Step 3: Install Max
-
-In the new terminal, run:
-
-```bash
-uv tool install max-cli
-```
-
-uv downloads Max and everything it needs. It takes a minute or two the first time.
-
-Close the terminal again and open a new one, then check that Max answers:
+**Close the terminal and open a new one.** The new window knows the `max` command; the old one doesn't. Check that Max answers:
 
 ```bash
 max --version
 ```
 
-You should see a line such as `max 1.1.0`. Max is installed.
+You should see a line such as `max 1.1.0`. To check the rest of your setup at any time, run:
+
+```bash
+max doctor
+```
+
+It marks each part (FFmpeg, the AI, YouTube, your folders) and says how to fix anything that's missing.
+
+??? note "Install it step by step instead"
+    The installer runs these two steps for you. To run them yourself:
+
+    1. Install uv: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` on Windows, or `curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux (or `winget install --id=astral-sh.uv -e`, or `brew install uv`). Then open a new terminal.
+    2. Install Max: `uv tool install max-cli`. Then open a new terminal.
 
 ## Step 4: Open the dashboard
 
@@ -130,11 +129,13 @@ max "convert every m4a in my Music folder to mp3"
 
 ## Keep Max up to date
 
-New versions add features and fix problems. To update, run:
+New versions add features and fix problems. Max tells you when one is out: a short line after a command, and a notice when the dashboard opens. To update, run:
 
 ```bash
-uv tool upgrade max-cli
+max update
 ```
+
+or press **Update** in the dashboard under **Settings** > **Maintenance**. On Windows a small **Updating Max** window opens; it waits for Max to close, updates it, and tells you when it's done. Running the installer line from Step 2 again updates Max too.
 
 To remove Max completely:
 
@@ -145,6 +146,8 @@ uv tool uninstall max-cli
 Your settings stay in a `.max_config.env` file in your home folder, and Max's own data in a `.max_cli` folder there. Delete both if you want no trace left.
 
 ## If something goes wrong
+
+**First, run `max doctor`.** It checks FFmpeg, the AI, YouTube and your folders, and says what to do about each problem it finds.
 
 **"uv" or "max" is not recognized, or "command not found".**
 Close the terminal and open a new one; a window opened before the install doesn't know about it. If that doesn't help, run `uv tool update-shell`, then open a new terminal once more.
@@ -162,7 +165,7 @@ YouTube blocked the request. On the Download page, press **Install fix** in the 
 Run `max config setup-ffmpeg` and try again.
 
 **Still stuck?**
-Run `max config validate`, copy what it says, and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues). Never paste your AI key into an issue.
+Run `max doctor`, copy what it says, and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues). Never paste your AI key into an issue.
 
 ## Already have Python?
 

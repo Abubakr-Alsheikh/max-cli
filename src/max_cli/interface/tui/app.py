@@ -87,6 +87,11 @@ def _app_version() -> str:
         return ""
 
 
+# What run() returns when the user picked Update: dashboard.py then updates.
+UPDATE_RESULT = "update"
+UPDATE_NOTICE_SECONDS = 15
+
+
 class MaxDashboardApp(App):
     """Interactive dashboard for Max CLI."""
 
@@ -250,6 +255,7 @@ class MaxDashboardApp(App):
         self.navigate(start_page if start_page in known else "home", remember=False)
         self.query_one(Sidebar).focus_nav()
         self._point_out_removed_settings()
+        self._check_for_update()
         self.set_interval(2.0, self._refresh_active_panel)
         self.set_interval(BADGE_REFRESH_SECONDS, self._refresh_badges)
         # Run queued work while the dashboard is open: "Queue for later" and
@@ -259,6 +265,32 @@ class MaxDashboardApp(App):
 
         self._task_manager = get_task_manager()
         self._task_manager.start_worker()
+
+    def _check_for_update(self) -> None:
+        """Ask PyPI in a thread, at most once a day (core/engines/updates.py)."""
+        from max_cli.config import settings
+
+        if settings.UPDATE_CHECK:
+            self.run_worker(self._fetch_update, thread=True, group="update-check")
+
+    def _fetch_update(self) -> None:
+        from max_cli.core.engines import updates
+
+        status = updates.check()
+        if status.available:
+            self.call_from_thread(self._announce_update, status.latest, status.current)
+
+    def _announce_update(self, latest: str, current: str) -> None:
+        self.notify(
+            f"Max {latest} is out (you have {current}). Settings ({SETTINGS_KEY}) "
+            "> Maintenance > Update installs it.",
+            title="Update available",
+            timeout=UPDATE_NOTICE_SECONDS,
+        )
+
+    def update_and_quit(self) -> None:
+        """Close the dashboard; `max dashboard` then updates Max (cli_update)."""
+        self.exit(UPDATE_RESULT)
 
     def _point_out_removed_settings(self) -> None:
         from max_cli.common.settings_file import removed_settings_in_file

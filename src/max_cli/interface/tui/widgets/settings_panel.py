@@ -6,7 +6,8 @@ with Show, lists for choices, checkboxes, a folder picker. Save checks the
 values, writes only the changed keys to ~/.max_config.env and applies them
 to the running app.
 
-MAINTENANCE shows versions, whether FFmpeg is found, the size of
+MAINTENANCE shows versions, whether a newer Max is out (Update closes
+the dashboard and installs it), whether FFmpeg is found, the size of
 ~/.max_cli, and clears the cache, old undo backups and old undo logs, each
 after a confirmation.
 """
@@ -25,7 +26,7 @@ from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from max_cli.common.utils import format_size
 from max_cli.config import Settings, settings
-from max_cli.interface.tui.text import markup
+from max_cli.interface.tui.text import markup, relative_time
 from max_cli.interface.tui.widgets.ai_slot import FALLBACK, MAIN, AISlot, slot_settings
 from max_cli.interface.tui.workers import show_from_worker
 
@@ -166,6 +167,13 @@ CARDS: tuple[tuple[str, str, tuple[SettingField, ...]], ...] = (
                 "Ask before moving, overwriting or deleting files",
                 "bool",
                 "Off works like --force on every command. Shred always asks.",
+                wide=True,
+            ),
+            SettingField(
+                "UPDATE_CHECK",
+                "Tell me when a new Max is out",
+                "bool",
+                "Asks PyPI once a day. Maintenance below updates Max.",
                 wide=True,
             ),
             SettingField(
@@ -329,6 +337,7 @@ class SettingsPanel(Vertical):
         with Vertical(id="settings-upkeep", classes="settings-card") as upkeep:
             upkeep.border_title = "MAINTENANCE"
             yield Static("", id="upkeep-about")
+            yield from self._upkeep_row("upkeep-update", ("Check now", "btn-update"))
             yield from self._upkeep_row("upkeep-ffmpeg", None)
             yield from self._upkeep_row("upkeep-data", ("Open folder", "btn-open-data"))
             yield from self._upkeep_row(
@@ -538,7 +547,10 @@ class SettingsPanel(Vertical):
         data_dir = Path.home() / ".max_cli"
         cache = get_default_cache()
         backups = data_dir / "backups"
+        from max_cli.core.engines import updates
+
         facts = {
+            "update": updates.check(),
             "ffmpeg": ffmpeg,
             "data_size": _folder_size(data_dir),
             "cache": (cache.get_size(), cache.count()),
@@ -552,15 +564,14 @@ class SettingsPanel(Vertical):
         show_from_worker(self, self._show_upkeep, facts)
 
     def _show_upkeep(self, facts: dict[str, Any]) -> None:
-        def line(title: str, *parts: tuple[str, str]) -> Content:
-            return Content.assemble((f"{title:<13}", "bold $accent"), *parts)
-
+        line = _upkeep_line
         muted = "$text-muted"
         ffmpeg = facts["ffmpeg"]
         cache_size, cache_items = facts["cache"]
         backup_count, backup_size = facts["backups"]
         with self.app.batch_update():
             self.query_one("#upkeep-about", Static).update(_about())
+            self._show_update(facts["update"])
             self.query_one("#upkeep-ffmpeg", Static).update(
                 line("FFMPEG", ("✓ found  ", "bold $success"), (str(ffmpeg), muted))
                 if ffmpeg
@@ -658,6 +669,72 @@ class SettingsPanel(Vertical):
 
         self.app.push_screen(ConfirmDialog(question), _answered)
 
+    def _show_update(self, status: Any) -> None:
+        line = _upkeep_line
+        self._update_status = status
+        muted = "$text-muted"
+        button = self.query_one("#btn-update", Button)
+        checked = (
+            f"  ·  checked {relative_time(status.checked_at.isoformat())}"
+            if status.checked_at
+            else ""
+        )
+        if status.available:
+            text = line(
+                "UPDATES",
+                (f"! {status.latest} is out  ", "bold $warning"),
+                (f"you have {status.current}{checked}", muted),
+            )
+            button.label = f"Update to {status.latest}"
+        elif status.latest:
+            text = line(
+                "UPDATES",
+                ("✓ newest  ", "bold $success"),
+                (f"{status.current}{checked}", muted),
+            )
+            button.label = "Check now"
+        else:
+            text = line(
+                "UPDATES",
+                ("? not checked  ", "bold $warning"),
+                (status.error or "Check now asks PyPI.", muted),
+            )
+            button.label = "Check now"
+        self.query_one("#upkeep-update", Static).update(text)
+
+    @on(Button.Pressed, "#btn-update")
+    def _on_update(self) -> None:
+        status = getattr(self, "_update_status", None)
+        if status is None or not status.available:
+            self.query_one("#btn-update", Button).label = "Checking..."
+            self.run_worker(self._check_now, thread=True, group="settings-update")
+            return
+        from max_cli.interface.tui.widgets.dialogs import ConfirmDialog
+
+        def _answered(confirmed: Optional[bool]) -> None:
+            if confirmed:
+                self.app.update_and_quit()  # type: ignore[attr-defined]  # MaxDashboardApp
+
+        self.app.push_screen(
+            ConfirmDialog(
+                f"Close the dashboard and update Max to {status.latest}? Downloads "
+                "and jobs running here stop; queued jobs wait for the next start."
+            ),
+            _answered,
+        )
+
+    def _check_now(self) -> None:
+        from max_cli.core.engines import updates
+
+        status = updates.check(force=True)
+
+        def show(found: Any) -> None:
+            self._show_update(found)
+            if found.latest and not found.available:
+                self.notify(f"Max {found.current} is the newest version.")
+
+        show_from_worker(self, show, status)
+
     @on(Button.Pressed, "#btn-open-data")
     def _on_open_data(self) -> None:
         from max_cli.common.utils import open_in_file_manager
@@ -737,6 +814,11 @@ class SettingsPanel(Vertical):
             "including your API key.",
             reset,
         )
+
+
+def _upkeep_line(title: str, *parts: tuple[str, str]) -> Content:
+    """A MAINTENANCE line: the title in a fixed column, then its parts."""
+    return Content.assemble((f"{title:<13}", "bold $accent"), *parts)
 
 
 def _about() -> Content:

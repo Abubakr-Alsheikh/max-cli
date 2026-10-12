@@ -10,10 +10,20 @@ New to the terminal? Follow [Start here](start-here.md) instead: it walks throug
 
 ## Install
 
-The easiest way is [uv](https://docs.astral.sh/uv/), which brings its own Python and keeps Max apart from your other programs:
+The quickest way is the one-line installer. It installs [uv](https://docs.astral.sh/uv/) when you don't have it (uv brings its own Python), then Max, and checks that Max starts. Run it again any time to update.
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"   # Windows
+```
 
 ```bash
-uv tool install max-cli     # update later with: uv tool upgrade max-cli
+curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh   # macOS and Linux
+```
+
+Or run the steps yourself with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install max-cli     # update later with: max update
 ```
 
 Install uv first with `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS and Linux), then open a new terminal.
@@ -79,5 +89,13 @@ You can also set the providers on the dashboard's Settings page, which lists eac
 
 ```bash
 max --version
-max config validate
+max doctor        # FFmpeg, the AI, YouTube, folders: each with its fix
 ```
+
+## Update
+
+```bash
+max update
+```
+
+Max updates itself the way you installed it (uv, pipx or pip) and tells you when a new version is out. See [Update and Doctor](commands/update.md).

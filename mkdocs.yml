@@ -34,6 +34,7 @@ theme:
 
 markdown_extensions:
   - admonition
+  - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -62,6 +63,7 @@ nav:
       - commands/tools.md
       - commands/config.md
       - commands/dashboard.md
+      - commands/update.md
   - API:
       - api/index.md
       - api/core.md
