@@ -36,24 +36,41 @@ A window opens with a blinking cursor. That's where you type.
 
 ## Step 2: Install Max
 
-Copy the line for your system, paste it into the terminal, and press **Enter**:
-
 === "Windows"
 
+    Paste these two lines one at a time, pressing **Enter** after each. They use **winget**, the app installer built into Windows 10 and 11, which checks each download against the hash in Microsoft's package list:
+
     ```powershell
-    powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
+    winget install --id astral-sh.uv --exact
     ```
 
+    Close the terminal and open a new one, then:
+
+    ```powershell
+    uv tool install max-cli
+    ```
+
+    If winget says it isn't recognized, install **App Installer** from the Microsoft Store first, or use the one-line installer below.
+
+    ??? note "Or one line that does both"
+        ```powershell
+        powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
+        ```
+
+        If Windows Defender stops it ("This script contains malicious content and has been blocked"), it's reacting to the *download-and-run* pattern of `irm ... | iex`, not to Max. Use the two winget lines above instead.
+
 === "macOS and Linux"
+
+    Paste this line and press **Enter**:
 
     ```bash
     curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
     ```
 
-!!! warning "Paste one line only"
-    Copy only the line for your system, without any line that starts with `#`, and don't paste the error text back in. You don't need to open the terminal as administrator.
+!!! warning "Paste one line at a time"
+    Copy only the lines for your system, without any line that starts with `#`, and don't paste error text back in. You don't need to open the terminal as administrator.
 
-The installer gets **uv** first, a small, free installer for Python programs that brings its own copy of Python, so you don't install Python yourself. Then it installs Max and everything it needs, and checks that Max starts. It takes a minute or two. When it says **Max is ready**, you're done.
+First comes **uv**, a small, free installer for Python programs that brings its own copy of Python, so you don't install Python yourself. Then uv installs Max and everything it needs. It takes a minute or two.
 
 ## Step 3: Open a new terminal
 
@@ -174,6 +191,9 @@ If that fails too, install step by step (Step 2's "Install it step by step inste
 
 **Windows Defender or another antivirus blocked something.**
 It's usually a false alarm about `max.exe` (the small launcher uv makes) or `ffmpeg.exe`. [Is Max Safe?](safety.md) explains what each file is, how to check it in **Protection history**, and how to report a false alarm to Microsoft.
+
+**"This script contains malicious content and has been blocked by your antivirus software" (Windows).**
+Windows Defender blocks *any* script that is downloaded and run in one go (`irm ... | iex`), because malware does that too. Use the two winget lines in Step 2 instead: they run no script, and winget checks what it downloads.
 
 **"Running scripts is disabled on this system" (Windows).**
 You typed only part of the uv line. Copy the whole line from Step 2, starting with `powershell -ExecutionPolicy ByPass`.

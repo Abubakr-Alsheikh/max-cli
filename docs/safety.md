@@ -6,7 +6,7 @@ Max is open source: every line of the program and of its installers is on [GitHu
 
 | Piece | Comes from | Where it goes |
 |-------|------------|---------------|
-| **uv** (installs Python programs) | winget (Windows' package manager) when you have it, else [astral.sh](https://docs.astral.sh/uv/), the company that makes it | `%LOCALAPPDATA%\Microsoft\WinGet` or `~\.local\bin` |
+| **uv** (installs Python programs) | winget (Windows' package manager) when you have it, else the official zip from [uv's GitHub releases](https://github.com/astral-sh/uv/releases), checked against its published SHA-256 ([astral.sh](https://docs.astral.sh/uv/) makes uv) | `%LOCALAPPDATA%\Microsoft\WinGet` or `~\.local\bin` |
 | **Python** (for Max only) | uv's own copy, from the [python-build-standalone](https://github.com/astral-sh/python-build-standalone) project | uv's folder in your user profile |
 | **Max** | [PyPI](https://pypi.org/project/max-cli/), the Python package index | uv's folder; the `max` command in `~\.local\bin` |
 | **FFmpeg** (video and audio) | winget (Gyan's build) or Homebrew when you have them; else a download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) or [BtbN](https://github.com/BtbN/FFmpeg-Builds) (Windows and Linux) or [Martin Riedl](https://ffmpeg.martin-riedl.de/) (macOS), which are the builds [ffmpeg.org](https://ffmpeg.org/download.html) links to | the package manager's folder, or `~\.max_cli\bin` |
@@ -23,7 +23,7 @@ Antivirus programs judge unfamiliar files by how they look and behave. They some
 
 - **`max.exe`**. uv makes a small launcher program called `max.exe` that starts Python with Max. Every launcher like it looks the same to an antivirus, and new ones have been flagged by mistake. The launcher holds no Max code.
 - **`ffmpeg.exe` downloaded by Max**. A program downloaded by another program, rather than by a browser, gets extra suspicion. Installing FFmpeg with winget avoids this: `winget install Gyan.FFmpeg`.
-- **The one-line installer** (`irm ... | iex`). Downloading a script and running it at once is a pattern malware uses too, so Windows can block it with "This script contains malicious content and has been blocked by your antivirus software". Use the step-by-step install instead.
+- **The one-line installer** (`irm ... | iex`). Downloading a script and running it at once is a pattern malware uses too, so Windows can block it with "This script contains malicious content and has been blocked by your antivirus software", or without a word. Max's installer itself never downloads and runs another script: it gets uv from winget, or from uv's official zip checked against its published SHA-256. To avoid the pattern completely, install with the two winget lines: `winget install --id astral-sh.uv --exact`, then in a new terminal `uv tool install max-cli`.
 
 ## When Windows Defender blocks something
 

@@ -10,6 +10,8 @@ New to the terminal? Follow [Start here](start-here.md) instead: it walks throug
 
 ## Install
 
+On Windows, the most trusted way uses winget, built into Windows 10 and 11: `winget install --id astral-sh.uv --exact`, then in a new terminal `uv tool install max-cli`.
+
 The quickest way is the one-line installer. It installs [uv](https://docs.astral.sh/uv/) when you don't have it (uv brings its own Python), then Max, and checks that Max starts. Run it again any time to update.
 
 ```powershell

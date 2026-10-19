@@ -50,11 +50,14 @@ max                                           # or open the dashboard
 
 One line installs everything: [uv](https://docs.astral.sh/uv/) (which brings its own Python) when you don't have it, then Max.
 
-**Windows** (PowerShell; no administrator needed):
+**Windows** (PowerShell; no administrator needed). winget, built into Windows 10 and 11, installs uv; open a new terminal, then uv installs Max:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
+winget install --id astral-sh.uv --exact
+uv tool install max-cli
 ```
+
+Or in one line: `powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"` (if Windows Defender blocks this download-and-run line, use the two lines above).
 
 **macOS and Linux:**
 
