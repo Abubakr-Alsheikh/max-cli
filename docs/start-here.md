@@ -50,6 +50,9 @@ Copy the line for your system, paste it into the terminal, and press **Enter**:
     curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
     ```
 
+!!! warning "Paste one line only"
+    Copy only the line for your system, without any line that starts with `#`, and don't paste the error text back in. You don't need to open the terminal as administrator.
+
 The installer gets **uv** first, a small, free installer for Python programs that brings its own copy of Python, so you don't install Python yourself. Then it installs Max and everything it needs, and checks that Max starts. It takes a minute or two. When it says **Max is ready**, you're done.
 
 ## Step 3: Open a new terminal
@@ -152,6 +155,26 @@ Your settings stay in a `.max_config.env` file in your home folder, and Max's ow
 **"uv" or "max" is not recognized, or "command not found".**
 Close the terminal and open a new one; a window opened before the install doesn't know about it. If that doesn't help, run `uv tool update-shell`, then open a new terminal once more.
 
+**"Unable to connect to the remote server" when you install.**
+Some networks block `raw.githubusercontent.com`, where the installer lives. Use the same installer from Max's website instead:
+
+=== "Windows"
+
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://abubakr-alsheikh.github.io/max-cli/install.ps1 | iex"
+    ```
+
+=== "macOS and Linux"
+
+    ```bash
+    curl -LsSf https://abubakr-alsheikh.github.io/max-cli/install.sh | sh
+    ```
+
+If that fails too, install step by step (Step 2's "Install it step by step instead"), or behind a company proxy ask its administrator.
+
+**Windows Defender or another antivirus blocked something.**
+It's usually a false alarm about `max.exe` (the small launcher uv makes) or `ffmpeg.exe`. [Is Max Safe?](safety.md) explains what each file is, how to check it in **Protection history**, and how to report a false alarm to Microsoft.
+
 **"Running scripts is disabled on this system" (Windows).**
 You typed only part of the uv line. Copy the whole line from Step 2, starting with `powershell -ExecutionPolicy ByPass`.
 
@@ -161,8 +184,8 @@ Use **Windows Terminal** on Windows (it comes with Windows 11; get it from the M
 **A YouTube download fails with "HTTP 403".**
 YouTube blocked the request. On the Download page, press **Install fix** in the TOOLS card, or run `max grab pot-setup`.
 
-**FFmpeg didn't download.**
-Run `max config setup-ffmpeg` and try again.
+**FFmpeg didn't install.**
+Run `max config setup-ffmpeg` again: Max tries winget first, then several download sites. Or install it yourself with `winget install Gyan.FFmpeg` (Windows) or `brew install ffmpeg` (Mac), then open a new terminal.
 
 **Still stuck?**
 Run `max doctor`, copy what it says, and [open an issue](https://github.com/Abubakr-Alsheikh/max-cli/issues). Never paste your AI key into an issue.

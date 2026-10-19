@@ -39,11 +39,10 @@ class FFmpegEngine:
 
         from max_cli.common.ffmpeg_resolver import FFmpegResolver
 
-        resolver = FFmpegResolver()
-        if resolver.local_path.exists() and resolver._validate_binary(
-            resolver.local_path
-        ):
-            return resolver.local_path
+        # Also where winget and Homebrew put it, before PATH knows.
+        installed = FFmpegResolver().find_installed()
+        if installed:
+            return installed
 
         if auto_resolve:
             from max_cli.common.ffmpeg_resolver import resolve_ffmpeg

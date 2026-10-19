@@ -50,13 +50,19 @@ max                                           # or open the dashboard
 
 One line installs everything: [uv](https://docs.astral.sh/uv/) (which brings its own Python) when you don't have it, then Max.
 
-```bash
-# Windows
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
+**Windows** (PowerShell; no administrator needed):
 
-# macOS and Linux
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.ps1 | iex"
+```
+
+**macOS and Linux:**
+
+```bash
 curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
 ```
+
+"Unable to connect"? Some networks block `raw.githubusercontent.com`; the same installer is at `https://abubakr-alsheikh.github.io/max-cli/install.ps1` (and `install.sh`). Antivirus warning? See [Is Max Safe?](https://Abubakr-Alsheikh.github.io/max-cli/safety/).
 
 Open a new terminal afterwards, then run `max doctor` to check your setup. With uv already installed, `uv tool install max-cli` does the same; with Python 3.9 or newer, `pipx install max-cli` or `pip install max-cli` works too.
 
@@ -399,7 +405,8 @@ max config setup-font                        # icons for the dashboard's pages
 
 ## Troubleshooting
 
-- **"FFmpeg not found":** run `max config setup-ffmpeg`, or accept the download offer the next time you run a video or audio command.
+- **"FFmpeg not found":** run `max config setup-ffmpeg` (winget or Homebrew first, then a download checked against its checksum), or accept the offer the next time you run a video or audio command.
+- **An antivirus blocked `max.exe` or `ffmpeg.exe`:** usually a false alarm; see [Is Max Safe?](https://Abubakr-Alsheikh.github.io/max-cli/safety/).
 - **"The AI isn't set up":** run `max config setup`, or open Settings in the dashboard.
 - **YouTube HTTP 403:** run `max grab pot-setup` once, or try `--player-client web`.
 - **A queued job doesn't start:** run `max queue status` to see the worker, then `max queue start`.
