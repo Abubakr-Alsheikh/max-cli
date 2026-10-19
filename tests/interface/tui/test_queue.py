@@ -21,6 +21,8 @@ from max_cli.interface.tui.widgets.queue_panel import (
     task_kind,
 )
 
+from .waiting import wait_until
+
 SIZE = (130, 60)
 
 
@@ -290,7 +292,9 @@ async def test_clear_waiting_asks_and_keeps_the_running_task(answer, cleared):
     async with app.run_test(size=SIZE) as pilot:
         await _refresh(app, pilot)
         app.query_one("#btn-clear-waiting", Button).press()
-        await pilot.pause()
+        # The dialog's buttons mount a frame after the screen: a slow
+        # Windows runner looked for them too early.
+        await wait_until(pilot, lambda: app.screen.query_one(answer, Button))
         assert isinstance(app.screen, ConfirmDialog)
         app.screen.query_one(answer, Button).press()
         await _refresh(app, pilot)
