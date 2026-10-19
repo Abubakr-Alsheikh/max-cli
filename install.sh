@@ -3,6 +3,10 @@
 #
 #   curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh
 #
+# Same script, for networks that block raw.githubusercontent.com:
+#
+#   curl -LsSf https://abubakr-alsheikh.github.io/max-cli/install.sh | sh
+#
 # It installs uv (a small installer for Python programs that brings its own
 # Python) when it's missing, then Max with uv, puts both on your PATH, and
 # checks that `max` answers. Run it again any time to update Max.

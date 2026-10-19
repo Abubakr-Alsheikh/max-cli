@@ -10,6 +10,8 @@ New to the terminal? Follow [Start here](start-here.md) instead: it walks throug
 
 ## Install
 
+On Windows, the most trusted way uses winget, built into Windows 10 and 11: `winget install --id astral-sh.uv --exact`, then in a new terminal `uv tool install max-cli`.
+
 The quickest way is the one-line installer. It installs [uv](https://docs.astral.sh/uv/) when you don't have it (uv brings its own Python), then Max, and checks that Max starts. Run it again any time to update.
 
 ```powershell
@@ -19,6 +21,8 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Abu
 ```bash
 curl -LsSf https://raw.githubusercontent.com/Abubakr-Alsheikh/max-cli/main/install.sh | sh   # macOS and Linux
 ```
+
+Networks that block `raw.githubusercontent.com` can use the copy on Max's website: `powershell -ExecutionPolicy ByPass -c "irm https://abubakr-alsheikh.github.io/max-cli/install.ps1 | iex"` or `curl -LsSf https://abubakr-alsheikh.github.io/max-cli/install.sh | sh`. An antivirus warning is usually a false alarm: see [Is Max Safe?](safety.md).
 
 Or run the steps yourself with [uv](https://docs.astral.sh/uv/):
 
@@ -56,7 +60,7 @@ The base install includes the AI, PDF, image and download features and the dashb
 
 ## FFmpeg
 
-Max looks for FFmpeg on your PATH. If it can't find it, the first video or audio command offers to download a build for your platform into `~/.max_cli/bin/`, and checks that it runs.
+Max looks for FFmpeg on your PATH and where winget and Homebrew put it. If it can't find it, the first video or audio command offers to install it: with winget (Windows, Gyan's build) or Homebrew (macOS) when you have them, else by downloading a build into `~/.max_cli/bin/`. A download comes from gyan.dev or BtbN (Windows), BtbN or johnvansickle.com (Linux), or Martin Riedl (macOS), tried in that order, and must match the SHA-256 its site publishes. Max installs `ffprobe` beside `ffmpeg`, and checks that it runs.
 
 To install it ahead of time:
 

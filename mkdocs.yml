@@ -49,6 +49,7 @@ nav:
   - Home: index.md
   - Start Here: start-here.md
   - Installation: installation.md
+  - Is Max Safe?: safety.md
   - Usage: usage.md
   - Commands:
       - commands/index.md

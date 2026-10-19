@@ -18,6 +18,7 @@ class TestMediaEngine:
         mock_which.return_value = None
         mock_resolver = MagicMock()
         mock_resolver.local_path.exists.return_value = False
+        mock_resolver.find_installed.return_value = None
         mock_resolver_class.return_value = mock_resolver
 
         with pytest.raises(RuntimeError, match="FFmpeg is not installed"):

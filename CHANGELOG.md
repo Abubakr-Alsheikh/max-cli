@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **FFmpeg installs again on every system.** The Windows download link answered 404, the macOS source shut its download API, and the Linux one stopped answering. Max now installs FFmpeg with winget (Windows) or Homebrew (macOS) when you have them, else downloads it from the next source that works (gyan.dev, BtbN, johnvansickle.com, Martin Riedl), checks it against the SHA-256 its site publishes, and installs `ffprobe` too. When nothing works, it says which sources failed and how to install FFmpeg yourself, without a traceback.
+- **Windows Defender blocked the Windows installer.** It downloaded uv's installer script and ran it straight away, a pattern Defender stops because malware uses it too. It now never runs a downloaded script: it gets uv with winget (Windows' own package manager), or from uv's official zip checked against its published SHA-256. It also turns on TLS 1.2 for older Windows, and has a copy on Max's website for networks that block `raw.githubusercontent.com`. The guides now lead with two winget commands, which need no script at all.
+
+### New
+
+- **[Is Max Safe?](https://Abubakr-Alsheikh.github.io/max-cli/safety/)**, a page on what Max installs and from where, and what to do when an antivirus stops `max.exe`, `ffmpeg.exe` or the installer.
+
 ## 1.2.0 (2026-10-13)
 
 Compress to a size, cut the pauses out of recordings, transcripts and subtitles with Gemini, download only part of a video, and an easier install that tells you when to update.

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from max_cli.common.archives import UnsafeArchiveError
+from max_cli.common import ffmpeg_resolver
 from max_cli.common.exceptions import ResourceNotFoundError
 from max_cli.common.ffmpeg_resolver import (
     MAX_CLI_BIN_DIR,
@@ -108,11 +108,16 @@ class TestFFmpegResolverTier3:
         confirm = MagicMock(return_value=True)
         progress = MagicMock()
 
-        def _fake_download(**kwargs: object) -> None:
+        def _fake_download(*args: object, **kwargs: object) -> None:
             (tmp_path / "ffmpeg").touch()
 
         mock_download.side_effect = _fake_download
+        source = ffmpeg_resolver.FFmpegSource(
+            "test", (ffmpeg_resolver.Download("https://example.com/ffmpeg"),)
+        )
 
+        monkeypatch.setattr(ffmpeg_resolver, "ffmpeg_sources", lambda system: [source])
+        monkeypatch.setattr(FFmpegResolver, "_package_manager", lambda self: None)
         with patch("max_cli.common.ffmpeg_resolver.MAX_CLI_BIN_DIR", tmp_path):
             resolver = FFmpegResolver()
             resolver.bin_dir = tmp_path
@@ -256,7 +261,6 @@ class TestDownloadDirectBinary:
         resolver._download_binary(
             url="https://example.com/ffmpeg",
             binary_name="ffmpeg",
-            extract_path=None,
         )
 
         assert resolver.local_path.exists()
@@ -291,7 +295,6 @@ class TestDownloadZipExtraction:
         resolver._download_binary(
             url="https://example.com/ffmpeg.zip",
             binary_name="ffmpeg.exe",
-            extract_path="bin/ffmpeg.exe",
         )
 
         assert resolver.local_path.exists()
@@ -331,7 +334,6 @@ class TestDownloadTarXzExtraction:
         resolver._download_binary(
             url="https://example.com/ffmpeg.tar.xz",
             binary_name="ffmpeg",
-            extract_path=None,
         )
 
         assert resolver.local_path.exists()
@@ -391,7 +393,6 @@ class TestExtractionRegressions:
         resolver._download_binary(
             url="https://example.com/ffmpeg.zip",
             binary_name="ffmpeg.exe",
-            extract_path=None,
         )
 
         assert resolver.local_path.read_bytes() == b"exe"
@@ -407,7 +408,6 @@ class TestExtractionRegressions:
         resolver._download_binary(
             url="https://example.com/ffmpeg.zip",
             binary_name="ffmpeg.exe",
-            extract_path="bin/ffmpeg.exe",
         )
 
         assert resolver.local_path.read_bytes() == b"new"
@@ -423,13 +423,12 @@ class TestExtractionRegressions:
         resolver._download_binary(
             url="https://example.com/ffmpeg.tar.xz",
             binary_name="ffmpeg",
-            extract_path=None,
         )
 
         assert resolver.local_path.read_bytes() == b"new"
 
     @patch("urllib.request.urlopen")
-    def test_tar_member_escaping_bin_dir_is_rejected(
+    def test_tar_member_paths_never_leave_bin_dir(
         self, mock_urlopen: MagicMock, tmp_path: Path
     ) -> None:
         bin_dir = tmp_path / "bin"
@@ -437,13 +436,12 @@ class TestExtractionRegressions:
         _mock_download(mock_urlopen, _tar_xz_bytes({"../../ffmpeg": b"evil"}))
         resolver = self._resolver(bin_dir, "ffmpeg")
 
-        with pytest.raises(UnsafeArchiveError):
-            resolver._download_binary(
-                url="https://example.com/ffmpeg.tar.xz",
-                binary_name="ffmpeg",
-                extract_path=None,
-            )
+        resolver._download_binary(
+            url="https://example.com/ffmpeg.tar.xz", binary_name="ffmpeg"
+        )
 
+        # Copied by name into bin_dir; nothing lands where the path pointed.
+        assert (bin_dir / "ffmpeg").read_bytes() == b"evil"
         assert not (tmp_path.parent / "ffmpeg").exists()
         assert not (tmp_path / "ffmpeg").exists()
 
